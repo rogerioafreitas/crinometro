@@ -48,7 +48,7 @@ O **Crinômetro 2.0** é uma aplicação científica interativa desenvolvida em 
 
 ### 1. Clonar o repositório
 `ash
-git clone https://github.com/R0GER10FRE1TAS/crinometro.git
+git clone https://github.com/rogerioafreitas/crinometro.git
 cd crinometro
 `
 
@@ -92,5 +92,6 @@ O arquivo compilado estará disponível na pasta dist/Crinômetro_2.0.exe.
 ---
 
 ## 👤 Autor
-- **R0GER10FRE1TAS**
+- **rogerioafreitas**
 - Projeto desenvolvido para estudos e pesquisas na área de Biologia / Bioacústica.
+
