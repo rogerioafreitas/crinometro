@@ -1,0 +1,22 @@
+{
+    "algo_params": {
+        "amp_min": 0.04,
+        "amp_max": 1.0,
+        "amp_var": 0.4,
+        "dur_min": 14.0,
+        "dur_max": 80.0,
+        "gap_min": 25.0,
+        "gap_max": 35.0,
+        "min_p": 3,
+        "max_p": 7,
+        "b1_min": 3200,
+        "b1_max": 6000
+    },
+    "report_params": {
+        "lang": "pt",
+        "institution": "",
+        "researcher_name": "",
+        "role": "",
+        "level": ""
+    }
+}

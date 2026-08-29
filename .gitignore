@@ -1,0 +1,22 @@
+﻿# Ambientes Virtuais
+.venv/
+venv/
+env/
+
+# Python & PyInstaller
+__pycache__/
+*.py[cod]
+*.class
+build/
+dist/
+*.spec.bak
+
+# Sinais temporários
+core.*
+
+# Mídias pesadas / Áudios locais
+audios/
+
+# IDEs
+.vscode/
+.idea/
