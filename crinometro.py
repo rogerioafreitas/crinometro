@@ -2113,7 +2113,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Aviso", "Cache vazio.")
             return
         now = datetime.datetime.now()
-        default_name = f"Relatorio_Crinometro_{now.strftime('%d%m%Y_%M%H')}.txt"
+        default_name = f"Relatorio_Crinometro_{now.strftime('%Y%m%d_%H%M')}.txt"
         file_path, _ = QFileDialog.getSaveFileName(self, I18N[self.lang]["export"], default_name, "Text Files (*.txt)")
         if not file_path:
             return
