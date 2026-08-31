@@ -10,7 +10,13 @@
         "min_p": 3,
         "max_p": 7,
         "b1_min": 3200,
-        "b1_max": 6000
+        "b1_max": 6000,
+        "prominence": 0.01,
+        "width_min_ms": 0.0,
+        "width_max_ms": 0.0,
+        "smooth_window_ms": 15.0,
+        "noise_floor": 0.9,
+        "adaptation_rate": 0.1
     },
     "report_params": {
         "lang": "pt",
@@ -18,5 +24,8 @@
         "researcher_name": "",
         "role": "",
         "level": ""
-    }
+    },
+    "theme": "dark",
+    "corrections_by_file": {},
+    "pulse_learner": null
 }
