@@ -19,9 +19,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QLabel, QSplitter, QMessageBox, 
                              QPushButton, QSlider, QSpinBox, QDoubleSpinBox, QFormLayout, 
                              QDialog, QDialogButtonBox, QFileDialog, QGridLayout, QLineEdit,
-                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction)
+                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction, QToolTip)
 from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
-from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen, QCursor
 from PyQt5.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 
@@ -3103,7 +3103,40 @@ class MainWindow(QMainWindow):
             markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
         self.timeline.set_data(d["duration"], markers)
         self.timeline.set_position(self.player.position() / 1000.0)
+        self._update_pulse_hover_data()
         self.capture_backgrounds()
+
+    def _update_pulse_hover_data(self):
+        """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""
+        self.pulse_hover_data = []
+        d = getattr(self, "active_heavy_data", None)
+        if not d:
+            return
+        rate = float(d.get("rate", 44100))
+        env = d.get("env1_smooth", d.get("env", np.array([])))
+        chirp_peaks_list = d.get("chirp_peaks_list", [])
+        dom_freqs = d.get("dom_freqs", np.array([]))
+        t_spec = d.get("t_spec", np.array([]))
+
+        for c_idx, cp in enumerate(chirp_peaks_list):
+            qnt = len(cp)
+            for p_idx, pk in enumerate(cp):
+                pk = int(pk)
+                t_val = float(pk) / rate
+                y_env = float(env[pk]) if (env is not None and len(env) > pk) else 0.0
+                if len(t_spec) > 0 and len(dom_freqs) > 0:
+                    y_freq = float(np.interp(t_val, t_spec, dom_freqs))
+                else:
+                    y_freq = 0.0
+                self.pulse_hover_data.append({
+                    "sample": pk,
+                    "time": t_val,
+                    "env_y": y_env,
+                    "freq_y": y_freq,
+                    "chirp_pulses": qnt,
+                    "chirp_idx": c_idx + 1,
+                    "pulse_num": p_idx + 1,
+                })
 
     def _update_summary_placeholder(self, filename=""):
         self.lbl_summary_file.setText(filename or "Nenhum arquivo selecionado")
@@ -3355,6 +3388,7 @@ class MainWindow(QMainWindow):
                                         color=color, markersize=8, markeredgewidth=1.2, zorder=5)
                     self._wave_user_markers.extend(line_spec)
 
+        self._update_pulse_hover_data()
         # Redesenha todos os painéis
         for panel in self.all_panels:
             try:
@@ -3775,30 +3809,89 @@ class MainWindow(QMainWindow):
         self.sync_throttle_time = current_time
 
     def on_motion(self, event):
-        if not self.panning or self.active_ax is None or event.inaxes != self.active_ax:
+        if self.panning and self.active_ax is not None and event.inaxes == self.active_ax:
+            dx, dy = event.x - self.start_x, event.y - self.start_y
+            x0, x1 = self.start_xlim
+            y0, y1 = self.start_ylim
+            bbox = self.active_ax.get_window_extent()
+            if bbox.width == 0 or bbox.height == 0:
+                return
+            new_xmin = x0 - dx * (x1-x0) / bbox.width
+            new_xmax = x1 - dx * (x1-x0) / bbox.width
+            new_ymin = y0 - dy * (y1-y0) / bbox.height
+            new_ymax = y1 - dy * (y1-y0) / bbox.height
+            time_axes = [self.panel_wave.ax, self.panel_freq.ax, self.panel_spec.ax]
+            if self.btn_sync.isChecked() and self.active_ax in time_axes:
+                for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                    panel.ax.set_xlim(new_xmin, new_xmax)
+                    if panel.ax == self.active_ax:
+                        panel.ax.set_ylim(new_ymin, new_ymax)
+                self._sync_render([self.panel_wave, self.panel_freq, self.panel_spec], new_xmin, new_xmax)
+            else:
+                self.active_ax.set_xlim(new_xmin, new_xmax)
+                self.active_ax.set_ylim(new_ymin, new_ymax)
+                mapping = {p.ax: p for p in self.all_panels}
+                self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
             return
-        dx, dy = event.x - self.start_x, event.y - self.start_y
-        x0, x1 = self.start_xlim
-        y0, y1 = self.start_ylim
-        bbox = self.active_ax.get_window_extent()
-        if bbox.width == 0 or bbox.height == 0:
-            return
-        new_xmin = x0 - dx * (x1-x0) / bbox.width
-        new_xmax = x1 - dx * (x1-x0) / bbox.width
-        new_ymin = y0 - dy * (y1-y0) / bbox.height
-        new_ymax = y1 - dy * (y1-y0) / bbox.height
-        time_axes = [self.panel_wave.ax, self.panel_freq.ax, self.panel_spec.ax]
-        if self.btn_sync.isChecked() and self.active_ax in time_axes:
-            for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                panel.ax.set_xlim(new_xmin, new_xmax)
-                if panel.ax == self.active_ax:
-                    panel.ax.set_ylim(new_ymin, new_ymax)
-            self._sync_render([self.panel_wave, self.panel_freq, self.panel_spec], new_xmin, new_xmax)
-        else:
-            self.active_ax.set_xlim(new_xmin, new_xmax)
-            self.active_ax.set_ylim(new_ymin, new_ymax)
-            mapping = {p.ax: p for p in self.all_panels}
-            self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
+
+        # Hover interativo em cima dos marcadores de pulsos (X)
+        if not self.panning and event.inaxes and event.xdata is not None and getattr(self, "pulse_hover_data", None):
+            ax = event.inaxes
+            target_panel = None
+            is_wave = (ax == self.panel_wave.ax)
+            is_freq = (ax == self.panel_freq.ax)
+            is_spec = (ax == self.panel_spec.ax)
+
+            if is_wave:
+                target_panel = self.panel_wave
+            elif is_freq:
+                target_panel = self.panel_freq
+            elif is_spec:
+                target_panel = self.panel_spec
+
+            if target_panel is not None:
+                best_match = None
+                min_pixel_dist = 20.0  # tolerância de 20 pixels para acionamento fácil do hover
+
+                for item in self.pulse_hover_data:
+                    # Determina coordenadas Y correspondentes ao eixo atual
+                    if is_wave:
+                        y_val = item["env_y"]
+                    else:
+                        y_val = item["freq_y"]
+
+                    try:
+                        pt_disp = ax.transData.transform((item["time"], y_val))
+                        dx_pix = abs(pt_disp[0] - event.x)
+                        dy_pix = abs(pt_disp[1] - event.y)
+                        dist_pix = np.hypot(dx_pix, dy_pix)
+
+                        # Na onda acústica, também considera proximidade na linha de base y=0
+                        if is_wave:
+                            pt_zero = ax.transData.transform((item["time"], 0.0))
+                            dist_zero = np.hypot(abs(pt_zero[0] - event.x), abs(pt_zero[1] - event.y))
+                            dist_pix = min(dist_pix, dist_zero)
+
+                        if dist_pix < min_pixel_dist:
+                            min_pixel_dist = dist_pix
+                            best_match = item
+                    except Exception:
+                        continue
+
+                if best_match is not None:
+                    qnt = best_match["chirp_pulses"]
+                    p_num = best_match["pulse_num"]
+                    t_val = best_match["time"]
+                    c_idx = best_match["chirp_idx"]
+                    msg = (
+                        f"<b>Chilreio #{c_idx}: {qnt} pulsos</b><br>"
+                        f"Pulso: {p_num} de {qnt}<br>"
+                        f"Tempo: {t_val:.3f} s"
+                    )
+                    QToolTip.showText(QCursor.pos(), msg, target_panel.canvas)
+                    return
+                else:
+                    QToolTip.hideText()
 
     def zoom_graph(self, event):
         if not event.inaxes or QApplication.keyboardModifiers() != Qt.ControlModifier:
