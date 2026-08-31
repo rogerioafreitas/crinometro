@@ -271,6 +271,24 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
         # Ponta afiada
         painter.drawLine(QPointF(size * 0.2, size * 0.7), QPointF(size * 0.25, size * 0.65))
 
+    elif kind == "trash":
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        # Tampa
+        line(size * 0.20, size * 0.30, size * 0.80, size * 0.30)
+        line(size * 0.38, size * 0.20, size * 0.62, size * 0.20)
+        # Cesto
+        cesto = QPolygonF([
+            QPointF(size * 0.26, size * 0.30),
+            QPointF(size * 0.31, size * 0.82),
+            QPointF(size * 0.69, size * 0.82),
+            QPointF(size * 0.74, size * 0.30),
+        ])
+        painter.drawPolygon(cesto)
+        # Linhas verticais internas
+        line(size * 0.43, size * 0.40, size * 0.43, size * 0.72)
+        line(size * 0.57, size * 0.40, size * 0.57, size * 0.72)
+
     painter.end()
     return QIcon(pm)
 
@@ -1454,9 +1472,73 @@ class LoadingScreen(QWidget):
         if callback:
             QTimer.singleShot(0, callback)
 
+class AudioListItemWidget(QWidget):
+    """Widget para item da lista de áudios contendo caixinha de seleção (azul quando marcada),
+    nome do arquivo e botão de lixeira para remoção rápida.
+    """
+    def __init__(self, filename, is_checked=True, on_toggle=None, on_delete=None, on_select=None, parent=None):
+        super().__init__(parent)
+        self.filename = filename
+        self.on_delete = on_delete
+        self.on_toggle = on_toggle
+        self.on_select = on_select
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(8)
+
+        # Caixinha para marcar/selecionar áudios para lote e relatório
+        self.checkbox = QCheckBox()
+        self.checkbox.setChecked(is_checked)
+        self.checkbox.setToolTip("Marcar para análise em lote e inclusão no relatório")
+        self.checkbox.setCursor(Qt.PointingHandCursor)
+        self.checkbox.stateChanged.connect(self._on_check_changed)
+        layout.addWidget(self.checkbox)
+
+        # Nome do arquivo de áudio
+        self.lbl_name = QLabel(filename)
+        self.lbl_name.setToolTip(filename)
+        self.lbl_name.setStyleSheet("background: transparent; border: 0; font-size: 12px;")
+        layout.addWidget(self.lbl_name, 1)
+
+        # Botão com ícone de lixeira para remover o áudio
+        self.btn_trash = QPushButton()
+        self.btn_trash.setFixedSize(22, 22)
+        self.btn_trash.setFlat(True)
+        self.btn_trash.setIcon(make_ui_icon("trash", color="#94A3B8", size=14))
+        self.btn_trash.setToolTip(f"Remover {filename} da lista")
+        self.btn_trash.setCursor(Qt.PointingHandCursor)
+        self.btn_trash.setStyleSheet("""
+            QPushButton { background: transparent; border: 0; border-radius: 4px; padding: 2px; }
+            QPushButton:hover { background: rgba(239, 68, 68, 0.25); }
+        """)
+        self.btn_trash.clicked.connect(self._on_delete_clicked)
+        layout.addWidget(self.btn_trash)
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if self.on_select:
+            self.on_select(self.filename)
+
+    def is_checked(self):
+        return self.checkbox.isChecked()
+
+    def set_checked(self, checked):
+        self.checkbox.setChecked(checked)
+
+    def _on_check_changed(self, state):
+        if self.on_toggle:
+            self.on_toggle(self.filename, state == Qt.Checked or state == 2)
+
+    def _on_delete_clicked(self):
+        if self.on_delete:
+            self.on_delete(self.filename)
+
+
 # ==========================================
 # JANELA PRINCIPAL / DASHBOARD
 # ==========================================
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1735,9 +1817,13 @@ class MainWindow(QMainWindow):
             QMenu::item { padding: 7px 24px 7px 12px; border-radius: 5px; }
             QMenu::item:selected { background: #2D8CD8; }
             QToolTip { background: #22262B; color: #F0F2F4; border: 1px solid #3B4047; }
-                QLabel#elapsedLabel { color: #AEB4BD; background: transparent; border: 0; padding: 0; }
+            QLabel#elapsedLabel { color: #AEB4BD; background: transparent; border: 0; padding: 0; }
             QFrame#playbackCard { background: transparent; border: 0; }
             QWidget#playCenter { background: transparent; border: 0; }
+            QCheckBox { spacing: 6px; color: #D1D5DB; background: transparent; }
+            QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #4B5563; background-color: #1F242C; }
+            QCheckBox::indicator:hover { border-color: #3B82F6; }
+            QCheckBox::indicator:checked { background-color: #2563EB; border-color: #2563EB; }
         """)
         if self.theme_mode == "light":
             self.setStyleSheet(self.styleSheet() + r"""
@@ -1781,6 +1867,10 @@ class MainWindow(QMainWindow):
                 QPushButton#playButton:focus { outline: none; border: 0; }
                 QMenu { background: #FFFFFF; color: #2D353D; border-color: #D4DAE0; }
                 QMenu::item:selected { background: #E2F0FC; color: #194D76; }
+                QCheckBox { spacing: 6px; color: #374151; background: transparent; }
+                QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #9CA3AF; background-color: #FFFFFF; }
+                QCheckBox::indicator:hover { border-color: #2563EB; }
+                QCheckBox::indicator:checked { background-color: #2563EB; border-color: #2563EB; }
                 QToolTip { background: #FFFFFF; color: #27313A; border-color: #CDD4DB; }
             """)
 
@@ -1939,12 +2029,26 @@ class MainWindow(QMainWindow):
         self.lbl_arquivos.setObjectName("sidebarTitle")
         side_head.addWidget(self.lbl_arquivos)
         side_head.addStretch()
+
+        self.chk_select_all = QCheckBox()
+        self.chk_select_all.setChecked(True)
+        self.chk_select_all.setToolTip("Marcar / Desmarcar todos os arquivos para lote e relatório")
+        self.chk_select_all.stateChanged.connect(self.toggle_select_all_files)
+        side_head.addWidget(self.chk_select_all)
+
         left_layout.addLayout(side_head)
 
         self.list_widget = QListWidget()
         self.list_widget.setIconSize(QSize(15, 15))
         self.list_widget.itemSelectionChanged.connect(self.on_file_selected)
         left_layout.addWidget(self.list_widget, 1)
+
+        self.btn_analyze_selected = QPushButton("⚡ Analisar Selecionados")
+        self.btn_analyze_selected.setObjectName("summaryAction")
+        self.btn_analyze_selected.setToolTip("Executar análise em todos os arquivos de áudio selecionados (marcados)")
+        self.btn_analyze_selected.setCursor(Qt.PointingHandCursor)
+        self.btn_analyze_selected.clicked.connect(self.analyze_selected_audios)
+        left_layout.addWidget(self.btn_analyze_selected)
 
         self.right_panel = QWidget()
         right_layout = QVBoxLayout(self.right_panel)
@@ -2317,11 +2421,111 @@ class MainWindow(QMainWindow):
             self.btn_collapse.setToolTip("Mostrar painel de arquivos")
 
     # ---------- arquivos ----------
+    def _add_audio_file_item(self, filename, is_checked=True):
+        """Adiciona um item com caixinha de seleção e botão de lixeira à lista de áudios."""
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            widget = self.list_widget.itemWidget(item)
+            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            if name == filename:
+                return item
+
+        item = QListWidgetItem(self.list_widget)
+        item.setText(filename)
+        item.setSizeHint(QSize(200, 32))
+
+        widget = AudioListItemWidget(
+            filename,
+            is_checked=is_checked,
+            on_toggle=self.on_file_check_toggled,
+            on_delete=self.remove_audio_by_name,
+            on_select=self.select_file_by_name
+        )
+        self.list_widget.setItemWidget(item, widget)
+        return item
+
+    def get_checked_files(self):
+        """Retorna os nomes dos arquivos que estão marcados com a caixinha de seleção."""
+        checked = []
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            widget = self.list_widget.itemWidget(item)
+            if widget and hasattr(widget, "is_checked") and widget.is_checked():
+                checked.append(widget.filename)
+            elif item and item.text():
+                checked.append(item.text())
+        return checked
+
+    def on_file_check_toggled(self, filename, is_checked):
+        pass
+
+    def toggle_select_all_files(self, state):
+        checked = (state == Qt.Checked or state == 2)
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            widget = self.list_widget.itemWidget(item)
+            if widget and hasattr(widget, "set_checked"):
+                widget.set_checked(checked)
+
+    def select_file_by_name(self, filename):
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            widget = self.list_widget.itemWidget(item)
+            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            if name == filename:
+                self.list_widget.setCurrentItem(item)
+                break
+
+    def analyze_selected_audios(self):
+        """Analisa em lote todos os áudios marcados com a caixinha de seleção."""
+        checked_files = self.get_checked_files()
+        if not checked_files:
+            QMessageBox.warning(
+                self,
+                "Nenhum áudio selecionado",
+                "Marque a caixinha de pelo menos um áudio na lista para analisar."
+            )
+            return
+
+        total = len(checked_files)
+        success_count = 0
+        errors = []
+
+        curr = self.list_widget.currentItem()
+        curr_widget = self.list_widget.itemWidget(curr) if curr else None
+        curr_name = curr_widget.filename if curr_widget and hasattr(curr_widget, "filename") else (curr.text() if curr else None)
+
+        for fname in checked_files:
+            if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
+                continue
+            try:
+                is_curr = (fname == curr_name)
+                self.run_analysis(fname, self.algo_params, render=is_curr)
+                success_count += 1
+            except Exception as exc:
+                errors.append(f"{fname}: {exc}")
+
+        if curr_name not in checked_files and checked_files:
+            self.select_file_by_name(checked_files[0])
+
+        msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
+        if errors:
+            msg += f"\n\nFalhas ({len(errors)}):\n" + "\n".join(errors[:5])
+            QMessageBox.warning(self, "Análise em Lote", msg)
+        else:
+            QMessageBox.information(self, I18N[self.lang]["success"], msg)
+
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()
         if not curr_item:
             return
-        fname = curr_item.text()
+        widget = self.list_widget.itemWidget(curr_item)
+        fname = widget.filename if widget and hasattr(widget, "filename") else curr_item.text()
+        self.remove_audio_by_name(fname)
+
+    def remove_audio_by_name(self, fname):
+        if not fname:
+            return
         if self.player.currentMedia().canonicalUrl().toLocalFile() == self.loaded_files.get(fname):
             self.player.stop()
             self.btn_play.setEnabled(False)
@@ -2329,46 +2533,66 @@ class MainWindow(QMainWindow):
             self.slider.setValue(0)
         self.loaded_files.pop(fname, None)
         self.analysis_cache.pop(fname, None)
-        self.list_widget.takeItem(self.list_widget.row(curr_item))
+        self.corrections_by_file.pop(fname, None)
+
+        # Remove o item da lista
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            widget = self.list_widget.itemWidget(item)
+            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            if name == fname:
+                self.list_widget.takeItem(i)
+                break
+
         if self.list_widget.count() == 0:
             self.active_heavy_data = {}
+            self.peaks_detected = []
+            self.peaks_user_verified = []
+            self.active_filename = ""
             for p in self.all_panels:
                 p.ax.clear()
                 p.canvas.draw_idle()
             self._update_summary_placeholder()
+        else:
+            if getattr(self, "active_filename", None) == fname:
+                first_item = self.list_widget.item(0)
+                if first_item:
+                    self.list_widget.setCurrentItem(first_item)
 
     def action_load_wav(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Load Audio Files", "", "WAV Files (*.wav)")
         for file_path in files:
             filename = os.path.basename(file_path)
             self.loaded_files[filename] = file_path
-            if not any(self.list_widget.item(i).text() == filename for i in range(self.list_widget.count())):
-                self.list_widget.addItem(QListWidgetItem(self._file_icon(), filename))
+            self._add_audio_file_item(filename, is_checked=True)
         if files:
             target = os.path.basename(files[-1])
-            matches = self.list_widget.findItems(target, Qt.MatchExactly)
-            if matches:
-                self.list_widget.setCurrentItem(matches[0])
+            self.select_file_by_name(target)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
     def dropEvent(self, event):
+        loaded_any = []
         for url in event.mimeData().urls():
             file_path = url.toLocalFile()
             if file_path.lower().endswith('.wav'):
                 filename = os.path.basename(file_path)
                 self.loaded_files[filename] = file_path
-                if not any(self.list_widget.item(i).text() == filename for i in range(self.list_widget.count())):
-                    self.list_widget.addItem(QListWidgetItem(self._file_icon(), filename))
+                self._add_audio_file_item(filename, is_checked=True)
+                loaded_any.append(filename)
+        if loaded_any:
+            self.select_file_by_name(loaded_any[-1])
         event.acceptProposedAction()
 
     def on_file_selected(self):
         selected = self.list_widget.selectedItems()
         if not selected:
             return
-        filename = selected[0].text()
+        curr_item = selected[0]
+        widget = self.list_widget.itemWidget(curr_item)
+        filename = widget.filename if widget and hasattr(widget, "filename") else curr_item.text()
         self.lbl_summary_file.setText(filename)
         if filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
             self.player.stop()
@@ -2792,14 +3016,43 @@ class MainWindow(QMainWindow):
 
     # ---------- exportação ----------
     def action_save_txt(self):
-        if not self.analysis_cache:
-            QMessageBox.warning(self, "Aviso", "Cache vazio.")
+        checked_files = self.get_checked_files()
+        if not checked_files:
+            QMessageBox.warning(
+                self,
+                "Nenhum áudio selecionado",
+                "Marque a caixinha de pelo menos um arquivo de áudio na lista para gerar o relatório."
+            )
             return
+
+        # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
+        unprocessed = [f for f in checked_files if f not in self.analysis_cache and f in self.loaded_files]
+        for f in unprocessed:
+            try:
+                self.run_analysis(f, self.algo_params, render=False)
+            except Exception as exc:
+                print(f"Aviso ao processar {f} para relatório: {exc}")
+
+        selected_cache = {
+            fname: self.analysis_cache[fname]
+            for fname in checked_files
+            if fname in self.analysis_cache
+        }
+
+        if not selected_cache:
+            QMessageBox.warning(
+                self,
+                "Sem dados",
+                "Nenhum dos áudios selecionados possui dados de análise válidos para o relatório."
+            )
+            return
+
         now = datetime.datetime.now()
         default_name = f"Relatorio_Crinometro_{now.strftime('%Y%m%d_%H%M')}.txt"
         file_path, _ = QFileDialog.getSaveFileName(self, I18N[self.lang]["export"], default_name, "Text Files (*.txt)")
         if not file_path:
             return
+
         with open(file_path, 'w', encoding='utf-8') as f:
             inst = self.report_params.get('institution', '').strip()
             name = self.report_params.get('researcher_name', '').strip()
@@ -2811,23 +3064,37 @@ class MainWindow(QMainWindow):
             if role: header_lines.append(f"Função: {role}")
             if level: header_lines.append(f"Grau Acadêmico: {level}")
             header_text = "\n".join(header_lines) + "\n\n" if header_lines else ""
-            params_list = [d['params'] for d in self.analysis_cache.values()]
+            params_list = [d['params'] for d in selected_cache.values()]
             all_same_params = all(p == params_list[0] for p in params_list)
-            texto = f"RELATÓRIO MULTIPLEXADO DE ANÁLISE BIOACÚSTICA - CRINÔMETRO\n{'='*58}\n{header_text}Data da Geração: {now.strftime('%d/%m/%Y %H:%M:%S')}\nTotal de Arquivos Compilados: {len(self.analysis_cache)}\n\n"
+            texto = (
+                f"RELATÓRIO MULTIPLEXADO DE ANÁLISE BIOACÚSTICA - CRINÔMETRO\n"
+                f"{'='*58}\n"
+                f"{header_text}"
+                f"Data da Geração: {now.strftime('%d/%m/%Y %H:%M:%S')}\n"
+                f"Total de Arquivos Selecionados Compilados: {len(selected_cache)}\n\n"
+            )
             def get_pulse_distribution_text(chirps_list):
                 unique_p, counts_p = np.unique(chirps_list, return_counts=True)
                 return "; ".join([f"{int(cnt)} chilreiro(s) com {int(up)} pulso(s)" for up, cnt in zip(unique_p, counts_p)])
             if all_same_params:
                 p = params_list[0]
-                texto += f"1. PARÂMETROS METODOLÓGICOS (CONFIGURAÇÕES GERAIS)\n{'-'*58}\n- Filtro de Amplitude: Mín={p['amp_min']} | Máx={p['amp_max']}\n- Limites de Duração de Pulso: {p['dur_min']}ms a {p['dur_max']}ms\n- Banda de Frequência Analisada: {p['b1_min']}Hz a {p['b1_max']}Hz\n\n2. RESULTADOS POR ÁUDIO\n{'-'*58}\n\n"
-                for fname, d in self.analysis_cache.items():
+                texto += (
+                    f"1. PARÂMETROS METODOLÓGICOS (CONFIGURAÇÕES GERAIS)\n"
+                    f"{'-'*58}\n"
+                    f"- Filtro de Amplitude: Mín={p['amp_min']} | Máx={p['amp_max']}\n"
+                    f"- Limites de Duração de Pulso: {p['dur_min']}ms a {p['dur_max']}ms\n"
+                    f"- Banda de Frequência Analisada: {p['b1_min']}Hz a {p['b1_max']}Hz\n\n"
+                    f"2. RESULTADOS POR ÁUDIO SELECIONADO\n"
+                    f"{'-'*58}\n\n"
+                )
+                for fname, d in selected_cache.items():
                     texto += f"• ARQUIVO: {fname}\n  - Duração Total: {d['duration']:.2f} segundos\n  - Chilreios Validados: {len(d['chirps'])}\n  - Moda (Padrão): {d['moda']} pulsos/chilreio | Média: {d['media']:.2f}\n  - Distribuição: {get_pulse_distribution_text(d['chirps'])}\n\n"
             else:
-                texto += "RESULTADOS DETALHADOS POR ÁUDIO\n"
-                for fname, d in self.analysis_cache.items():
+                texto += "RESULTADOS DETALHADOS POR ÁUDIO SELECIONADO\n"
+                for fname, d in selected_cache.items():
                     texto += f"Arquivo: {fname} | Chilreios: {len(d['chirps'])}\n"
             f.write(texto)
-        QMessageBox.information(self, I18N[self.lang]["success"], "Relatório gerado.")
+        QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s).")
 
     # ---------- reprodução ----------
     def toggle_playback(self):

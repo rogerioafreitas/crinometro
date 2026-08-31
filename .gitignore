@@ -1,4 +1,4 @@
-﻿# Ambientes Virtuais
+# Ambientes Virtuais
 .venv/
 venv/
 env/
@@ -20,3 +20,8 @@ audios/
 # IDEs
 .vscode/
 .idea/
+
+# Modelos treinados locais e temporários
+*.pkl
+*.tmp
+
