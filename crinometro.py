@@ -36,7 +36,7 @@ CONFIG_FILE = "crinometro_config.json"
 
 I18N = {
     "pt": {
-        "app_title": "Crinômetro - 2.0",
+        "app_title": "Crinômetro - 3.0",
         "file": "Arquivo",
         "load": "Carregar .wav",
         "export": "Exportar Relatório (.txt)",
@@ -77,7 +77,7 @@ I18N = {
         "reset_done": "Configurações resetadas. O app agora usa os parâmetros padrão originais.",
     },
     "en": {
-        "app_title": "Crinômetro - 2.0",
+        "app_title": "Crinômetro - 3.0",
         "file": "File",
         "load": "Load .wav",
         "export": "Export Report (.txt)",
@@ -635,7 +635,7 @@ class AboutDialog(QDialog):
         lbl_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #4CAF50; margin-bottom: 5px;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
-        lbl_version = QLabel("Versão: 2.0")
+        lbl_version = QLabel("Versão: 3.0")
         lbl_version.setStyleSheet("font-size: 12px; color: #9E9E9E;")
         lbl_version.setAlignment(Qt.AlignCenter)
         
@@ -2067,7 +2067,7 @@ class MainWindow(QMainWindow):
         brand.setAttribute(Qt.WA_TranslucentBackground, True)
         brand.setAutoFillBackground(False)
         nav_l.addWidget(brand)
-        version = QLabel("v2.0")
+        version = QLabel("v3.0")
         version.setObjectName("version")
         version.setAttribute(Qt.WA_TranslucentBackground, True)
         version.setAutoFillBackground(False)
