@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import pickle
 import numpy as np
 import statistics
 import datetime
@@ -9,17 +10,22 @@ import base64
 from scipy.io import wavfile
 from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram
 
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+try:
+    from sklearn.ensemble import RandomForestClassifier
+except Exception:  # pragma: no cover - depende do ambiente do usuário.
+    RandomForestClassifier = None
+
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QListWidget, QLabel, QSplitter, QMessageBox, 
                              QPushButton, QSlider, QSpinBox, QDoubleSpinBox, QFormLayout, 
                              QDialog, QDialogButtonBox, QFileDialog, QGridLayout, QLineEdit,
-                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox)
-from PyQt6.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
-from PyQt6.QtGui import QFont, QAction, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction)
+from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen
+from PyQt5.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaContent
+from PyQt5.QtMultimediaWidgets import QVideoWidget
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
@@ -44,6 +50,7 @@ I18N = {
         "reanalyze": "🔄 Reanalisar",
         "remove": "🗑️",
         "sync": "🔗 Sincronizar (X)",
+        "learn_corrections": "Aprender com as Correções",
         "wave": "Onda Acústica",
         "hist": "Histograma de Pulsos",
         "freq": "Freq. Dominante vs Tempo",
@@ -74,6 +81,7 @@ I18N = {
         "reanalyze": "🔄 Reanalyze",
         "remove": "🗑️",
         "sync": "🔗 Sync Time (X)",
+        "learn_corrections": "Learn from Corrections",
         "wave": "Acoustic Wave",
         "hist": "Pulse Histogram",
         "freq": "Dominant Freq. vs Time",
@@ -112,16 +120,16 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
     """
     size = int(size)
     pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
+    pm.fill(Qt.transparent)
 
     painter = QPainter(pm)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
     pen = QPen(QColor(color), 1.7)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
     painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setBrush(Qt.NoBrush)
 
     def line(x1, y1, x2, y2):
         painter.drawLine(QPointF(float(x1), float(y1)), QPointF(float(x2), float(y2)))
@@ -171,7 +179,7 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
         line(c + 3, size - 9, c, size - 6)
 
     elif kind == "play":
-        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(color))
         painter.drawPolygon(QPolygonF([
             QPointF(size * 0.38, size * 0.23),
@@ -180,7 +188,7 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
         ]))
 
     elif kind == "pause":
-        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(color))
         painter.drawRoundedRect(QRectF(size * 0.28, size * 0.22, size * 0.15, size * 0.56), 1.5, 1.5)
         painter.drawRoundedRect(QRectF(size * 0.57, size * 0.22, size * 0.15, size * 0.56), 1.5, 1.5)
@@ -205,6 +213,30 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
         line(size-e, g, size-g, g); line(size-g, g, size-g, e)
         line(g, size-e, g, size-g); line(g, size-g, e, size-g)
         line(size-g, size-e, size-g, size-g); line(size-g, size-g, size-e, size-g)
+
+    elif kind == "brain":
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(QRectF(size * 0.18, size * 0.33, size * 0.18, size * 0.18))
+        painter.drawEllipse(QRectF(size * 0.64, size * 0.33, size * 0.18, size * 0.18))
+        painter.drawEllipse(QRectF(size * 0.42, size * 0.14, size * 0.16, size * 0.16))
+        painter.drawEllipse(QRectF(size * 0.42, size * 0.66, size * 0.16, size * 0.16))
+        arc(size * 0.12, size * 0.30, size * 0.76, size * 0.40, 0, 180 * 16)
+        arc(size * 0.08, size * 0.18, size * 0.84, size * 0.66, 20 * 16, 140 * 16)
+
+    elif kind == "pencil":
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        # Lápis simples
+        poly = QPolygonF([
+            QPointF(size * 0.2, size * 0.7),
+            QPointF(size * 0.5, size * 0.15),
+            QPointF(size * 0.65, size * 0.28),
+            QPointF(size * 0.35, size * 0.83),
+        ])
+        painter.drawPolygon(poly)
+        # Ponta afiada
+        painter.drawLine(QPointF(size * 0.2, size * 0.7), QPointF(size * 0.25, size * 0.65))
 
     painter.end()
     return QIcon(pm)
@@ -370,19 +402,11 @@ class AlgoSettingsDialog(QDialog):
         
         self.inputs = {}
         fields = [
-            ("amp_min", "Amp. Mínima:", QDoubleSpinBox, 0.01, 2.00, 0.01),
-            ("amp_max", "Amp. Máxima:", QDoubleSpinBox, 0.01, 2.00, 0.01),
-            ("amp_var", "Var. Amplitude (%):", QDoubleSpinBox, 0.05, 1.00, 0.05),
-            ("dur_min", "Dur. Mín. (ms):", QDoubleSpinBox, 1.0, 100.0, 0.5),
-            ("dur_max", "Dur. Máx. (ms):", QDoubleSpinBox, 1.0, 100.0, 0.5),
-            ("gap_min", "Espaço Mín (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
-            ("gap_max", "Espaço Máx (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
             ("min_p", "Mín. Pulsos/Chilr.:", QSpinBox, 1, 50, 1),
             ("max_p", "Máx. Pulsos/Chilr.:", QSpinBox, 1, 100, 1),
-            ("b1_min", "Banda 1 Min (Hz):", QSpinBox, 100, 24000, 100),
-            ("b1_max", "Banda 1 Max (Hz):", QSpinBox, 100, 24000, 100)
+            ("amp_min", "Altura mínima do pico:", QDoubleSpinBox, 0.01, 2.00, 0.01),
+            ("gap_min", "Distância mínima entre picos (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
         ]
-        
         for key, label, WidgetClass, vmin, vmax, step in fields:
             widget = WidgetClass()
             widget.setRange(vmin, vmax)
@@ -390,9 +414,17 @@ class AlgoSettingsDialog(QDialog):
             widget.setValue(current_params[key])
             self.inputs[key] = widget
             form.addRow(label, widget)
-            
+
+        self.advanced_button = QPushButton("Configurações Avançadas")
+        self.advanced_button.clicked.connect(self.open_advanced)
+        layout.addWidget(self.advanced_button)
+
+        # _advanced_params guarda os parâmetros avançados que não têm widget
+        # no dialog básico. São editados via AdvancedAlgoSettingsDialog.
+        # dict(current_params) já copia todos os valores; o for redundante foi removido (BUG 5 e 6).
+        self._advanced_params = dict(current_params)
         layout.addLayout(form)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -409,6 +441,53 @@ class AlgoSettingsDialog(QDialog):
             QPushButton:hover { background-color: #1E88E5; }
         """)
         
+    def get_params(self):
+        result = dict(self._advanced_params)
+        result.update({key: widget.value() for key, widget in self.inputs.items()})
+        return result
+
+    def open_advanced(self):
+        dialog = AdvancedAlgoSettingsDialog(self.get_params(), self)
+        if dialog.exec_():
+            self._advanced_params.update(dialog.get_params())
+
+
+class AdvancedAlgoSettingsDialog(QDialog):
+    def __init__(self, current_params, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configurações Avançadas")
+        self.setMinimumWidth(430)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.inputs = {}
+        fields = [
+            ("prominence", "Proeminência (Prominence):", 0.0, 2.0, 0.001),
+            ("width_min_ms", "Largura mínima do pico (ms):", 0.0, 500.0, 0.5),
+            ("width_max_ms", "Largura máxima do pico (ms):", 0.0, 500.0, 0.5),
+            ("smooth_window_ms", "Janela de suavização (ms):", 1.0, 500.0, 0.5),
+            ("b1_min", "Frequência passa-alta (Hz):", 100.0, 24000.0, 100.0),
+            ("b1_max", "Frequência passa-baixa (Hz):", 100.0, 24000.0, 100.0),
+            ("noise_floor", "Limiar de ruído dinâmico:", 0.01, 2.0, 0.01),
+            ("adaptation_rate", "Taxa de adaptação:", 0.0, 1.0, 0.01),
+        ]
+        for key, label, vmin, vmax, step in fields:
+            widget = QDoubleSpinBox()
+            widget.setRange(vmin, vmax)
+            widget.setSingleStep(step)
+            widget.setDecimals(4)
+            widget.setValue(float(current_params.get(key, {
+                "prominence": 0.01, "width_min_ms": 0.0, "width_max_ms": 0.0,
+                "smooth_window_ms": 15.0, "noise_floor": 0.9,
+                "adaptation_rate": 0.1
+            }.get(key, 0.0))))
+            self.inputs[key] = widget
+            form.addRow(label, widget)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
     def get_params(self):
         return {key: widget.value() for key, widget in self.inputs.items()}
 
@@ -450,7 +529,7 @@ class GeneralSettingsDialog(QDialog):
         form.addRow(I18N[lang]["level"], self.level_input)
         
         layout.addLayout(form)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -488,16 +567,16 @@ class AboutDialog(QDialog):
         
         lbl_title = QLabel("🦗 Crinômetro")
         lbl_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #4CAF50; margin-bottom: 5px;")
-        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_version = QLabel("Versão: 2.0")
         lbl_version.setStyleSheet("font-size: 12px; color: #9E9E9E;")
-        lbl_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_version.setAlignment(Qt.AlignCenter)
         
         lbl_dev = QLabel("Criado por: <b>Rogério de Araújo Freitas</b><br><a href='https://github.com/rogerioafreitas' style='color:#4CAF50; text-decoration:none;'>github.com/rogerioafreitas</a>")
         lbl_dev.setOpenExternalLinks(True)
         lbl_dev.setStyleSheet("font-size: 14px; margin-top: 15px; margin-bottom: 10px;")
-        lbl_dev.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_dev.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel(
             "Desenvolvido com a intenção de auxiliar em um projeto de pesquisa na <b>UNIFESP</b>.<br>"
@@ -530,7 +609,7 @@ class CricketAnalyzer:
             return min(modes) if modes else 0
 
     @staticmethod
-    def analyze(file_path, params):
+    def analyze(file_path, params, pulse_learner=None):
         rate, data = wavfile.read(file_path)
         if len(data.shape) > 1: data = data[:, 0]
 
@@ -546,7 +625,9 @@ class CricketAnalyzer:
         data_b1 = sosfiltfilt(sos_b1, data)
         env1 = np.abs(hilbert(data_b1))
 
-        smooth_window = max(9, int(rate * 0.015))
+        smooth_window = max(9, int(rate * params.get("smooth_window_ms", 15.0) / 1000.0))
+        if smooth_window % 2 == 0:
+            smooth_window += 1
         kernel = np.ones(smooth_window) / smooth_window
         env1_smooth = np.convolve(env1, kernel, mode='same')
 
@@ -562,11 +643,16 @@ class CricketAnalyzer:
 
         dist_samples = max(1, int(rate * (params["gap_min"] / 1000.0)))
         
-        search_thresh = params["amp_min"] * 0.90
-        prominence_val = search_thresh * 0.01 
-            
+        noise_floor = float(params.get("noise_floor", 0.90))
+        search_thresh = max(params["amp_min"] * noise_floor, float(np.percentile(env1_smooth, 25)))
+        prominence_val = float(params.get("prominence", search_thresh * 0.01))
+        width_min = max(0.0, float(params.get("width_min_ms", 0.0)) * rate / 1000.0)
+        width_max_ms = float(params.get("width_max_ms", 0.0))
+        width_max = None if width_max_ms <= 0 else width_max_ms * rate / 1000.0
+             
         raw_peaks, _ = find_peaks(env1_smooth, height=(search_thresh, params["amp_max"]), 
-                               distance=dist_samples, prominence=prominence_val)
+                               distance=dist_samples, prominence=prominence_val,
+                               width=(width_min, width_max))
 
         if len(raw_peaks) == 0: raise ValueError("Nenhum pico encontrado com a amplitude informada.")
 
@@ -593,7 +679,13 @@ class CricketAnalyzer:
             if (params["dur_min"]/1000.0)*(1-dur_tol) <= dur <= (params["dur_max"]/1000.0)*(1+dur_tol):
                 valid_peaks_stage2.append(p)
                 
-        peaks = np.array(valid_peaks_stage2)
+        candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
+        if pulse_learner is not None and pulse_learner.is_trained():
+            candidate_peaks = pulse_learner.filter_peaks(candidate_peaks, rate, env1_smooth)
+            if len(candidate_peaks) == 0:
+                raise ValueError("Nenhum pulso passou no filtro do aprendizado ativo.")
+
+        peaks = np.asarray(candidate_peaks, dtype=int)
         if len(peaks) == 0: raise ValueError("Nenhum pulso passou pelo filtro de duração.")
 
         pulse_times_s = peaks / rate
@@ -639,6 +731,257 @@ class CricketAnalyzer:
 
         return rate, data, data_b1, env1_smooth, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec
 
+
+class PulseLearner:
+    """Faz a ponte entre a correção manual do usuário e a classificação de pulsos.
+
+    A ideia é simples: a interface produz um conjunto de amostras positivas e negativas,
+    e o classificador aprende a separar batimentos válidos de ruído. O estado treinado é
+    serializado em base64 dentro do arquivo de configuração JSON já existente.
+    """
+
+    def __init__(self, config_path=CONFIG_FILE):
+        self.config_path = config_path
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        self.persistence_path = os.path.join(config_dir, "modelo_treinado.pkl")
+        self.model = None
+        self.training_features = np.empty((0, 7), dtype=float)
+        self.training_labels = np.empty((0,), dtype=int)
+        self.feature_names = [
+            "peak_amp",
+            "peak_width_s",
+            "local_snr_db",
+            "energy",
+            "median_amp",
+            "std_amp",
+            "prominence_ratio",
+        ]
+        self.load_from_config()
+        self.load_persisted_training()
+
+    def is_trained(self):
+        return self.model is not None
+
+    def _build_model(self):
+        if RandomForestClassifier is None:
+            raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
+        return RandomForestClassifier(
+            n_estimators=250,
+            max_depth=8,
+            min_samples_leaf=2,
+            class_weight="balanced_subsample",
+            random_state=42,
+        )
+
+    @staticmethod
+    def extract_features_for_peak(peak_idx, rate, env_signal):
+        peak_idx = int(np.asarray(peak_idx).item())
+        if peak_idx < 0 or peak_idx >= len(env_signal):
+            return np.zeros(7, dtype=float)
+
+        half_window = max(4, int(rate * 0.03))
+        start = max(0, peak_idx - half_window)
+        end = min(len(env_signal), peak_idx + half_window + 1)
+        segment = env_signal[start:end]
+
+        if segment.size == 0:
+            return np.zeros(7, dtype=float)
+
+        peak_amp = float(env_signal[peak_idx])
+        median_amp = float(np.median(segment))
+        std_amp = float(np.std(segment))
+        energy = float(np.sum(segment ** 2))
+        local_noise = max(std_amp, 1e-6)
+
+        if local_noise > 0:
+            snr_db = 20.0 * np.log10((peak_amp + 1e-6) / (local_noise + 1e-6))
+        else:
+            snr_db = 0.0
+
+        prominence_ratio = peak_amp / (median_amp + 1e-6)
+
+        widths, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.5)
+        width_s = float(widths[0] / rate) if widths.size else 0.0
+
+        return np.asarray([
+            peak_amp,
+            width_s,
+            snr_db,
+            energy,
+            median_amp,
+            std_amp,
+            prominence_ratio,
+        ], dtype=float)
+
+    @staticmethod
+    def build_training_matrix(peaks_detected, peaks_user_verified, rate, env_signal,
+                              require_both_classes=True):
+        detected = {int(p) for p in np.asarray(peaks_detected, dtype=int)}
+        verified = {int(p) for p in np.asarray(peaks_user_verified, dtype=int)}
+
+        if not detected and not verified:
+            raise ValueError("Não há picos suficientes para treinar o modelo.")
+
+        X_rows = []
+        y_rows = []
+        for peak_idx in sorted(detected | verified):
+            feature_row = PulseLearner.extract_features_for_peak(peak_idx, rate, env_signal)
+            label = 1 if peak_idx in verified else 0
+            X_rows.append(feature_row)
+            y_rows.append(label)
+
+        X = np.asarray(X_rows, dtype=float)
+        y = np.asarray(y_rows, dtype=int)
+        if X.shape[0] == 0:
+            raise ValueError("Não há amostras de treinamento.")
+        if require_both_classes and np.unique(y).size < 2:
+            raise ValueError("O conjunto de correções precisa incluir pelo menos uma classe positiva e uma negativa para treinar.")
+        return X, y
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=int)
+        if X.size == 0 or y.size == 0:
+            raise ValueError("Sem dados de treinamento disponíveis.")
+        self.model = self._build_model()
+        self.model.fit(X, y)
+        self.training_features = X.copy()
+        self.training_labels = y.copy()
+        self.save_persisted_training()
+        return self.model
+
+    def update_from_corrections(self, peaks_detected, peaks_user_verified, rate, env_signal):
+        X_new, y_new = self.build_training_matrix(
+            peaks_detected, peaks_user_verified, rate, env_signal,
+            require_both_classes=False,
+        )
+        if self.training_features.size:
+            X = np.vstack((self.training_features, X_new))
+            y = np.concatenate((self.training_labels, y_new))
+        else:
+            X, y = X_new, y_new
+        samples = np.unique(np.column_stack((X, y)), axis=0)
+        self.training_features = samples[:, :-1]
+        self.training_labels = samples[:, -1].astype(int)
+        # Limita o conjunto de treino a 5000 amostras para evitar crescimento
+        # ilimitado de memória e degradação de performance (BUG 9).
+        # Mantém as amostras mais recentes para preservar o aprendizado recente.
+        _MAX_SAMPLES = 5000
+        if len(self.training_features) > _MAX_SAMPLES:
+            self.training_features = self.training_features[-_MAX_SAMPLES:]
+            self.training_labels = self.training_labels[-_MAX_SAMPLES:]
+        if np.unique(self.training_labels).size < 2:
+            self.save_persisted_training()
+            return False
+        self.model = self._build_model()
+        self.model.fit(self.training_features, self.training_labels)
+        self.save_persisted_training()
+        return True
+
+    def predict(self, X):
+        if self.model is None:
+            return np.asarray([], dtype=int)
+        X = np.asarray(X, dtype=float)
+        if X.size == 0:
+            return np.asarray([], dtype=int)
+        return self.model.predict(X).astype(int)
+
+    def filter_peaks(self, peaks, rate, env_signal):
+        peaks = np.asarray(peaks, dtype=int)
+        if self.model is None or peaks.size == 0:
+            return peaks
+        features = np.asarray([
+            self.extract_features_for_peak(int(peak_idx), rate, env_signal)
+            for peak_idx in peaks
+        ], dtype=float)
+        predictions = self.predict(features)
+        return peaks[predictions == 1]
+
+    def serialize(self):
+        if self.model is None:
+            return None
+        payload = pickle.dumps(self.model)
+        return {
+            "model_type": type(self.model).__name__,
+            "feature_names": self.feature_names,
+            "model_pickle_b64": base64.b64encode(payload).decode("ascii"),
+        }
+
+    def save_to_config(self):
+        if self.model is None:
+            return False
+        try:
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except FileNotFoundError:
+                config = {}
+            if not isinstance(config, dict):
+                config = {}
+            config["pulse_learner"] = self.serialize()
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"Erro ao persistir modelo de aprendizado: {exc}")
+            return False
+
+    def save_persisted_training(self):
+        payload = {
+            "model": self.model,
+            "training_features": self.training_features,
+            "training_labels": self.training_labels,
+            "feature_names": self.feature_names,
+        }
+        temp_path = self.persistence_path + ".tmp"
+        try:
+            with open(temp_path, "wb") as f:
+                pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(temp_path, self.persistence_path)
+            return True
+        except (OSError, pickle.PickleError) as exc:
+            print(f"Erro ao persistir treinamento: {exc}")
+            return False
+
+    def load_persisted_training(self):
+        if not os.path.exists(self.persistence_path):
+            return False
+        try:
+            with open(self.persistence_path, "rb") as f:
+                payload = pickle.load(f)
+            if not isinstance(payload, dict):
+                return False
+            features = np.asarray(payload.get("training_features", []), dtype=float)
+            labels = np.asarray(payload.get("training_labels", []), dtype=int)
+            if features.ndim == 2 and features.shape[1] == 7 and len(labels) == len(features):
+                self.training_features = features
+                self.training_labels = labels
+            model = payload.get("model")
+            if model is not None and hasattr(model, "predict"):
+                self.model = model
+            return self.model is not None or self.training_features.size > 0
+        except (OSError, EOFError, pickle.PickleError, ValueError, TypeError) as exc:
+            print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
+            return False
+    def load_from_config(self):
+        if not os.path.exists(self.config_path):
+            return False
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            if not isinstance(config, dict):
+                return False
+            payload = config.get("pulse_learner")
+            if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
+                return False
+            model_bytes = base64.b64decode(payload["model_pickle_b64"])
+            self.model = pickle.loads(model_bytes)
+            return True
+        except Exception as exc:
+            print(f"Aviso: não foi possível restaurar o modelo treinado: {exc}")
+            self.model = None
+            return False
+
 # ==========================================
 # PAINEL DE GRÁFICO MODERNO
 # ==========================================
@@ -648,13 +991,14 @@ class PlotPanel(QWidget):
         super().__init__()
         self.title_key = title_key
         self.expand_callback = expand_callback
+        self.pulse_edit_mode = False
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
 
         self.title_bar = QWidget()
         self.title_bar.setObjectName("plotTitleBar")
-        self.title_bar.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.title_bar.setAttribute(Qt.WA_TranslucentBackground, True)
         bar = QHBoxLayout(self.title_bar)
         bar.setContentsMargins(12, 7, 8, 7)
         bar.setSpacing(4)
@@ -663,6 +1007,23 @@ class PlotPanel(QWidget):
         self.lbl_title.setObjectName("plotTitle")
         bar.addWidget(self.lbl_title)
         bar.addStretch()
+
+        # Botão de edição de pulsos (ativa/desativa modo de seleção)
+        self.btn_pulse_edit = self._tool_button("", "Ativar modo de edição de pulsos (clique para adicionar/remover)")
+        self.btn_pulse_edit.setObjectName("plotTool")
+        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color="#D7DCE2", size=15))
+        self.btn_pulse_edit.setIconSize(QSize(14, 14))
+        self.btn_pulse_edit.setCheckable(True)
+        self.btn_pulse_edit.toggled.connect(self._toggle_pulse_edit_mode)
+        bar.addWidget(self.btn_pulse_edit)
+
+        self.btn_pulse_undo = self._tool_button("↶", "Desfazer última edição de pulso")
+        self.btn_pulse_undo.setEnabled(False)
+        self.btn_pulse_undo.clicked.connect(
+            lambda: self.window()._undo_pulse_edit()
+            if hasattr(self.window(), "_undo_pulse_edit") else None
+        )
+        bar.addWidget(self.btn_pulse_undo)
 
         # Ações do gráfico: somente maximizar/restaurar, que possui comportamento real.
         self.btn_expand = self._tool_button("", "Colocar este gráfico na posição principal")
@@ -684,18 +1045,32 @@ class PlotPanel(QWidget):
         self.layout.addWidget(self.canvas, 1)
 
         self.setObjectName("plotCard")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self._set_main_visual(main)
 
     def _tool_button(self, glyph, tooltip):
         b = QPushButton(glyph)
         b.setFlat(True)
-        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        b.setFocusPolicy(Qt.NoFocus)
         b.setToolTip(tooltip)
         b.setFixedSize(28, 26)
         b.setObjectName("plotTool")
         return b
+
+    def _toggle_pulse_edit_mode(self, checked):
+        """Ativa/desativa o modo de edição de pulsos para este painel."""
+        self.pulse_edit_mode = checked
+        parent = self.window()
+        if hasattr(parent, '_update_pulse_edit_buttons'):
+            parent._update_pulse_edit_buttons(self)
+        if checked:
+            self.btn_pulse_edit.setToolTip("Modo de edição ativo! Clique nos picos para adicionar/remover")
+            self.btn_pulse_edit.setStyleSheet("QPushButton { background: #1F6FEB; border-radius: 4px; }")
+        else:
+            self.btn_pulse_edit.setToolTip("Ativar modo de edição de pulsos (clique para adicionar/remover)")
+            self.btn_pulse_edit.setStyleSheet("")
+
 
     def _set_main_visual(self, main):
         self.setProperty("mainPlot", bool(main))
@@ -742,7 +1117,7 @@ class TimelineWidget(QWidget):
         self.setMinimumHeight(92)
         self.setMaximumHeight(104)
         self.setMouseTracking(True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAutoFillBackground(False)
 
     def set_data(self, duration, markers):
@@ -760,7 +1135,7 @@ class TimelineWidget(QWidget):
         return left + (right - left) * (seconds / self.duration)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.LeftButton:
             left, right = 18, max(19, self.width() - 18)
             ratio = max(0.0, min(1.0, (event.position().x() - left) / max(1, right-left)))
             self.position_callback(ratio * self.duration * 1000.0)
@@ -805,7 +1180,7 @@ class TimelineWidget(QWidget):
             if is_major:
                 p.setPen(major)
                 label = self._format_time(sec)
-                p.drawText(int(x)-28, 72, 56, 14, Qt.AlignmentFlag.AlignCenter, label)
+                p.drawText(int(x)-28, 72, 56, 14, Qt.AlignCenter, label)
             sec += 1.0
 
         # faixa discreta de progresso
@@ -834,8 +1209,8 @@ class TimelineWidget(QWidget):
         p.setPen(text)
         # Tempo corrente e duração ficam na faixa inferior, separados das flags.
         p.setPen(text)
-        p.drawText(18, 88, 74, 14, Qt.AlignmentFlag.AlignLeft, self._format_time(self.position) )
-        p.drawText(right-74, 88, 74, 14, Qt.AlignmentFlag.AlignRight, self._format_time(self.duration) )
+        p.drawText(18, 88, 74, 14, Qt.AlignLeft, self._format_time(self.position) )
+        p.drawText(right-74, 88, 74, 14, Qt.AlignRight, self._format_time(self.duration) )
         p.end()
 
     @staticmethod
@@ -850,8 +1225,8 @@ class ThemeToggle(QCheckBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(46, 24)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.NoFocus)
         self.setChecked(False)
         self.setStyleSheet("QCheckBox{background:transparent;border:0;} QCheckBox::indicator{width:44px;height:22px;border:0;background:transparent;}" )
     def paintEvent(self, event):
@@ -860,7 +1235,7 @@ class ThemeToggle(QCheckBox):
         track=QColor('#2A2E33' if dark else '#D6DDE4'); active=QColor('#2E8ED8'); border=QColor('#444A52' if dark else '#B8C1CA')
         p.setPen(QPen(border,1)); p.setBrush(active if self.isChecked() else track); p.drawRoundedRect(QRectF(1,1,44,22),11,11)
         x=33 if self.isChecked() else 13
-        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor('#FFFFFF')); p.drawEllipse(QRectF(x-8,4,16,16)); p.end()
+        p.setPen(Qt.NoPen); p.setBrush(QColor('#FFFFFF')); p.drawEllipse(QRectF(x-8,4,16,16)); p.end()
 
 
 # ==========================================
@@ -871,11 +1246,11 @@ class LoadingScreen(QWidget):
     def __init__(self, parent=None, finish_callback=None):
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
+            Qt.Tool
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.finish_callback = finish_callback
         self.setStyleSheet("background: #0D0F11;")
 
@@ -890,7 +1265,7 @@ class LoadingScreen(QWidget):
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
         self.audio.setVolume(1.0)  # reproduz também a trilha de áudio do loading.mp4
-        self.player.setAudioOutput(self.audio)
+        self.player.setVolume(100)
         self.player.setVideoOutput(self.video)
 
         self.player.mediaStatusChanged.connect(self._on_media_status)
@@ -905,7 +1280,7 @@ class LoadingScreen(QWidget):
 
         video_path = self._asset_path("loading.mp4")
         if os.path.exists(video_path):
-            self.player.setSource(QUrl.fromLocalFile(video_path))
+            self.player.setMedia(QMediaContent(QUrl.fromLocalFile(video_path)))
             self.player.play()
             self._fallback.start(15000)
         else:
@@ -966,8 +1341,10 @@ class MainWindow(QMainWindow):
             "amp_min": 0.04, "amp_max": 1.00, "amp_var": 0.40,
             "dur_min": 14.0, "dur_max": 80.0,
             "gap_min": 25.0, "gap_max": 35.0,
-            "min_p": 3, "max_p": 7,
-            "b1_min": 3200, "b1_max": 6000
+            "min_p": 3, "max_p": 7, "b1_min": 3200, "b1_max": 6000,
+            "prominence": 0.01, "width_min_ms": 0.0, "width_max_ms": 0.0,
+            "smooth_window_ms": 15.0, "noise_floor": 0.90,
+            "adaptation_rate": 0.10
         }
         self.report_params = {"lang": "pt", "institution": "", "researcher_name": "", "role": "", "level": ""}
 
@@ -975,6 +1352,14 @@ class MainWindow(QMainWindow):
         # Isso evita AttributeError caso alguma ação seja disparada durante a inicialização.
         self.lang = "pt"
         self.theme_mode = "dark"
+        self.pulse_learner = PulseLearner(CONFIG_FILE)
+        self.peaks_detected = []
+        self.peaks_user_verified = []
+        self.corrections_by_file = {}
+        self.active_filename = None
+        self._pulse_edit_history = []
+        self._wave_user_markers = []
+        self._click_alignment_lines = []
         self.load_settings()
         self.lang = self.report_params.get("lang", "pt") or "pt"
 
@@ -993,10 +1378,10 @@ class MainWindow(QMainWindow):
 
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
-        self.player.setAudioOutput(self.audio_output)
+        self.player.setVolume(80)
         self.player.positionChanged.connect(self.update_playback_cursor)
         self.player.durationChanged.connect(self.update_duration)
-        self.player.playbackStateChanged.connect(self._on_playback_state)
+        self.player.stateChanged.connect(self._on_playback_state)
 
         self.loaded_files = {}
         self.cursor_lines = []
@@ -1363,7 +1748,7 @@ class MainWindow(QMainWindow):
         self.btn_menu.setObjectName("menuButton")
         self.btn_menu.setIcon(make_ui_icon("menu", size=18))
         self.btn_menu.setIconSize(QSize(18, 18))
-        self.btn_menu.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_menu.setFocusPolicy(Qt.NoFocus)
         self.btn_menu.setFixedSize(34, 34)
         self.btn_menu.clicked.connect(self.show_app_menu)
         nav_l.addWidget(self.btn_menu)
@@ -1372,7 +1757,7 @@ class MainWindow(QMainWindow):
         self.btn_collapse.setObjectName("navIcon")
         self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
         self.btn_collapse.setIconSize(QSize(16, 16))
-        self.btn_collapse.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_collapse.setFocusPolicy(Qt.NoFocus)
         self.btn_collapse.setFixedSize(30, 30)
         self.btn_collapse.setToolTip("Ocultar/mostrar painel de arquivos")
         self.btn_collapse.clicked.connect(self.toggle_sidebar)
@@ -1380,12 +1765,12 @@ class MainWindow(QMainWindow):
 
         brand = QLabel("CRINÔMETRO")
         brand.setObjectName("brand")
-        brand.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        brand.setAttribute(Qt.WA_TranslucentBackground, True)
         brand.setAutoFillBackground(False)
         nav_l.addWidget(brand)
         version = QLabel("v2.0")
         version.setObjectName("version")
-        version.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        version.setAttribute(Qt.WA_TranslucentBackground, True)
         version.setAutoFillBackground(False)
         nav_l.addWidget(version)
         nav_l.addStretch()
@@ -1394,7 +1779,7 @@ class MainWindow(QMainWindow):
         self.btn_sync.setObjectName("btn_sync")
         self.btn_sync.setIcon(make_ui_icon("sync", color="#EAF4FB", size=18))
         self.btn_sync.setCheckable(True)
-        self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_sync.setFocusPolicy(Qt.NoFocus)
         self.btn_sync.toggled.connect(self.on_sync_toggled)
         self.btn_sync.setFixedHeight(36)
         self.btn_sync.setMinimumWidth(158)
@@ -1412,7 +1797,7 @@ class MainWindow(QMainWindow):
         root.addWidget(nav)
 
         # CONTEÚDO: sidebar + dashboard
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setChildrenCollapsible(True)
         root.addWidget(self.splitter, 1)
 
@@ -1456,7 +1841,7 @@ class MainWindow(QMainWindow):
         self.lbl_summary_meta = QLabel("Carregue um arquivo WAV para iniciar a análise")
         self.lbl_summary_meta.setObjectName("summaryMeta")
         for _label in (self.lbl_eyebrow, self.lbl_summary_file, self.lbl_summary_meta):
-            _label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            _label.setAttribute(Qt.WA_TranslucentBackground, True)
             _label.setAutoFillBackground(False)
         summary_info.addWidget(self.lbl_eyebrow)
         summary_info.addWidget(self.lbl_summary_file)
@@ -1469,11 +1854,16 @@ class MainWindow(QMainWindow):
         self.btn_reanalisar_main.setObjectName("summaryAction")
         self.btn_reanalisar_main.setIcon(make_ui_icon("reload", size=17))
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
+        self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
+        self.btn_learn_corrections.setObjectName("summaryAction")
+        self.btn_learn_corrections.setIcon(make_ui_icon("brain", size=17))
+        self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         self.btn_export_main = QPushButton("Exportar Dados")
         self.btn_export_main.setObjectName("summaryAction")
         self.btn_export_main.setIcon(make_ui_icon("export", size=17))
         self.btn_export_main.clicked.connect(self.action_save_txt)
         actions.addWidget(self.btn_reanalisar_main)
+        actions.addWidget(self.btn_learn_corrections)
         actions.addWidget(self.btn_export_main)
         summary.addLayout(actions)
 
@@ -1489,12 +1879,16 @@ class MainWindow(QMainWindow):
         self.lbl_total.setObjectName("metricValue")
         self.lbl_metric_sub = QLabel("Moda: —   |   Média: —")
         self.lbl_metric_sub.setObjectName("metricSub")
-        for _label in (self.lbl_metric_title, self.lbl_total, self.lbl_metric_sub):
-            _label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.lbl_model_status = QLabel("🧠 Modelo: não treinado")
+        self.lbl_model_status.setObjectName("metricSub")
+        self.lbl_model_status.setStyleSheet("color: #F97316;")
+        for _label in (self.lbl_metric_title, self.lbl_total, self.lbl_metric_sub, self.lbl_model_status):
+            _label.setAttribute(Qt.WA_TranslucentBackground, True)
             _label.setAutoFillBackground(False)
         metrics.addWidget(self.lbl_metric_title)
         metrics.addWidget(self.lbl_total)
         metrics.addWidget(self.lbl_metric_sub)
+        metrics.addWidget(self.lbl_model_status)
         summary.addLayout(metrics)
         right_layout.addWidget(self.summary_card)
 
@@ -1541,7 +1935,7 @@ class MainWindow(QMainWindow):
         # CONTROLES DE REPRODUÇÃO — velocidade à esquerda, play no centro, volume à direita
         self.playback_card = QFrame()
         self.playback_card.setObjectName("playbackCard")
-        self.playback_card.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.playback_card.setAttribute(Qt.WA_TranslucentBackground, True)
         root_play = QVBoxLayout(self.playback_card)
         root_play.setContentsMargins(14, 5, 14, 5)
         root_play.setSpacing(0)
@@ -1554,34 +1948,34 @@ class MainWindow(QMainWindow):
         self.btn_speed.setObjectName("speedButton")
         self.btn_speed.setFixedSize(50, 38)
         self.btn_speed.clicked.connect(self.cycle_playback_speed)
-        row.addWidget(self.btn_speed, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.btn_speed, 0, Qt.AlignVCenter)
 
         center = QWidget()
         center.setObjectName("playCenter")
-        center.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        center.setAttribute(Qt.WA_TranslucentBackground, True)
         center_l = QVBoxLayout(center)
         center_l.setContentsMargins(0,0,0,0)
         center_l.setSpacing(0)
-        center_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_l.setAlignment(Qt.AlignCenter)
         self.btn_play = self._transport_button("", "Reproduzir", play=True)
-        self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_play.setFocusPolicy(Qt.NoFocus)
         self.btn_play.setAutoDefault(False)
         self.btn_play.setDefault(False)
         self.btn_play.setFlat(True)
         self.btn_play.setFixedSize(46,46)
         self.btn_play.setIconSize(QSize(19,19))
         self.btn_play.clicked.connect(self.toggle_playback)
-        center_l.addWidget(self.btn_play,0,Qt.AlignmentFlag.AlignCenter)
+        center_l.addWidget(self.btn_play,0,Qt.AlignCenter)
         self.lbl_elapsed = QLabel("00:00.00 / 00:00.00")
         self.lbl_elapsed.setObjectName("elapsedLabel")
         self.lbl_elapsed.setFixedWidth(138)
-        self.lbl_elapsed.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        center_l.addWidget(self.lbl_elapsed,0,Qt.AlignmentFlag.AlignCenter)
-        row.addWidget(center,0,Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_elapsed.setAlignment(Qt.AlignCenter)
+        center_l.addWidget(self.lbl_elapsed,0,Qt.AlignCenter)
+        row.addWidget(center,0,Qt.AlignVCenter)
 
         self.volume_cluster = QWidget()
         self.volume_cluster.setObjectName("volumeCluster")
-        self.volume_cluster.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.volume_cluster.setAttribute(Qt.WA_TranslucentBackground, True)
         vol_l = QHBoxLayout(self.volume_cluster)
         vol_l.setContentsMargins(0,0,0,0)
         vol_l.setSpacing(6)
@@ -1590,21 +1984,21 @@ class MainWindow(QMainWindow):
         self.lbl_volume.setPixmap(make_ui_icon("volume", size=16).pixmap(16,16))
         self.lbl_volume.setFixedSize(18,18)
         vol_l.addWidget(self.lbl_volume)
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider = QSlider(Qt.Horizontal)
         self.volume_slider.setObjectName("volumeSlider")
         self.volume_slider.setRange(0,100)
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(120)
-        self.volume_slider.valueChanged.connect(lambda v: self.audio_output.setVolume(v/100.0))
+        self.volume_slider.valueChanged.connect(self.player.setVolume)
         vol_l.addWidget(self.volume_slider)
-        row.addWidget(self.volume_cluster,0,Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.volume_cluster,0,Qt.AlignVCenter)
         row.addStretch(2)
         root_play.addLayout(row)
 
         # CONTÊINER ÚNICO: controles + cursor/timeline do áudio
         self.transport_timeline_card = QFrame()
         self.transport_timeline_card.setObjectName("transportTimelineCard")
-        self.transport_timeline_card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.transport_timeline_card.setAttribute(Qt.WA_StyledBackground, True)
         self.transport_timeline_card.setAutoFillBackground(True)
         transport_timeline_layout = QVBoxLayout(self.transport_timeline_card)
         transport_timeline_layout.setContentsMargins(8, 8, 8, 8)
@@ -1620,17 +2014,17 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes([238, 1240])
         self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
 
-        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider = QSlider(Qt.Horizontal)
         # slider legado mantido para compatibilidade com as rotinas existentes;
         # a interação visual principal ocorre na TimelineWidget.
         self.slider.setRange(0, 0)
         self.slider.setVisible(False)
-        self._on_playback_state(self.player.playbackState())
+        self._on_playback_state(self.player.state())
 
     def _transport_button(self, text, tooltip, play=False, checkable=False):
         b = QPushButton(text)
         b.setObjectName("playButton" if play else "transport")
-        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        b.setFocusPolicy(Qt.NoFocus)
         b.setFixedSize(44 if not play else 46, 44 if not play else 46)
         b.setToolTip(tooltip)
         b.setCheckable(checkable)
@@ -1639,7 +2033,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _file_icon():
         pix = QPixmap(18, 18)
-        pix.fill(Qt.GlobalColor.transparent)
+        pix.fill(Qt.transparent)
         painter = QPainter(pix)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QColor("#AEB4BD"))
@@ -1778,6 +2172,7 @@ class MainWindow(QMainWindow):
         l = self.lang
         self.lbl_arquivos.setText(I18N[l]["files"].replace("🎧 ", ""))
         self.btn_reanalisar_main.setText("Reanalisar")
+        self.btn_learn_corrections.setText(I18N[l]["learn_corrections"])
         self.btn_sync.setText(I18N[l]["sync"].replace("🔗 ", ""))
         self.lbl_metric_title.setText("Chilreios Totais" if l == "pt" else "Total Chirps")
         for p in self.all_panels:
@@ -1801,7 +2196,7 @@ class MainWindow(QMainWindow):
         if not curr_item:
             return
         fname = curr_item.text()
-        if self.player.source().toLocalFile() == self.loaded_files.get(fname):
+        if self.player.currentMedia().canonicalUrl().toLocalFile() == self.loaded_files.get(fname):
             self.player.stop()
             self.btn_play.setEnabled(False)
             self._update_play_icon()
@@ -1825,7 +2220,7 @@ class MainWindow(QMainWindow):
                 self.list_widget.addItem(QListWidgetItem(self._file_icon(), filename))
         if files:
             target = os.path.basename(files[-1])
-            matches = self.list_widget.findItems(target, Qt.MatchFlag.MatchExactly)
+            matches = self.list_widget.findItems(target, Qt.MatchExactly)
             if matches:
                 self.list_widget.setCurrentItem(matches[0])
 
@@ -1859,7 +2254,7 @@ class MainWindow(QMainWindow):
         self.player.setPlaybackRate(1.0)
         self.btn_speed.setText("1×")
         self._update_play_icon()
-        self.player.setSource(QUrl.fromLocalFile(self.loaded_files[filename]))
+        self.player.setMedia(QMediaContent(QUrl.fromLocalFile(self.loaded_files[filename])))
         self.btn_play.setEnabled(True)
         if filename in self.analysis_cache:
             self.run_analysis(filename, self.analysis_cache[filename]["params"], render=True)
@@ -1869,13 +2264,13 @@ class MainWindow(QMainWindow):
     # ---------- configurações ----------
     def open_algo_settings(self):
         dialog = AlgoSettingsDialog(self.algo_params, self.lang, self)
-        if dialog.exec():
+        if dialog.exec_():
             new_params = dialog.get_params()
             if new_params != self.algo_params:
                 self.algo_params = new_params
                 if self.analysis_cache:
-                    reply = QMessageBox.question(self, "Reanalisar?", "Configurações alteradas! Deseja refazer as análises no cache?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                    if reply == QMessageBox.StandardButton.Yes:
+                    reply = QMessageBox.question(self, "Reanalisar?", "Configurações alteradas! Deseja refazer as análises no cache?", QMessageBox.Yes | QMessageBox.No)
+                    if reply == QMessageBox.Yes:
                         for fname in list(self.analysis_cache.keys()):
                             self.run_analysis(fname, self.algo_params, render=False)
                 curr = self.list_widget.currentItem()
@@ -1884,14 +2279,14 @@ class MainWindow(QMainWindow):
 
     def open_report_settings(self):
         dialog = GeneralSettingsDialog(self.report_params, self.lang, self)
-        if dialog.exec():
+        if dialog.exec_():
             self.report_params = dialog.get_params()
             if self.report_params["lang"] != self.lang:
                 self.lang = self.report_params["lang"]
                 self.refresh_ui_texts()
 
     def open_about(self):
-        AboutDialog(self).exec()
+        AboutDialog(self).exec_()
 
     def load_settings(self):
         """Carrega as configurações persistidas, mantendo os valores padrão quando ausentes."""
@@ -1908,13 +2303,38 @@ class MainWindow(QMainWindow):
                 theme = data.get("theme")
                 if theme in {"dark", "light"}:
                     self.theme_mode = theme
+                corrections = data.get("corrections_by_file")
+                if isinstance(corrections, dict):
+                    self.corrections_by_file = {
+                        str(name): [int(p) for p in peaks]
+                        for name, peaks in corrections.items()
+                        if isinstance(peaks, list)
+                    }
+                if "pulse_learner" in data:
+                    self.pulse_learner.load_from_config()
         except Exception as e:
             print(f"Erro ao carregar configurações: {e}")
 
     def save_settings(self):
         try:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            else:
+                config = {}
+            if not isinstance(config, dict):
+                config = {}
+            config["algo_params"] = self.algo_params
+            config["report_params"] = self.report_params
+            config["theme"] = self.theme_mode
+            config["corrections_by_file"] = self.corrections_by_file
+            if not "pulse_learner" in config:
+                config["pulse_learner"] = None
+            if self.pulse_learner.model is not None:
+                config["pulse_learner"] = self.pulse_learner.serialize()
+                self.pulse_learner.save_persisted_training()
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump({"algo_params": self.algo_params, "report_params": self.report_params, "theme": self.theme_mode}, f, indent=4, ensure_ascii=False)
+                json.dump(config, f, indent=4, ensure_ascii=False)
             QMessageBox.information(self, I18N[self.lang]["success"], I18N[self.lang]["config_saved"])
         except Exception as e:
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Failed to save:\n{e}")
@@ -1928,18 +2348,31 @@ class MainWindow(QMainWindow):
         if filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
             QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de reanalisar.")
             return
+        # Reseta badge visual que indica parâmetros adaptados (BUG 7)
+        self.btn_reanalisar_main.setText("Reanalisar")
+        self.btn_reanalisar_main.setToolTip("")
         self.run_analysis(filename, self.algo_params, render=True)
 
     def run_analysis(self, filename, params, render=True):
         file_path = self.loaded_files[filename]
         try:
-            rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = CricketAnalyzer.analyze(file_path, params)
+            rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = CricketAnalyzer.analyze(file_path, params, pulse_learner=self.pulse_learner)
+            self.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
+            self.active_filename = filename
+            stored_corrections = self.corrections_by_file.get(filename)
+            self.peaks_user_verified = (
+                list(stored_corrections)
+                if stored_corrections is not None
+                else list(self.peaks_detected)
+            )
             self.analysis_cache[filename] = {"chirps": chirps, "media": media, "moda": moda, "duration": audio_duration, "params": params.copy()}
             self.active_heavy_data = {
                 "rate": rate, "data": data, "env": env, "peaks": peaks, "chirps": chirps,
                 "chirp_peaks_list": chirp_peaks_list, "media": media, "moda": moda,
                 "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
-                "duration": audio_duration, "params": params.copy()
+                "duration": audio_duration, "params": params.copy(),
+                "peaks_detected": list(self.peaks_detected),
+                "peaks_user_verified": list(self.peaks_user_verified),
             }
             if render:
                 self.render_dashboard(filename)
@@ -1947,6 +2380,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
 
     def render_dashboard(self, filename):
+        # Limpa referências a linhas de alinhamento do clique em eixos que serão
+        # destruídos/recriados nesta renderização. Mantê-las causaria RuntimeError
+        # ao chamar line.remove() na próxima chamada de _align_click_marker().
+        self._click_alignment_lines = []
         d = self.active_heavy_data
         p = d["params"]
         rate = d["rate"]
@@ -1964,6 +2401,10 @@ class MainWindow(QMainWindow):
         self.lbl_summary_meta.setText(f"Duração: {d['duration']:.2f} seconds   |   Parâmetros: {p_txt}")
         self.lbl_total.setText(str(len(chirps)))
         self.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
+        model_status_text = "🧠 Modelo: ✓ treinado" if self.pulse_learner.is_trained() else "🧠 Modelo: não treinado"
+        model_status_color = "#10B981" if self.pulse_learner.is_trained() else "#F97316"
+        self.lbl_model_status.setText(model_status_text)
+        self.lbl_model_status.setStyleSheet(f"color: {model_status_color};")
 
         paleta_cores = ['#03A9F4', '#4CAF50', '#FF5252', '#E040FB', '#FFAB40', '#00E676', '#FF4081', '#FFEA00']
         # Visual solicitado: verde/orange/magenta como categorias dominantes.
@@ -1999,6 +2440,8 @@ class MainWindow(QMainWindow):
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
             ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.7, zorder=3)
+
+        self._refresh_user_peak_markers()
         ax1.set_xlabel("seconds")
         ax1.set_ylabel("Amplitude")
         ax1.set_ylim(-1.05, 1.05)
@@ -2148,17 +2591,17 @@ class MainWindow(QMainWindow):
 
     # ---------- reprodução ----------
     def toggle_playback(self):
-        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+        if self.player.state() == QMediaPlayer.PlayingState:
             self.player.pause()
         else:
-            if self.player.source().isEmpty():
+            if self.player.currentMedia().isNull():
                 return
             self.player.play()
 
     def _update_play_icon(self):
         if not hasattr(self, "btn_play"):
             return
-        playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        playing = self.player.state() == QMediaPlayer.PlayingState
         icon_color = "#FFFFFF" if self.theme_mode == "dark" else "#123B5D"
         self.btn_play.setIcon(make_ui_icon("pause" if playing else "play", color=icon_color, size=19))
         self.btn_play.setIconSize(QSize(19,19))
@@ -2224,12 +2667,272 @@ class MainWindow(QMainWindow):
             return
         try:
             active_panels = [self.panel_wave, self.panel_freq, self.panel_spec]
-            for i, panel in enumerate(active_panels):
-                panel.canvas.restore_region(self.backgrounds[i])
-                panel.ax.draw_artist(self.cursor_lines[i])
+            # Usa zip() para evitar IndexError caso cursor_lines e active_panels
+            # estejam dessincronizados (BUG 4)
+            for panel, bg, line in zip(active_panels, self.backgrounds, self.cursor_lines):
+                panel.canvas.restore_region(bg)
+                panel.ax.draw_artist(line)
                 panel.canvas.blit(panel.ax.bbox)
         except Exception:
             pass
+
+    def _refresh_user_peak_markers(self):
+        """Renderiza marcadores de picos do usuário em todos os gráficos relevantes (onda, freq, spec)."""
+        if not hasattr(self, 'panel_wave'):
+            return
+        
+        # Limpa marcadores antigos de todos os painéis
+        for artist in getattr(self, '_wave_user_markers', []):
+            try:
+                artist.remove()
+            except Exception:
+                pass
+        self._wave_user_markers = []
+
+        if not self.active_heavy_data or not self.peaks_user_verified:
+            return
+
+        rate = float(self.active_heavy_data.get('rate', 1.0))
+        t_spec = self.active_heavy_data.get('t_spec', [])
+        dom_freqs = self.active_heavy_data.get('dom_freqs', [])
+        
+        peaks_detected_set = set(int(p) for p in self.peaks_detected)
+        peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
+
+        peaks_confirmed = sorted(peaks_verified_set & peaks_detected_set)
+        peaks_added = sorted(peaks_verified_set - peaks_detected_set)
+        peaks_removed = sorted(peaks_detected_set - peaks_verified_set)
+
+        # Renderiza na onda acústica (ax1)
+        ax1 = self.panel_wave.ax
+        if peaks_confirmed:
+            xdata = np.asarray(peaks_confirmed, dtype=float) / rate
+            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='o', 
+                                 color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=6)
+            self._wave_user_markers.append(scatter)
+
+        if peaks_added:
+            xdata = np.asarray(peaks_added, dtype=float) / rate
+            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='^', 
+                                 color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=6)
+            self._wave_user_markers.append(scatter)
+
+        if peaks_removed:
+            xdata = np.asarray(peaks_removed, dtype=float) / rate
+            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=80, marker='x', 
+                                 color='#EF4444', linewidths=2.0, zorder=6)
+            self._wave_user_markers.append(scatter)
+
+        # Renderiza no espectrograma (ax4) e gráfico de frequência (ax3) se dados disponíveis
+        if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
+            ax3 = self.panel_freq.ax
+            ax4 = self.panel_spec.ax
+            
+            for peaks, color, marker in [
+                (peaks_confirmed, '#10B981', 'o'),
+                (peaks_added, '#3B82F6', '^'),
+                (peaks_removed, '#EF4444', 'x'),
+            ]:
+                if peaks:
+                    pks_t = np.asarray(peaks, dtype=float) / rate
+                    freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
+                    
+                    # Frequência
+                    line_freq = ax3.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
+                                        color=color, markersize=8, markeredgewidth=1.2, zorder=5)
+                    self._wave_user_markers.extend(line_freq)
+                    
+                    # Espectrograma
+                    line_spec = ax4.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
+                                        color=color, markersize=8, markeredgewidth=1.2, zorder=5)
+                    self._wave_user_markers.extend(line_spec)
+
+        # Redesenha todos os painéis
+        for panel in self.all_panels:
+            try:
+                panel.canvas.draw_idle()
+            except Exception:
+                pass
+
+    def _find_nearest_user_peak(self, time_sec, tolerance_sec=0.005):
+        """Encontra o pico mais próximo ao clique, com tolerância precisa de 5 ms."""
+        if not self.peaks_user_verified or not self.active_heavy_data:
+            return None
+        rate = float(self.active_heavy_data.get('rate', 1.0))
+        tolerance_samples = max(2, int(round(tolerance_sec * rate)))
+        peak_samples = np.asarray(self.peaks_user_verified, dtype=int)
+        target = int(round(float(time_sec) * rate))
+        diffs = np.abs(peak_samples - target)
+        if diffs.size == 0:
+            return None
+        nearest_idx = int(np.argmin(diffs))
+        if diffs[nearest_idx] <= tolerance_samples:
+            return int(peak_samples[nearest_idx])
+        return None
+
+    def _toggle_peak_marker(self, time_sec):
+        """Alterna a classificação do pico mais próximo ou adiciona um novo pico."""
+        if not self.active_heavy_data:
+            return
+        rate = float(self.active_heavy_data.get('rate', 1.0))
+        target = int(round(float(time_sec) * rate))
+        candidates = sorted(set(int(p) for p in self.peaks_detected) |
+                            set(int(p) for p in self.peaks_user_verified))
+        if candidates:
+            distances = np.abs(np.asarray(candidates, dtype=int) - target)
+            nearest = candidates[int(np.argmin(distances))] if distances.min() <= int(round(0.005 * rate)) else None
+        else:
+            nearest = None
+
+        self._pulse_edit_history.append(list(self.peaks_user_verified))
+        # Limite de 50 estados no histórico para evitar crescimento ilimitado de memória (BUG 2)
+        if len(self._pulse_edit_history) > 50:
+            self._pulse_edit_history = self._pulse_edit_history[-50:]
+
+        if nearest is not None and nearest in self.peaks_user_verified:
+            self.peaks_user_verified = [int(p) for p in self.peaks_user_verified if int(p) != nearest]
+        elif nearest is not None:
+            # Clicar no X vermelho desfaz a desclassificação e restaura a bolinha verde.
+            self.peaks_user_verified = sorted(set(self.peaks_user_verified + [nearest]))
+        else:
+            self.peaks_user_verified = sorted(set(self.peaks_user_verified + [target]))
+        self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
+        if self.active_filename:
+            self.corrections_by_file[self.active_filename] = list(self.peaks_user_verified)
+            self._save_corrections_state()
+        self.pulse_learner.update_from_corrections(
+            self.peaks_detected,
+            self.peaks_user_verified,
+            rate,
+            self.active_heavy_data['env'],
+        )
+        self._adapt_advanced_params()
+        self.pulse_learner.save_to_config()
+        for panel in self.all_panels:
+            if hasattr(panel, "btn_pulse_undo"):
+                panel.btn_pulse_undo.setEnabled(True)
+        self._refresh_user_peak_markers()
+
+    def _adapt_advanced_params(self):
+        """Atualiza parâmetros avançados com estatísticas das correções atuais."""
+        if not self.active_heavy_data or not self.peaks_user_verified:
+            return
+        env = self.active_heavy_data.get("env")
+        if env is None:
+            return
+        rate = float(self.active_heavy_data.get("rate", 1.0))
+        features = np.asarray([
+            PulseLearner.extract_features_for_peak(p, rate, env)
+            for p in self.peaks_user_verified
+        ])
+        if features.size == 0:
+            return
+        adaptation = float(self.algo_params.get("adaptation_rate", 0.10))
+        adaptation = min(1.0, max(0.0, adaptation))
+        target_prominence = float(np.percentile(features[:, 0], 25) * 0.01)
+        target_noise = float(np.median(features[:, 0]) / (np.max(features[:, 0]) + 1e-9))
+        target_width_ms = float(np.median(features[:, 1]) * 1000.0)
+        self.algo_params["prominence"] = (
+            (1.0 - adaptation) * float(self.algo_params.get("prominence", target_prominence))
+            + adaptation * max(0.0001, target_prominence)
+        )
+        self.algo_params["noise_floor"] = (
+            (1.0 - adaptation) * float(self.algo_params.get("noise_floor", 0.90))
+            + adaptation * min(1.5, max(0.1, target_noise))
+        )
+        if target_width_ms > 0:
+            current_width = float(self.algo_params.get("width_min_ms", 0.0))
+            self.algo_params["width_min_ms"] = (
+                (1.0 - adaptation) * current_width
+                + adaptation * max(0.0, target_width_ms * 0.5)
+            )
+        # BUG 7 — Indica visualmente que os parâmetros foram ajustados e que
+        # o usuário deve reanalisar para aplicar os novos valores ao find_peaks.
+        if hasattr(self, "btn_reanalisar_main"):
+            self.btn_reanalisar_main.setText("⚡ Reanalisar")
+            self.btn_reanalisar_main.setToolTip(
+                "Parâmetros de detecção foram ajustados automaticamente.\n"
+                "Clique para reaplicar a análise com os novos valores."
+            )
+
+    def _undo_pulse_edit(self):
+        if not self._pulse_edit_history:
+            return
+        self.peaks_user_verified = self._pulse_edit_history.pop()
+        self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
+        if self.active_filename:
+            self.corrections_by_file[self.active_filename] = list(self.peaks_user_verified)
+            self._save_corrections_state()
+        enabled = bool(self._pulse_edit_history)
+        for panel in self.all_panels:
+            if hasattr(panel, "btn_pulse_undo"):
+                panel.btn_pulse_undo.setEnabled(enabled)
+        self._refresh_user_peak_markers()
+
+    def _save_corrections_state(self):
+        """Persiste correções sem exibir o diálogo de confirmação das configurações."""
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            if not isinstance(config, dict):
+                config = {}
+            config["corrections_by_file"] = self.corrections_by_file
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"Erro ao persistir correções: {exc}")
+    def _learn_from_corrections_now(self, filename):
+        if not self.active_heavy_data:
+            QMessageBox.warning(self, "Sem dados", "Primeiro carregue um arquivo WAV antes de treinar o classificador.")
+            return
+
+        detected = self.peaks_detected
+        verified = self.peaks_user_verified
+        detected_set = set(int(p) for p in detected)
+        verified_set = set(int(p) for p in verified)
+
+        if not detected_set or not verified_set:
+            QMessageBox.warning(self, "Dados insuficientes", "Você precisa ter tanto pulsos detectados quanto verificados para treinar.")
+            return
+
+        if detected_set == verified_set:
+            QMessageBox.information(self, "Sem mudanças", "Nenhuma correção foi feita no arquivo atual.")
+            return
+
+        try:
+            # update_from_corrections já chama build_training_matrix internamente.
+            # A chamada duplicada anterior criava X, y que eram descartados logo em seguida.
+            self.pulse_learner.update_from_corrections(
+                detected, verified,
+                self.active_heavy_data['rate'],
+                self.active_heavy_data['env'],
+            )
+            self.pulse_learner.save_to_config()
+            num_corrections = len(detected_set ^ verified_set)
+            QMessageBox.information(
+                self, 
+                I18N[self.lang]['success'], 
+                f'Modelo treinado com sucesso!\n\n'
+                f'Arquivo: {filename}\n'
+                f'Picos analisados: {len(detected)}\n'
+                f'Correções do usuário: {num_corrections}\n'
+                f'Picos verificados: {len(verified)}\n\n'
+                f'O modelo foi persistido e será aplicado na próxima análise.'
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{exc}')
+
+    def learn_from_corrections(self):
+        curr = self.list_widget.currentItem()
+        if not curr:
+            QMessageBox.warning(self, "Nenhum arquivo", "Selecione um arquivo antes de treinar.")
+            return
+        filename = curr.text()
+        QTimer.singleShot(0, lambda: self._learn_from_corrections_now(filename))
+
+    def on_double_click(self, event):
+        if event.inaxes == self.panel_wave.ax and event.xdata is not None:
+            self._toggle_peak_marker(event.xdata)
 
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):
@@ -2243,7 +2946,7 @@ class MainWindow(QMainWindow):
         if self.active_heavy_data: self._refresh_all_canvases()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.expanded_panel is not None:
+        if event.key() == Qt.Key_Escape and self.expanded_panel is not None:
             self.swap_main_panel(self.expanded_panel)
         else:
             super().keyPressEvent(event)
@@ -2268,18 +2971,59 @@ class MainWindow(QMainWindow):
         self.bg_cache_valid = True
 
     def on_press(self, event):
+        """Gerencia cliques em painéis. Se modo de edição de pulsos estiver ativo, permite editar."""
+        if event.xdata is not None:
+            self._align_click_marker(float(event.xdata))
+        
+        # Determina qual painel foi clicado
+        clicked_panel = None
         for panel in self.all_panels:
-            if panel is self.panel_hist:
-                continue
-            if event.button == 1 and event.inaxes == panel.ax:
-                self.panning = True
-                self.active_ax = event.inaxes
-                self.start_xlim = self.active_ax.get_xlim()
-                self.start_ylim = self.active_ax.get_ylim()
-                self.start_x, self.start_y = event.x, event.y
-                self.bg_cache_valid = False
-                for line in self.cursor_lines:
-                    line.set_animated(False)
+            if event.inaxes == panel.ax:
+                clicked_panel = panel
+                break
+
+        # Se modo de edição está ativo e clicou em um painel que suporta edição
+        if clicked_panel and getattr(clicked_panel, 'pulse_edit_mode', False) and event.xdata is not None:
+            # Converte coordenada X (tempo) para amostras
+            if self.active_heavy_data:
+                rate = float(self.active_heavy_data.get('rate', 1.0))
+                time_sec = float(event.xdata)
+                self._toggle_peak_marker(time_sec)
+                return
+
+        # Comportamento normal de pan/zoom quando não em modo de edição
+        if clicked_panel and clicked_panel != self.panel_hist and event.button == 1:
+            self.panning = True
+            self.active_ax = event.inaxes
+            self.start_xlim = self.active_ax.get_xlim()
+            self.start_ylim = self.active_ax.get_ylim()
+            self.start_x, self.start_y = event.x, event.y
+            self.bg_cache_valid = False
+            for line in self.cursor_lines:
+                line.set_animated(False)
+
+    def _align_click_marker(self, time_sec):
+        """Desenha a referência vertical do clique em todos os eixos temporais."""
+        for line in self._click_alignment_lines:
+            line.remove()
+        self._click_alignment_lines = []
+        for panel in (self.panel_wave, self.panel_freq, self.panel_spec):
+            for ax in panel.figure.axes:
+                self._click_alignment_lines.append(
+                    ax.axvline(x=time_sec, color="#FACC15", linewidth=1.0,
+                               linestyle="--", alpha=0.75, zorder=8)
+                )
+            panel.canvas.draw_idle()
+
+    def _update_pulse_edit_buttons(self, activated_panel):
+        """Quando um painel é ativado para edição de pulsos, desativa os outros."""
+        for panel in self.all_panels:
+            if panel != activated_panel:
+                panel.pulse_edit_mode = False
+                if hasattr(panel, 'btn_pulse_edit'):
+                    panel.btn_pulse_edit.blockSignals(True)
+                    panel.btn_pulse_edit.setChecked(False)
+                    panel.btn_pulse_edit.blockSignals(False)
 
     def on_release(self, event):
         if event.button == 1:
@@ -2390,7 +3134,7 @@ class MainWindow(QMainWindow):
             self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
 
     def zoom_graph(self, event):
-        if not event.inaxes or QApplication.keyboardModifiers() != Qt.KeyboardModifier.ControlModifier:
+        if not event.inaxes or QApplication.keyboardModifiers() != Qt.ControlModifier:
             return
         self.bg_cache_valid = False
         for line in self.cursor_lines:
@@ -2488,4 +3232,4 @@ if __name__ == "__main__":
         release_timer.timeout.connect(release_when_requested)
         release_timer.start()
 
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
