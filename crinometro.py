@@ -1473,39 +1473,64 @@ class LoadingScreen(QWidget):
             QTimer.singleShot(0, callback)
 
 class AudioListItemWidget(QWidget):
-    """Widget para item da lista de áudios contendo caixinha de seleção (azul quando marcada),
-    nome do arquivo e botão de lixeira para remoção rápida.
+    """Widget para item da lista de áudios contendo:
+    - Um card clicável com o nome do áudio (com efeito hover e seleção ativa).
+    - Fora do card, no canto direito: a caixinha de seleção (azul quando marcada) e o botão de lixeira.
     """
-    def __init__(self, filename, is_checked=True, on_toggle=None, on_delete=None, on_select=None, parent=None):
+    def __init__(self, filename, is_checked=True, is_active=False, on_toggle=None, on_delete=None, on_select=None, parent=None):
         super().__init__(parent)
         self.filename = filename
         self.on_delete = on_delete
         self.on_toggle = on_toggle
         self.on_select = on_select
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(8)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(1, 1, 1, 1)
+        main_layout.setSpacing(6)
 
-        # Caixinha para marcar/selecionar áudios para lote e relatório
+        # 1. Card de clique / hover do áudio (exclusivo para o nome do arquivo)
+        self.card = QFrame()
+        self.card.setObjectName("audioFileCard")
+        self.card.setProperty("active", is_active)
+        self.card.setCursor(Qt.PointingHandCursor)
+        
+        card_layout = QHBoxLayout(self.card)
+        card_layout.setContentsMargins(8, 4, 8, 4)
+        card_layout.setSpacing(6)
+
+        self.lbl_icon = QLabel()
+        self.lbl_icon.setPixmap(make_ui_icon("play", color="#8B949E", size=10).pixmap(10, 10))
+        self.lbl_icon.setStyleSheet("background: transparent; border: 0;")
+        card_layout.addWidget(self.lbl_icon)
+
+        self.lbl_name = QLabel(filename)
+        self.lbl_name.setObjectName("audioFileName")
+        self.lbl_name.setToolTip(filename)
+        self.lbl_name.setStyleSheet("background: transparent; border: 0;")
+        card_layout.addWidget(self.lbl_name, 1)
+
+        main_layout.addWidget(self.card, 1)
+
+        # 2. Área no canto direito (FORA do card de clique/hover do áudio)
+        self.actions_widget = QWidget()
+        self.actions_widget.setStyleSheet("background: transparent; border: 0;")
+        actions_layout = QHBoxLayout(self.actions_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(4)
+
+        # Caixinha de marcar (fica azul quando selecionada)
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(is_checked)
-        self.checkbox.setToolTip("Marcar para análise em lote e inclusão no relatório")
+        self.checkbox.setToolTip("Marcar para análise em lote e relatório")
         self.checkbox.setCursor(Qt.PointingHandCursor)
         self.checkbox.stateChanged.connect(self._on_check_changed)
-        layout.addWidget(self.checkbox)
-
-        # Nome do arquivo de áudio
-        self.lbl_name = QLabel(filename)
-        self.lbl_name.setToolTip(filename)
-        self.lbl_name.setStyleSheet("background: transparent; border: 0; font-size: 12px;")
-        layout.addWidget(self.lbl_name, 1)
+        actions_layout.addWidget(self.checkbox)
 
         # Botão com ícone de lixeira para remover o áudio
         self.btn_trash = QPushButton()
         self.btn_trash.setFixedSize(22, 22)
         self.btn_trash.setFlat(True)
-        self.btn_trash.setIcon(make_ui_icon("trash", color="#94A3B8", size=14))
+        self.btn_trash.setIcon(make_ui_icon("trash", color="#8B949E", size=14))
         self.btn_trash.setToolTip(f"Remover {filename} da lista")
         self.btn_trash.setCursor(Qt.PointingHandCursor)
         self.btn_trash.setStyleSheet("""
@@ -1513,12 +1538,23 @@ class AudioListItemWidget(QWidget):
             QPushButton:hover { background: rgba(239, 68, 68, 0.25); }
         """)
         self.btn_trash.clicked.connect(self._on_delete_clicked)
-        layout.addWidget(self.btn_trash)
+        actions_layout.addWidget(self.btn_trash)
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+        main_layout.addWidget(self.actions_widget, 0)
+
+        # Evento de clique no card para selecionar o áudio
+        self.card.mousePressEvent = self._on_card_clicked
+
+    def _on_card_clicked(self, event):
         if self.on_select:
             self.on_select(self.filename)
+
+    def set_active(self, active):
+        self.card.setProperty("active", bool(active))
+        self.card.style().unpolish(self.card)
+        self.card.style().polish(self.card)
+        self.lbl_name.style().unpolish(self.lbl_name)
+        self.lbl_name.style().polish(self.lbl_name)
 
     def is_checked(self):
         return self.checkbox.isChecked()
@@ -1694,22 +1730,46 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: 0;
                 outline: 0;
-                padding: 2px 8px 8px 8px;
+                padding: 2px 4px 4px 4px;
                 color: #BFC3CA;
                 font-size: 12px;
             }
             QListWidget::item {
-                height: 29px;
-                padding: 0 8px;
-                border-radius: 6px;
-                margin: 1px 0;
+                background: transparent;
+                border: none;
+                padding: 0;
+                margin: 2px 0;
             }
             QListWidget::item:selected {
+                background: transparent;
+                border: none;
+            }
+            QListWidget::item:hover {
+                background: transparent;
+                border: none;
+            }
+            QFrame#audioFileCard {
+                background: #171A1E;
+                border: 1px solid #282C32;
+                border-radius: 6px;
+            }
+            QFrame#audioFileCard:hover {
+                background: #23282F;
+                border: 1px solid #3A424D;
+            }
+            QFrame#audioFileCard[active="true"] {
                 background: #193A58;
-                color: #E9F4FF;
+                border: 1px solid #2D8CD8;
+            }
+            QLabel#audioFileName {
+                color: #D1D5DB;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QFrame#audioFileCard[active="true"] QLabel#audioFileName {
+                color: #FFFFFF;
                 font-weight: 600;
             }
-            QListWidget::item:hover:!selected { background: #1A1D21; }
             QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard, QFrame#plotCard {
                 background: #17191C;
                 border: 1px solid #292D32;
@@ -1843,9 +1903,32 @@ class MainWindow(QMainWindow):
                 QPushButton#btn_sync:checked { background: #236FAE; }
                 QFrame#sidebar { background: #F7F9FB; border-right: 1px solid #D9DEE4; }
                 QLabel#sidebarTitle, QLabel#eyebrow { color: #606A74; }
-                QListWidget { color: #4D5761; }
-                QListWidget::item:hover:!selected { background: #EEF2F5; }
-                QListWidget::item:selected { background: #DCEFFF; color: #164D78; }
+                QListWidget { color: #4D5761; background: transparent; border: 0; outline: 0; }
+                QListWidget::item { background: transparent; border: none; padding: 0; margin: 2px 0; }
+                QListWidget::item:hover { background: transparent; }
+                QListWidget::item:selected { background: transparent; }
+                QFrame#audioFileCard {
+                    background: #FFFFFF;
+                    border: 1px solid #D9DEE4;
+                    border-radius: 6px;
+                }
+                QFrame#audioFileCard:hover {
+                    background: #F1F5F9;
+                    border-color: #CBD5E1;
+                }
+                QFrame#audioFileCard[active="true"] {
+                    background: #DCEFFF;
+                    border: 1px solid #2E8ED8;
+                }
+                QLabel#audioFileName {
+                    color: #334155;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+                QFrame#audioFileCard[active="true"] QLabel#audioFileName {
+                    color: #164D78;
+                    font-weight: 600;
+                }
                 QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard, QFrame#plotCard {
                     background: #FFFFFF; border: 1px solid #D9DEE4;
                     border-radius: 10px;
@@ -2421,22 +2504,39 @@ class MainWindow(QMainWindow):
             self.btn_collapse.setToolTip("Mostrar painel de arquivos")
 
     # ---------- arquivos ----------
-    def _add_audio_file_item(self, filename, is_checked=True):
-        """Adiciona um item com caixinha de seleção e botão de lixeira à lista de áudios."""
+    def _get_item_filename(self, item):
+        if not item:
+            return None
+        widget = self.list_widget.itemWidget(item)
+        if widget and hasattr(widget, "filename"):
+            return widget.filename
+        return item.data(Qt.UserRole) or item.text()
+
+    def update_audio_list_active_states(self, active_filename):
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             widget = self.list_widget.itemWidget(item)
-            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            if widget and hasattr(widget, "set_active"):
+                is_act = (widget.filename == active_filename)
+                widget.set_active(is_act)
+
+    def _add_audio_file_item(self, filename, is_checked=True):
+        """Adiciona um item com card de áudio e botões de ação externos à lista."""
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            name = self._get_item_filename(item)
             if name == filename:
                 return item
 
         item = QListWidgetItem(self.list_widget)
-        item.setText(filename)
-        item.setSizeHint(QSize(200, 32))
+        item.setText("")  # Deixa vazio no QListWidgetItem para evitar sobreposição visual
+        item.setData(Qt.UserRole, filename)
+        item.setSizeHint(QSize(200, 36))
 
         widget = AudioListItemWidget(
             filename,
             is_checked=is_checked,
+            is_active=False,
             on_toggle=self.on_file_check_toggled,
             on_delete=self.remove_audio_by_name,
             on_select=self.select_file_by_name
@@ -2452,8 +2552,8 @@ class MainWindow(QMainWindow):
             widget = self.list_widget.itemWidget(item)
             if widget and hasattr(widget, "is_checked") and widget.is_checked():
                 checked.append(widget.filename)
-            elif item and item.text():
-                checked.append(item.text())
+            elif item and (item.data(Qt.UserRole) or item.text()):
+                checked.append(item.data(Qt.UserRole) or item.text())
         return checked
 
     def on_file_check_toggled(self, filename, is_checked):
@@ -2470,10 +2570,10 @@ class MainWindow(QMainWindow):
     def select_file_by_name(self, filename):
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            widget = self.list_widget.itemWidget(item)
-            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            name = self._get_item_filename(item)
             if name == filename:
                 self.list_widget.setCurrentItem(item)
+                self.update_audio_list_active_states(filename)
                 break
 
     def analyze_selected_audios(self):
@@ -2492,8 +2592,7 @@ class MainWindow(QMainWindow):
         errors = []
 
         curr = self.list_widget.currentItem()
-        curr_widget = self.list_widget.itemWidget(curr) if curr else None
-        curr_name = curr_widget.filename if curr_widget and hasattr(curr_widget, "filename") else (curr.text() if curr else None)
+        curr_name = self._get_item_filename(curr)
 
         for fname in checked_files:
             if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
@@ -2519,8 +2618,7 @@ class MainWindow(QMainWindow):
         curr_item = self.list_widget.currentItem()
         if not curr_item:
             return
-        widget = self.list_widget.itemWidget(curr_item)
-        fname = widget.filename if widget and hasattr(widget, "filename") else curr_item.text()
+        fname = self._get_item_filename(curr_item)
         self.remove_audio_by_name(fname)
 
     def remove_audio_by_name(self, fname):
@@ -2538,8 +2636,7 @@ class MainWindow(QMainWindow):
         # Remove o item da lista
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            widget = self.list_widget.itemWidget(item)
-            name = widget.filename if widget and hasattr(widget, "filename") else item.text()
+            name = self._get_item_filename(item)
             if name == fname:
                 self.list_widget.takeItem(i)
                 break
@@ -2558,6 +2655,8 @@ class MainWindow(QMainWindow):
                 first_item = self.list_widget.item(0)
                 if first_item:
                     self.list_widget.setCurrentItem(first_item)
+                    next_fname = self._get_item_filename(first_item)
+                    self.update_audio_list_active_states(next_fname)
 
     def action_load_wav(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Load Audio Files", "", "WAV Files (*.wav)")
@@ -2591,8 +2690,10 @@ class MainWindow(QMainWindow):
         if not selected:
             return
         curr_item = selected[0]
-        widget = self.list_widget.itemWidget(curr_item)
-        filename = widget.filename if widget and hasattr(widget, "filename") else curr_item.text()
+        filename = self._get_item_filename(curr_item)
+        if not filename:
+            return
+        self.update_audio_list_active_states(filename)
         self.lbl_summary_file.setText(filename)
         if filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
             self.player.stop()
