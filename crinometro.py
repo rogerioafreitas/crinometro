@@ -19,7 +19,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QLabel, QSplitter, QMessageBox, 
                              QPushButton, QSlider, QSpinBox, QDoubleSpinBox, QFormLayout, 
                              QDialog, QDialogButtonBox, QFileDialog, QGridLayout, QLineEdit,
-                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction, QToolTip)
+                             QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction, QToolTip,
+                             QTextBrowser)
 from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen, QCursor
 from PyQt5.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaContent
@@ -29,6 +30,45 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
+# ==============================================================================
+# VERSÃO DO APLICATIVO (Altere aqui para atualizar a versão em todo o sistema)
+# Regras de versionamento (SemVer de 3 casas: X.Y.Z):
+#   - Z (+1): Correção de erros, bugs visuais e pequenos ajustes (ex: 3.0.0 -> 3.0.1)
+#   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
+#   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
+# ==============================================================================
+APP_VERSION = "3.2.1"
+# ==============================================================================
+
+# ==========================================
+# HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
+# ==========================================
+CHANGELOG = {
+    "3.2.1": [
+        "Correção e alinhamento visual dos submenus do menu hambúrguer no hover.",
+        "Suporte completo ao tema claro para todas as janelas de diálogo e pop-ups.",
+        "Caixa 'Selecionar tudo' na barra lateral agora é oculta por padrão e surge dinamicamente ao marcar áudios.",
+        "Hiperlink clicável na versão da janela Sobre para exibir o histórico de mudanças."
+    ],
+    "3.2.0": [
+        "Classificador Random Forest expandido para 500 árvores de decisão em paralelo.",
+        "Extração bioacústica ampliada para 12 descritores morfológicos e espectrais.",
+        "Funcionalidade de Exportar e Importar arquivos de treinamento (.pkl).",
+        "Correção na resolução do nome de arquivos no botão Reanalisar e Aprendizado com Correções."
+    ],
+    "3.1.0": [
+        "Taxa de atualização de áudio e timeline acelerada para 10 ms (100 Hz).",
+        "Correção de instabilidades e crashes ao arrastar o cursor de reprodução na timeline.",
+        "Otimização de eventos de reprodução e isolamento de rotinas gráficas."
+    ],
+    "3.0.0": [
+        "Nova interface visual modernizada com temas Claro e Escuro.",
+        "Sistema de seleção individual de áudios e exclusão rápida na barra lateral.",
+        "Análise em lote e relatórios consolidados apenas para áudios selecionados.",
+        "Tooltips e hover interativo nos marcadores de pulsos (X) com contagem de pulsos por chilreio."
+    ]
+}
+
 # ==========================================
 # CONSTANTES E INTERNACIONALIZAÇÃO (i18n)
 # ==========================================
@@ -36,7 +76,7 @@ CONFIG_FILE = "crinometro_config.json"
 
 I18N = {
     "pt": {
-        "app_title": "Crinômetro - 3.0",
+        "app_title": f"Crinômetro - {APP_VERSION}",
         "file": "Arquivo",
         "load": "Carregar .wav",
         "export": "Exportar Relatório (.txt)",
@@ -79,7 +119,7 @@ I18N = {
         "import_training": "Carregar Treinamento (.pkl)...",
     },
     "en": {
-        "app_title": "Crinômetro - 3.0",
+        "app_title": f"Crinometer - {APP_VERSION}",
         "file": "File",
         "load": "Load .wav",
         "export": "Export Report (.txt)",
@@ -744,11 +784,70 @@ class GeneralSettingsDialog(QDialog):
         }
 
 
+class ChangelogDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Notas de Atualização - v{APP_VERSION}")
+        self.setMinimumSize(480, 360)
+        self.apply_styles()
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+        
+        lbl_header = QLabel(f"📋 Histórico de Versões e Mudanças")
+        lbl_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #3B82F6;")
+        layout.addWidget(lbl_header)
+        
+        text_browser = QTextBrowser()
+        text_browser.setOpenExternalLinks(True)
+        
+        html_content = "<div style='font-family: Segoe UI, sans-serif; font-size: 13px;'>"
+        for ver, changes in CHANGELOG.items():
+            badge_color = "#3B82F6" if ver == APP_VERSION else "#64748B"
+            current_tag = " <span style='font-size: 10px; background: #2563EB; color: white; padding: 2px 6px; border-radius: 4px;'>atual</span>" if ver == APP_VERSION else ""
+            html_content += f"<h3 style='margin-bottom: 4px; color: {badge_color};'>v{ver}{current_tag}</h3><ul style='margin-top: 4px; padding-left: 18px;'>"
+            for change in changes:
+                html_content += f"<li style='margin-bottom: 4px; line-height: 1.4;'>{change}</li>"
+            html_content += "</ul>"
+        html_content += "</div>"
+        
+        text_browser.setHtml(html_content)
+        layout.addWidget(text_browser, 1)
+        
+        btn_close = QPushButton("Fechar")
+        btn_close.setObjectName("btn_secondary")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close, 0, Qt.AlignRight)
+
+    def apply_styles(self):
+        dark = True
+        if self.parent() and hasattr(self.parent(), "theme_mode"):
+            dark = (self.parent().theme_mode == "dark")
+        elif self.parent() and self.parent().parent() and hasattr(self.parent().parent(), "theme_mode"):
+            dark = (self.parent().parent().theme_mode == "dark")
+
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QTextBrowser { background-color: #262A30; color: #E7E9EC; border: 1px solid #3F444D; border-radius: 6px; padding: 8px; }
+                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #444C56; }
+                QPushButton:hover { background-color: #373E47; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
+                QTextBrowser { background-color: #F8FAFC; color: #1E293B; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }
+                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #CBD5E1; }
+                QPushButton:hover { background-color: #E2E8F0; }
+            """)
+
+
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Sobre o Crinômetro")
-        self.setFixedSize(450, 260)
+        self.setFixedSize(450, 270)
         self.apply_styles()
         
         layout = QVBoxLayout(self)
@@ -758,9 +857,13 @@ class AboutDialog(QDialog):
         lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #3B82F6; margin-bottom: 2px;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
-        lbl_version = QLabel("Versão: 3.0")
-        lbl_version.setStyleSheet("font-size: 12px; color: #64748B;")
+        lbl_version = QLabel(f"<a href='changelog' style='color:#3B82F6; text-decoration: underline; font-weight: 600;'>Versão: {APP_VERSION} (ver mudanças)</a>")
+        lbl_version.setTextFormat(Qt.RichText)
+        lbl_version.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        lbl_version.setCursor(Qt.PointingHandCursor)
+        lbl_version.setStyleSheet("font-size: 12px;")
         lbl_version.setAlignment(Qt.AlignCenter)
+        lbl_version.linkActivated.connect(self._open_changelog)
         
         lbl_dev = QLabel("Criado por: <b>Rogério de Araújo Freitas</b><br><a href='https://github.com/rogerioafreitas' style='color:#3B82F6; text-decoration:none;'>github.com/rogerioafreitas</a>")
         lbl_dev.setOpenExternalLinks(True)
@@ -784,6 +887,10 @@ class AboutDialog(QDialog):
         layout.addWidget(lbl_desc)
         layout.addStretch()
         layout.addWidget(btn_close)
+
+    def _open_changelog(self, _link=None):
+        dlg = ChangelogDialog(self)
+        dlg.exec_()
 
     def apply_styles(self):
         dark = True
@@ -1297,7 +1404,7 @@ class PulseLearner:
             "training_features": self.training_features,
             "training_labels": self.training_labels,
             "feature_names": self.feature_names,
-            "version": "3.0",
+            "version": APP_VERSION,
             "timestamp": time.time(),
         }
         with open(filepath, "wb") as f:
@@ -2390,7 +2497,7 @@ class MainWindow(QMainWindow):
         brand.setAttribute(Qt.WA_TranslucentBackground, True)
         brand.setAutoFillBackground(False)
         nav_l.addWidget(brand)
-        version = QLabel("v3.0")
+        version = QLabel(f"v{APP_VERSION}")
         version.setObjectName("version")
         version.setAttribute(Qt.WA_TranslucentBackground, True)
         version.setAutoFillBackground(False)
