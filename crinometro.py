@@ -68,7 +68,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.1"
+APP_VERSION = "3.4.2"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -97,6 +97,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.4.2": [
+        "Correção definitiva da seleção individual e em lote dos arquivos de áudio.",
+        "Correção do comportamento e visibilidade dinâmica do controle 'Selecionar tudo'.",
+        "Análise em lote de selecionados agora processa fielmente apenas os áudios marcados."
+    ],
     "3.4.1": [
         "Correção do encerramento inesperado ao alternar entre áudios já analisados e reanalisados.",
         "Preservação integral do cache de dados e picos detectados na memória.",
@@ -2129,7 +2134,7 @@ class AudioListItemWidget(QWidget):
     - Um card clicável com o nome do áudio (com efeito hover e seleção ativa).
     - Fora do card, no canto direito: a caixinha de seleção (azul quando marcada) e o botão de lixeira.
     """
-    def __init__(self, filename, is_checked=True, is_active=False, on_toggle=None, on_delete=None, on_select=None, parent=None):
+    def __init__(self, filename, is_checked=False, is_active=False, on_toggle=None, on_delete=None, on_select=None, parent=None):
         super().__init__(parent)
         self.filename = filename
         self.on_delete = on_delete
@@ -3414,11 +3419,11 @@ class MainWindow(QMainWindow):
         checked = []
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
+            if not item:
+                continue
             widget = self.list_widget.itemWidget(item)
             if widget and hasattr(widget, "is_checked") and widget.is_checked():
                 checked.append(widget.filename)
-            elif item and (item.data(Qt.UserRole) or item.text()):
-                checked.append(item.data(Qt.UserRole) or item.text())
         return checked
 
     def _update_select_all_visibility(self):
@@ -3445,6 +3450,8 @@ class MainWindow(QMainWindow):
         checked = (state == Qt.Checked or state == 2 or state is True)
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
+            if not item:
+                continue
             widget = self.list_widget.itemWidget(item)
             if widget and hasattr(widget, "checkbox"):
                 widget.checkbox.blockSignals(True)
