@@ -448,19 +448,22 @@ class AlgoSettingsDialog(QDialog):
     def __init__(self, current_params, lang, parent=None):
         super().__init__(parent)
         self.setWindowTitle(I18N[lang]["algo_settings"])
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(430)
+        self.lang = lang
         self.apply_styles()
         
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        
         form = QFormLayout()
         form.setSpacing(12)
         
         self.inputs = {}
         fields = [
-            ("min_p", "Mín. Pulsos/Chilr.:", QSpinBox, 1, 50, 1),
-            ("max_p", "Máx. Pulsos/Chilr.:", QSpinBox, 1, 100, 1),
-            ("amp_min", "Altura mínima do pico:", QDoubleSpinBox, 0.01, 2.00, 0.01),
-            ("gap_min", "Distância mínima entre picos (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
+            ("min_p", "Mín. Pulsos/Chilr.:" if lang == "pt" else "Min Pulses/Chirp:", QSpinBox, 1, 50, 1),
+            ("max_p", "Máx. Pulsos/Chilr.:" if lang == "pt" else "Max Pulses/Chirp:", QSpinBox, 1, 100, 1),
+            ("amp_min", "Altura mínima do pico:" if lang == "pt" else "Min Peak Height:", QDoubleSpinBox, 0.01, 2.00, 0.01),
+            ("gap_min", "Distância mínima entre picos (ms):" if lang == "pt" else "Min Peak Distance (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
         ]
         for key, label, WidgetClass, vmin, vmax, step in fields:
             widget = WidgetClass()
@@ -470,19 +473,37 @@ class AlgoSettingsDialog(QDialog):
             self.inputs[key] = widget
             form.addRow(label, widget)
 
-        self.advanced_button = QPushButton("Configurações Avançadas")
+        layout.addLayout(form)
+
+        self.advanced_button = QPushButton("⚙️ Configurações Avançadas..." if lang == "pt" else "⚙️ Advanced Settings...")
         self.advanced_button.clicked.connect(self.open_advanced)
         layout.addWidget(self.advanced_button)
 
-        # _advanced_params guarda os parâmetros avançados que não têm widget
-        # no dialog básico. São editados via AdvancedAlgoSettingsDialog.
-        # dict(current_params) já copia todos os valores; o for redundante foi removido (BUG 5 e 6).
+        # Seção de Aprendizado Ativo & Modelo de Treinamento
+        training_group = QGroupBox("🧠 Aprendizado Ativo & Treinamento" if lang == "pt" else "🧠 Active Learning & Training")
+        training_layout = QHBoxLayout(training_group)
+        training_layout.setContentsMargins(10, 10, 10, 10)
+        training_layout.setSpacing(8)
+
+        self.btn_export_training = QPushButton("💾 Exportar Treinamento (.pkl)..." if lang == "pt" else "💾 Export Training (.pkl)...")
+        self.btn_export_training.setObjectName("btn_secondary")
+        self.btn_export_training.setToolTip("Salvar o classificador treinado e dados de correção em arquivo")
+        self.btn_export_training.clicked.connect(self._on_export_training)
+        training_layout.addWidget(self.btn_export_training)
+
+        self.btn_import_training = QPushButton("📂 Carregar Treinamento (.pkl)..." if lang == "pt" else "📂 Load Training (.pkl)...")
+        self.btn_import_training.setObjectName("btn_secondary")
+        self.btn_import_training.setToolTip("Importar arquivo com modelo treinado previamente")
+        self.btn_import_training.clicked.connect(self._on_import_training)
+        training_layout.addWidget(self.btn_import_training)
+
+        layout.addWidget(training_group)
+
         self._advanced_params = dict(current_params)
-        layout.addLayout(form)
 
         btn_box = QHBoxLayout()
-        self.btn_reset_defaults = QPushButton("Restaurar Padrões")
-        self.btn_reset_defaults.setStyleSheet("background-color: #555; color: #FFF; padding: 6px; border-radius: 4px;")
+        self.btn_reset_defaults = QPushButton("Restaurar Padrões" if lang == "pt" else "Restore Defaults")
+        self.btn_reset_defaults.setObjectName("btn_secondary")
         self.btn_reset_defaults.clicked.connect(self.reset_defaults)
         btn_box.addWidget(self.btn_reset_defaults)
         btn_box.addStretch()
@@ -492,25 +513,61 @@ class AlgoSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         btn_box.addWidget(buttons)
         layout.addLayout(btn_box)
-        
+
+    def _on_export_training(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "export_training_model"):
+            parent.export_training_model()
+
+    def _on_import_training(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "import_training_model"):
+            parent.import_training_model()
+
     def reset_defaults(self):
         for key, widget in self.inputs.items():
             if key in DEFAULT_ALGO_PARAMS:
                 widget.setValue(DEFAULT_ALGO_PARAMS[key])
         self._advanced_params = DEFAULT_ALGO_PARAMS.copy()
-        
+
     def apply_styles(self):
-        self.setStyleSheet("""
-            QDialog { background-color: #1E1E1E; color: white; font-family: 'Segoe UI'; }
-            QLabel { font-weight: bold; font-size: 12px; }
-            QSpinBox, QDoubleSpinBox { 
-                background-color: #2D2D2D; color: #4CAF50; font-weight: bold; font-size: 13px;
-                border: 1px solid #555; border-radius: 4px; padding: 4px;
-            }
-            QPushButton { background-color: #2196F3; color: white; padding: 8px; border-radius: 4px; font-weight: bold;}
-            QPushButton:hover { background-color: #1E88E5; }
-        """)
+        dark = True
+        if self.parent() and hasattr(self.parent(), "theme_mode"):
+            dark = (self.parent().theme_mode == "dark")
         
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QSpinBox, QDoubleSpinBox { 
+                    background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
+                    border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
+                }
+                QSpinBox:focus, QDoubleSpinBox:focus { border-color: #3B82F6; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+                QPushButton#btn_secondary { background-color: #2D333B; color: #E2E8F0; border: 1px solid #444C56; font-size: 11px; }
+                QPushButton#btn_secondary:hover { background-color: #373E47; }
+                QGroupBox { font-weight: bold; font-size: 12px; color: #94A3B8; border: 1px solid #334155; border-radius: 6px; margin-top: 10px; padding-top: 12px; }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QSpinBox, QDoubleSpinBox { 
+                    background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
+                    border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
+                }
+                QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563EB; background-color: #FFFFFF; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+                QPushButton#btn_secondary { background-color: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; font-size: 11px; }
+                QPushButton#btn_secondary:hover { background-color: #E2E8F0; }
+                QGroupBox { font-weight: bold; font-size: 12px; color: #64748B; border: 1px solid #E2E8F0; border-radius: 6px; margin-top: 10px; padding-top: 12px; }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }
+            """)
+
     def get_params(self):
         result = dict(self._advanced_params)
         result.update({key: widget.value() for key, widget in self.inputs.items()})
@@ -526,9 +583,11 @@ class AdvancedAlgoSettingsDialog(QDialog):
     def __init__(self, current_params, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Configurações Avançadas")
-        self.setMinimumWidth(430)
+        self.setMinimumWidth(440)
+        self.apply_styles()
         layout = QVBoxLayout(self)
         form = QFormLayout()
+        form.setSpacing(10)
         self.inputs = {}
         fields = [
             ("prominence", "Proeminência (Prominence):", 0.0, 2.0, 0.001),
@@ -558,14 +617,47 @@ class AdvancedAlgoSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def apply_styles(self):
+        dark = True
+        if self.parent() and hasattr(self.parent(), "theme_mode"):
+            dark = (self.parent().theme_mode == "dark")
+        elif self.parent() and self.parent().parent() and hasattr(self.parent().parent(), "theme_mode"):
+            dark = (self.parent().parent().theme_mode == "dark")
+
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QDoubleSpinBox { 
+                    background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
+                    border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
+                }
+                QDoubleSpinBox:focus { border-color: #3B82F6; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QDoubleSpinBox { 
+                    background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
+                    border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
+                }
+                QDoubleSpinBox:focus { border-color: #2563EB; background-color: #FFFFFF; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+            """)
+
     def get_params(self):
         return {key: widget.value() for key, widget in self.inputs.items()}
+
 
 class GeneralSettingsDialog(QDialog):
     def __init__(self, current_params, lang, parent=None):
         super().__init__(parent)
         self.setWindowTitle(I18N[lang]["gen_settings"])
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(420)
         self.apply_styles()
         
         layout = QVBoxLayout(self)
@@ -605,17 +697,42 @@ class GeneralSettingsDialog(QDialog):
         layout.addWidget(buttons)
         
     def apply_styles(self):
-        self.setStyleSheet("""
-            QDialog { background-color: #1E1E1E; color: white; font-family: 'Segoe UI'; }
-            QLabel { font-weight: bold; font-size: 12px; }
-            QLineEdit, QComboBox { 
-                background-color: #2D2D2D; color: #4CAF50; font-weight: bold; font-size: 13px;
-                border: 1px solid #555; border-radius: 4px; padding: 4px;
-            }
-            QComboBox::drop-down { border: 0px; }
-            QPushButton { background-color: #2196F3; color: white; padding: 8px; border-radius: 4px; font-weight: bold;}
-            QPushButton:hover { background-color: #1E88E5; }
-        """)
+        dark = True
+        if self.parent() and hasattr(self.parent(), "theme_mode"):
+            dark = (self.parent().theme_mode == "dark")
+
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QLineEdit, QComboBox { 
+                    background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
+                    border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus { border-color: #3B82F6; }
+                QComboBox QAbstractItemView {
+                    background-color: #1B1E22; color: #E7E9EC; selection-background-color: #2D8CD8;
+                }
+                QComboBox::drop-down { border: 0px; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QLineEdit, QComboBox { 
+                    background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
+                    border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
+                }
+                QLineEdit:focus, QComboBox:focus { border-color: #2563EB; background-color: #FFFFFF; }
+                QComboBox QAbstractItemView {
+                    background-color: #FFFFFF; color: #1E293B; selection-background-color: #DBEAFE; selection-color: #1E40AF;
+                }
+                QComboBox::drop-down { border: 0px; }
+                QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
+                QPushButton:hover { background-color: #1D4ED8; }
+            """)
 
     def get_params(self):
         return {
@@ -626,26 +743,28 @@ class GeneralSettingsDialog(QDialog):
             "level": self.level_input.currentText()
         }
 
+
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Sobre o Crinômetro")
-        self.setFixedSize(450, 250)
-        self.setStyleSheet("background-color: #1E1E1E; color: white; font-family: 'Segoe UI';")
+        self.setFixedSize(450, 260)
+        self.apply_styles()
         
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
         
         lbl_title = QLabel("🦗 Crinômetro")
-        lbl_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #4CAF50; margin-bottom: 5px;")
+        lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #3B82F6; margin-bottom: 2px;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_version = QLabel("Versão: 3.0")
-        lbl_version.setStyleSheet("font-size: 12px; color: #9E9E9E;")
+        lbl_version.setStyleSheet("font-size: 12px; color: #64748B;")
         lbl_version.setAlignment(Qt.AlignCenter)
         
-        lbl_dev = QLabel("Criado por: <b>Rogério de Araújo Freitas</b><br><a href='https://github.com/rogerioafreitas' style='color:#4CAF50; text-decoration:none;'>github.com/rogerioafreitas</a>")
+        lbl_dev = QLabel("Criado por: <b>Rogério de Araújo Freitas</b><br><a href='https://github.com/rogerioafreitas' style='color:#3B82F6; text-decoration:none;'>github.com/rogerioafreitas</a>")
         lbl_dev.setOpenExternalLinks(True)
-        lbl_dev.setStyleSheet("font-size: 14px; margin-top: 15px; margin-bottom: 10px;")
+        lbl_dev.setStyleSheet("font-size: 13px; margin-top: 10px; margin-bottom: 8px;")
         lbl_dev.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel(
@@ -653,10 +772,10 @@ class AboutDialog(QDialog):
             "Ferramenta de bioacústica focada em detecção, análise e geração de relatórios de chilreios e pulsos."
         )
         lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("font-size: 12px; text-align: justify; color: #E0E0E0;")
+        lbl_desc.setStyleSheet("font-size: 12px; text-align: justify;")
         
         btn_close = QPushButton("Fechar")
-        btn_close.setStyleSheet("background-color: #333; padding: 8px; border-radius: 4px; font-weight: bold;")
+        btn_close.setObjectName("btn_secondary")
         btn_close.clicked.connect(self.accept)
         
         layout.addWidget(lbl_title)
@@ -665,6 +784,26 @@ class AboutDialog(QDialog):
         layout.addWidget(lbl_desc)
         layout.addStretch()
         layout.addWidget(btn_close)
+
+    def apply_styles(self):
+        dark = True
+        if self.parent() and hasattr(self.parent(), "theme_mode"):
+            dark = (self.parent().theme_mode == "dark")
+
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { color: #E7E9EC; }
+                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #444C56; }
+                QPushButton:hover { background-color: #373E47; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
+                QLabel { color: #334155; }
+                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #CBD5E1; }
+                QPushButton:hover { background-color: #E2E8F0; }
+            """)
 
 # ==========================================
 # MOTOR DE ANÁLISE BIOACÚSTICA
@@ -2003,15 +2142,31 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 font-weight: 600;
                 color: #AEB4BD;
-            }
             QMenu {
                 background: #1B1E22;
                 color: #E7E9EC;
                 border: 1px solid #34383E;
-                padding: 5px;
+                border-radius: 6px;
+                padding: 4px;
             }
-            QMenu::item { padding: 7px 24px 7px 12px; border-radius: 5px; }
-            QMenu::item:selected { background: #2D8CD8; }
+            QMenu::item {
+                padding: 6px 24px 6px 12px;
+                border-radius: 4px;
+                margin: 1px 2px;
+                background: transparent;
+            }
+            QMenu::item:selected {
+                background: #2D8CD8;
+                color: #FFFFFF;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #34383E;
+                margin: 4px 6px;
+            }
+            QMenu::right-arrow {
+                margin-right: 6px;
+            }
             QToolTip { background: #22262B; color: #F0F2F4; border: 1px solid #3B4047; }
             QLabel#elapsedLabel { color: #AEB4BD; background: transparent; border: 0; padding: 0; }
             QFrame#playbackCard { background: transparent; border: 0; }
@@ -2084,8 +2239,32 @@ class MainWindow(QMainWindow):
                 QPushButton#playButton { background: #2E8ED8; color: #FFFFFF; outline: none; border: 0; }
                 QPushButton#playButton:hover { background: #3B9BE7; }
                 QPushButton#playButton:focus { outline: none; border: 0; }
-                QMenu { background: #FFFFFF; color: #2D353D; border-color: #D4DAE0; }
-                QMenu::item:selected { background: #E2F0FC; color: #194D76; }
+                QMenu {
+                    background: #FFFFFF;
+                    color: #2D353D;
+                    border: 1px solid #D4DAE0;
+                    border-radius: 6px;
+                    padding: 4px;
+                }
+                QMenu::item {
+                    padding: 6px 24px 6px 12px;
+                    border-radius: 4px;
+                    margin: 1px 2px;
+                    color: #2D353D;
+                    background: transparent;
+                }
+                QMenu::item:selected {
+                    background: #E2F0FC;
+                    color: #194D76;
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: #E5E9EE;
+                    margin: 4px 6px;
+                }
+                QMenu::right-arrow {
+                    margin-right: 6px;
+                }
                 QCheckBox { spacing: 6px; color: #374151; background: transparent; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #9CA3AF; background-color: #FFFFFF; }
                 QCheckBox::indicator:hover { border-color: #2563EB; }
@@ -2257,11 +2436,24 @@ class MainWindow(QMainWindow):
         side_head.addWidget(self.lbl_arquivos)
         side_head.addStretch()
 
+        self.container_select_all = QWidget()
+        self.container_select_all.setObjectName("containerSelectAll")
+        layout_sel_all = QHBoxLayout(self.container_select_all)
+        layout_sel_all.setContentsMargins(0, 0, 0, 0)
+        layout_sel_all.setSpacing(4)
+
+        self.lbl_select_all = QLabel("Selecionar tudo")
+        self.lbl_select_all.setStyleSheet("font-size: 11px; color: #64748B;")
+        layout_sel_all.addWidget(self.lbl_select_all)
+
         self.chk_select_all = QCheckBox()
-        self.chk_select_all.setChecked(True)
+        self.chk_select_all.setChecked(False)
         self.chk_select_all.setToolTip("Marcar / Desmarcar todos os arquivos para lote e relatório")
         self.chk_select_all.stateChanged.connect(self.toggle_select_all_files)
-        side_head.addWidget(self.chk_select_all)
+        layout_sel_all.addWidget(self.chk_select_all)
+
+        self.container_select_all.setVisible(False)
+        side_head.addWidget(self.container_select_all)
 
         left_layout.addLayout(side_head)
 
@@ -2664,7 +2856,7 @@ class MainWindow(QMainWindow):
                 is_act = (widget.filename == active_filename)
                 widget.set_active(is_act)
 
-    def _add_audio_file_item(self, filename, is_checked=True):
+    def _add_audio_file_item(self, filename, is_checked=False):
         """Adiciona um item com card de áudio e botões de ação externos à lista."""
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
@@ -2686,6 +2878,7 @@ class MainWindow(QMainWindow):
             on_select=self.select_file_by_name
         )
         self.list_widget.setItemWidget(item, widget)
+        self._update_select_all_visibility()
         return item
 
     def get_checked_files(self):
@@ -2700,16 +2893,36 @@ class MainWindow(QMainWindow):
                 checked.append(item.data(Qt.UserRole) or item.text())
         return checked
 
+    def _update_select_all_visibility(self):
+        """Exibe o controle 'Selecionar tudo' apenas quando houver pelo menos 1 arquivo marcado."""
+        if not hasattr(self, 'container_select_all') or not hasattr(self, 'chk_select_all'):
+            return
+        checked = self.get_checked_files()
+        total_count = self.list_widget.count() if hasattr(self, 'list_widget') else 0
+
+        has_any_checked = (len(checked) > 0)
+        self.container_select_all.setVisible(has_any_checked)
+
+        self.chk_select_all.blockSignals(True)
+        if total_count > 0 and len(checked) == total_count:
+            self.chk_select_all.setChecked(True)
+        else:
+            self.chk_select_all.setChecked(False)
+        self.chk_select_all.blockSignals(False)
+
     def on_file_check_toggled(self, filename, is_checked):
-        pass
+        self._update_select_all_visibility()
 
     def toggle_select_all_files(self, state):
-        checked = (state == Qt.Checked or state == 2)
+        checked = (state == Qt.Checked or state == 2 or state is True)
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             widget = self.list_widget.itemWidget(item)
-            if widget and hasattr(widget, "set_checked"):
+            if widget and hasattr(widget, "checkbox"):
+                widget.checkbox.blockSignals(True)
                 widget.set_checked(checked)
+                widget.checkbox.blockSignals(False)
+        self._update_select_all_visibility()
 
     def select_file_by_name(self, filename):
         for i in range(self.list_widget.count()):
@@ -2785,6 +2998,8 @@ class MainWindow(QMainWindow):
                 self.list_widget.takeItem(i)
                 break
 
+        self._update_select_all_visibility()
+
         if self.list_widget.count() == 0:
             self.active_heavy_data = {}
             self.peaks_detected = []
@@ -2807,7 +3022,7 @@ class MainWindow(QMainWindow):
         for file_path in files:
             filename = os.path.basename(file_path)
             self.loaded_files[filename] = file_path
-            self._add_audio_file_item(filename, is_checked=True)
+            self._add_audio_file_item(filename, is_checked=False)
         if files:
             target = os.path.basename(files[-1])
             self.select_file_by_name(target)
@@ -2823,7 +3038,7 @@ class MainWindow(QMainWindow):
             if file_path.lower().endswith('.wav'):
                 filename = os.path.basename(file_path)
                 self.loaded_files[filename] = file_path
-                self._add_audio_file_item(filename, is_checked=True)
+                self._add_audio_file_item(filename, is_checked=False)
                 loaded_any.append(filename)
         if loaded_any:
             self.select_file_by_name(loaded_any[-1])
