@@ -1,12 +1,38 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+block_cipher = None
 
 a = Analysis(
     ['crinometro.py'],
-    pathex=[],
+    pathex=['M:\\Documentos\\Faculdade\\Biologia'],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[
+        ('loading.mp4', '.'),
+        ('loaded.mp4', '.'),
+        ('grilinho.ico', '.'),
+        ('grilinho.png', '.'),
+        ('crinometro_config.json', '.'),
+        ('modelo_treinado.pkl', '.'),
+    ],
+    hiddenimports=[
+        'scipy',
+        'scipy.io',
+        'scipy.io.wavfile',
+        'scipy.signal',
+        'matplotlib',
+        'matplotlib.backends.backend_qt5agg',
+        'matplotlib.figure',
+        'matplotlib.patches',
+        'numpy',
+        'sklearn',
+        'sklearn.ensemble',
+        'PyQt5',
+        'PyQt5.QtCore',
+        'PyQt5.QtGui',
+        'PyQt5.QtWidgets',
+        'PyQt5.QtMultimedia',
+        'PyQt5.QtMultimediaWidgets',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -14,7 +40,8 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
@@ -22,7 +49,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='crinometro',
+    name='Crinômetro',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,5 +62,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['grilinho.ico'],
+    icon='grilinho.ico',
 )

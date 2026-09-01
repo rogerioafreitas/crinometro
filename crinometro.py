@@ -68,7 +68,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.2"
+APP_VERSION = "3.5.0"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -97,6 +97,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.5.0": [
+        "Padronização global do cursor de clique (hand pointer) em todos os botões e ferramentas da interface.",
+        "Remoção de tarjas e aplicação de transparência total no contêiner 'Selecionar tudo'.",
+        "Integração direta da tela de carregamento (Launcher Splash em vídeo) e compilação do executável único unificado."
+    ],
     "3.4.2": [
         "Correção definitiva da seleção individual e em lote dos arquivos de áudio.",
         "Correção do comportamento e visibilidade dinâmica do controle 'Selecionar tudo'.",
@@ -2641,6 +2646,21 @@ class MainWindow(QMainWindow):
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
                 background: none; border: none;
             }
+            QPushButton { cursor: pointer; }
+            QWidget#containerSelectAll {
+                background: transparent;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+            QLabel#select_all_lbl {
+                background: transparent;
+                background-color: transparent;
+                border: none;
+                color: #94A3B8;
+                font-size: 11px;
+            }
         """)
         if self.theme_mode == "light":
             self.setStyleSheet(self.styleSheet() + r"""
@@ -2797,10 +2817,25 @@ class MainWindow(QMainWindow):
                 }
                 QCheckBox { spacing: 6px; color: #374151; background: transparent; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #9CA3AF; background-color: #FFFFFF; }
-                QCheckBox::indicator:hover { border-color: #2563EB; }
-                QCheckBox::indicator:checked { background-color: #2563EB; border-color: #2563EB; }
                 QToolTip { background: #FFFFFF; color: #27313A; border-color: #CDD4DB; }
+                QPushButton { cursor: pointer; }
+                QWidget#containerSelectAll {
+                    background: transparent;
+                    background-color: transparent;
+                    border: none;
+                    margin: 0px;
+                    padding: 0px;
+                }
+                QLabel#select_all_lbl {
+                    background: transparent;
+                    background-color: transparent;
+                    border: none;
+                    color: #64748B;
+                    font-size: 11px;
+                }
             """)
+        for btn in self.findChildren(QPushButton):
+            btn.setCursor(Qt.PointingHandCursor)
 
     def set_theme_mode(self, mode):
         mode = "light" if mode == "light" else "dark"
@@ -2971,16 +3006,20 @@ class MainWindow(QMainWindow):
 
         self.container_select_all = QWidget()
         self.container_select_all.setObjectName("containerSelectAll")
+        self.container_select_all.setStyleSheet("background: transparent; background-color: transparent; border: none; margin: 0; padding: 0;")
         layout_sel_all = QHBoxLayout(self.container_select_all)
         layout_sel_all.setContentsMargins(0, 0, 0, 0)
         layout_sel_all.setSpacing(4)
 
         self.lbl_select_all = QLabel("Selecionar tudo")
-        self.lbl_select_all.setStyleSheet("font-size: 11px; color: #64748B;")
+        self.lbl_select_all.setObjectName("select_all_lbl")
+        self.lbl_select_all.setStyleSheet("background: transparent; border: none; font-size: 11px; color: #64748B;")
         layout_sel_all.addWidget(self.lbl_select_all)
 
         self.chk_select_all = QCheckBox()
         self.chk_select_all.setChecked(False)
+        self.chk_select_all.setCursor(Qt.PointingHandCursor)
+        self.chk_select_all.setStyleSheet("background: transparent; border: none;")
         self.chk_select_all.setToolTip("Marcar / Desmarcar todos os arquivos para lote e relatório")
         self.chk_select_all.stateChanged.connect(self.toggle_select_all_files)
         layout_sel_all.addWidget(self.chk_select_all)
@@ -5071,65 +5110,31 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    # Quando iniciado pelo launcher, o processo principal inicializa tudo em
-    # segundo plano e só exibe a janela após receber o sinal de liberação.
-    # Executado normalmente, mantém o comportamento tradicional.
     import argparse
 
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--launcher-managed", action="store_true")
-    parser.add_argument("--ready-file", default="")
-    parser.add_argument("--release-file", default="")
-    parser.add_argument("--shown-file", default="")
+    parser.add_argument("--no-splash", action="store_true")
     args, _ = parser.parse_known_args()
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    icon_file = LoadingScreen._asset_path("grilinho.ico")
+    if os.path.isfile(icon_file):
+        app.setWindowIcon(QIcon(icon_file))
+
     window = MainWindow()
 
-    def write_signal(path, content):
-        if not path:
-            return
-        try:
-            path = os.path.abspath(path)
-            parent = os.path.dirname(path)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-        except Exception as e:
-            print(f"Aviso: não foi possível criar sinal em {path}: {e}")
-
-    if not args.launcher_managed:
+    def show_main():
         window.show()
         window.raise_()
         window.activateWindow()
+
+    video_file = LoadingScreen._asset_path("loading.mp4")
+    if not args.no_splash and os.path.isfile(video_file):
+        splash = LoadingScreen(finish_callback=show_main)
+        splash.show()
     else:
-        # Sinaliza que MainWindow terminou de ser construída, mas NÃO a exibe.
-        write_signal(args.ready_file, "ready")
-
-        release_timer = QTimer()
-        release_timer.setInterval(25)
-        wait_ticks = [0]
-
-        def release_when_requested():
-            wait_ticks[0] += 1
-            if not args.release_file:
-                return
-            if os.path.exists(args.release_file):
-                release_timer.stop()
-                try:
-                    window.show()
-                    window.raise_()
-                    window.activateWindow()
-                    write_signal(args.shown_file, "shown")
-                except Exception as e:
-                    print(f"Erro ao exibir janela principal: {e}")
-            elif wait_ticks[0] > 4800:  # 120s sem sinal: encerra para não virar processo órfão
-                release_timer.stop()
-                sys.exit(0)
-
-        release_timer.timeout.connect(release_when_requested)
-        release_timer.start()
+        show_main()
 
     sys.exit(app.exec_())
