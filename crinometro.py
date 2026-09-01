@@ -7,6 +7,7 @@ import statistics
 import datetime
 import json
 import base64
+import traceback
 from scipy.io import wavfile
 from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram
 
@@ -30,6 +31,36 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
+def setup_global_exception_handler():
+    """Captura qualquer exceção não tratada na aplicação e exibe um pop-up de erro detalhado para o usuário."""
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        tb_text = "".join(tb_lines)
+        print("CRASH / UNHANDLED EXCEPTION:\n", tb_text, file=sys.stderr)
+
+        app = QApplication.instance()
+        if app:
+            try:
+                msg_box = QMessageBox()
+                msg_box.setIcon(QMessageBox.Critical)
+                msg_box.setWindowTitle("Erro Inesperado - Crinômetro")
+                msg_box.setText(f"Ocorreu um erro inesperado no aplicativo:\n\n{exc_type.__name__}: {exc_value}")
+                msg_box.setDetailedText(tb_text)
+                msg_box.setStandardButtons(QMessageBox.Ok)
+                msg_box.exec_()
+            except Exception:
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        else:
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+    sys.excepthook = handle_exception
+
+setup_global_exception_handler()
+
 # ==============================================================================
 # VERSÃO DO APLICATIVO (Altere aqui para atualizar a versão em todo o sistema)
 # Regras de versionamento (SemVer de 3 casas: X.Y.Z):
@@ -37,7 +68,7 @@ from matplotlib.patches import Patch
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.0"
+APP_VERSION = "3.4.1"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -66,6 +97,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.4.1": [
+        "Correção do encerramento inesperado ao alternar entre áudios já analisados e reanalisados.",
+        "Preservação integral do cache de dados e picos detectados na memória.",
+        "Sistema global de captura de erros com pop-up modal detalhado (Crash Reporter) para diagnóstico imediato."
+    ],
     "3.4.0": [
         "Tolerância e resiliência total na análise: arquivos com 0 chilreios são exibidos normalmente para edição manual.",
         "Parâmetro padrão de chilreios atualizado de fábrica para a faixa de 2 a 10 pulsos.",
@@ -3610,11 +3646,15 @@ class MainWindow(QMainWindow):
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
             self.active_heavy_data = self.analysis_cache[filename]
+            self.peaks_detected = list(self.active_heavy_data.get("peaks_detected", []))
+            self.peaks_user_verified = list(self.active_heavy_data.get("peaks_user_verified", []))
+            self.active_filename = filename
             self.render_dashboard(filename)
         else:
             self.btn_reanalisar_main.setText("Analisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
+            self.active_filename = filename
             self._update_summary_ready_for_analysis(filename)
 
     def _get_item_widget_by_name(self, filename):
@@ -3968,17 +4008,17 @@ class MainWindow(QMainWindow):
         else:
             self.peaks_user_verified = list(self.peaks_detected)
 
-        self.analysis_cache[filename] = {
-            "chirps": chirps, "media": media, "moda": moda, "duration": audio_duration, "params": params.copy()
-        }
-        self.active_heavy_data = {
-            "rate": rate, "data": data, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
+        heavy_data = {
+            "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
             "chirp_peaks_list": chirp_peaks_list, "media": media, "moda": moda,
             "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
             "duration": audio_duration, "params": params.copy(),
             "peaks_detected": list(self.peaks_detected),
             "peaks_user_verified": list(self.peaks_user_verified),
         }
+        self.analysis_cache[filename] = heavy_data
+        self.active_heavy_data = heavy_data
+        self.active_filename = filename
         if render:
             self.render_dashboard(filename)
 
@@ -4018,11 +4058,12 @@ class MainWindow(QMainWindow):
         # Paleta canônica por quantidade de pulsos, disponível de 3 a 10.
         # A mesma cor é usada no histograma, nos X da onda, frequência e espectrograma.
         pulse_colors = {
+            2: '#3B82F6',  # azul
             3: '#8C4CC5',  # roxo
             4: '#F0A84B',  # laranja
             5: '#10C978',  # verde
             6: '#D74486',  # magenta
-            7: '#3F94D5',  # azul
+            7: '#3F94D5',  # azul claro
             8: '#00A6A6',  # teal
             9: '#E06C9F',  # rosa
             10: '#C9A227', # dourado
