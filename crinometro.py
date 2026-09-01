@@ -75,6 +75,8 @@ I18N = {
             "Esta operação não pode ser desfeita. Deseja continuar?"
         ),
         "reset_done": "Configurações resetadas. O app agora usa os parâmetros padrão originais.",
+        "export_training": "Exportar Treinamento (.pkl)...",
+        "import_training": "Carregar Treinamento (.pkl)...",
     },
     "en": {
         "app_title": "Crinômetro - 3.0",
@@ -116,6 +118,8 @@ I18N = {
             "This cannot be undone. Continue?"
         ),
         "reset_done": "Settings reset. The app now uses the original default parameters.",
+        "export_training": "Export Training Model (.pkl)...",
+        "import_training": "Load Training Model (.pkl)...",
     }
 }
 
@@ -857,7 +861,7 @@ class PulseLearner:
 
     A ideia é simples: a interface produz um conjunto de amostras positivas e negativas,
     e o classificador aprende a separar batimentos válidos de ruído. O estado treinado é
-    serializado em base64 dentro do arquivo de configuração JSON já existente.
+    serializado em base64 dentro do arquivo de configuração JSON já existente e em arquivo .pkl.
     """
 
     def __init__(self, config_path=CONFIG_FILE):
@@ -865,8 +869,6 @@ class PulseLearner:
         config_dir = os.path.dirname(os.path.abspath(config_path))
         self.persistence_path = os.path.join(config_dir, "modelo_treinado.pkl")
         self.model = None
-        self.training_features = np.empty((0, 7), dtype=float)
-        self.training_labels = np.empty((0,), dtype=int)
         self.feature_names = [
             "peak_amp",
             "peak_width_s",
@@ -875,7 +877,14 @@ class PulseLearner:
             "median_amp",
             "std_amp",
             "prominence_ratio",
+            "peak_sharpness",
+            "crest_factor",
+            "skewness_local",
+            "norm_height",
+            "local_density",
         ]
+        self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
+        self.training_labels = np.empty((0,), dtype=int)
         self.load_from_config()
         self.load_persisted_training()
 
@@ -886,26 +895,29 @@ class PulseLearner:
         if RandomForestClassifier is None:
             raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
         return RandomForestClassifier(
-            n_estimators=250,
-            max_depth=8,
-            min_samples_leaf=2,
+            n_estimators=500,
+            max_depth=14,
+            min_samples_split=2,
+            min_samples_leaf=1,
             class_weight="balanced_subsample",
             random_state=42,
+            n_jobs=-1,
         )
 
     @staticmethod
     def extract_features_for_peak(peak_idx, rate, env_signal):
         peak_idx = int(np.asarray(peak_idx).item())
+        n_features = 12
         if peak_idx < 0 or peak_idx >= len(env_signal):
-            return np.zeros(7, dtype=float)
+            return np.zeros(n_features, dtype=float)
 
-        half_window = max(4, int(rate * 0.03))
+        half_window = max(4, int(rate * 0.03))  # janela local de 30 ms
         start = max(0, peak_idx - half_window)
         end = min(len(env_signal), peak_idx + half_window + 1)
         segment = env_signal[start:end]
 
         if segment.size == 0:
-            return np.zeros(7, dtype=float)
+            return np.zeros(n_features, dtype=float)
 
         peak_amp = float(env_signal[peak_idx])
         median_amp = float(np.median(segment))
@@ -923,6 +935,33 @@ class PulseLearner:
         widths, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.5)
         width_s = float(widths[0] / rate) if widths.size else 0.0
 
+        # 8. Curvatura / Nitidez no vértice do pico (segunda derivada discreta)
+        left_val = float(env_signal[peak_idx - 1]) if peak_idx > 0 else peak_amp
+        right_val = float(env_signal[peak_idx + 1]) if peak_idx < len(env_signal) - 1 else peak_amp
+        peak_sharpness = float(2.0 * peak_amp - left_val - right_val)
+
+        # 9. Fator de crista (Peak / RMS local)
+        local_rms = float(np.sqrt(np.mean(segment ** 2))) if segment.size else 1e-6
+        crest_factor = float(peak_amp / (local_rms + 1e-6))
+
+        # 10. Assimetria local (diferença normalizada de flanco de subida vs decaimento)
+        left_subseg = env_signal[start:peak_idx]
+        right_subseg = env_signal[peak_idx + 1:end]
+        mean_left = float(np.mean(left_subseg)) if left_subseg.size else peak_amp
+        mean_right = float(np.mean(right_subseg)) if right_subseg.size else peak_amp
+        skewness_local = float((mean_left - mean_right) / (peak_amp + 1e-6))
+
+        # 11. Altura normalizada em relação ao máximo global
+        max_global = float(np.max(env_signal)) if env_signal.size else 1.0
+        norm_height = float(peak_amp / (max_global + 1e-6))
+
+        # 12. Densidade de energia na vizinhança curta (10 ms)
+        short_half = max(2, int(rate * 0.01))
+        short_start = max(0, peak_idx - short_half)
+        short_end = min(len(env_signal), peak_idx + short_half + 1)
+        short_seg = env_signal[short_start:short_end]
+        local_density = float(np.sum(short_seg ** 2) / max(1, short_seg.size))
+
         return np.asarray([
             peak_amp,
             width_s,
@@ -931,6 +970,11 @@ class PulseLearner:
             median_amp,
             std_amp,
             prominence_ratio,
+            peak_sharpness,
+            crest_factor,
+            skewness_local,
+            norm_height,
+            local_density,
         ], dtype=float)
 
     @staticmethod
@@ -976,6 +1020,10 @@ class PulseLearner:
             require_both_classes=False,
         )
         if self.training_features.size:
+            # Compatibilidade caso o conjunto anterior tivesse dimensão diferente
+            if self.training_features.shape[1] != X_new.shape[1]:
+                self.training_features = np.empty((0, X_new.shape[1]), dtype=float)
+                self.training_labels = np.empty((0,), dtype=int)
             X = np.vstack((self.training_features, X_new))
             y = np.concatenate((self.training_labels, y_new))
         else:
@@ -983,9 +1031,7 @@ class PulseLearner:
         samples = np.unique(np.column_stack((X, y)), axis=0)
         self.training_features = samples[:, :-1]
         self.training_labels = samples[:, -1].astype(int)
-        # Limita o conjunto de treino a 5000 amostras para evitar crescimento
-        # ilimitado de memória e degradação de performance (BUG 9).
-        # Mantém as amostras mais recentes para preservar o aprendizado recente.
+        # Limita o conjunto de treino a 5000 amostras
         _MAX_SAMPLES = 5000
         if len(self.training_features) > _MAX_SAMPLES:
             self.training_features = self.training_features[-_MAX_SAMPLES:]
@@ -1073,7 +1119,7 @@ class PulseLearner:
                 return False
             features = np.asarray(payload.get("training_features", []), dtype=float)
             labels = np.asarray(payload.get("training_labels", []), dtype=int)
-            if features.ndim == 2 and features.shape[1] == 7 and len(labels) == len(features):
+            if features.ndim == 2 and features.shape[1] == len(self.feature_names) and len(labels) == len(features):
                 self.training_features = features
                 self.training_labels = labels
             model = payload.get("model")
@@ -1083,6 +1129,7 @@ class PulseLearner:
         except (OSError, EOFError, pickle.PickleError, ValueError, TypeError) as exc:
             print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
             return False
+
     def load_from_config(self):
         if not os.path.exists(self.config_path):
             return False
@@ -1102,10 +1149,57 @@ class PulseLearner:
             self.model = None
             return False
 
+    def export_model_file(self, filepath):
+        """Exporta o modelo treinado completo, conjunto de dados e metadados para um arquivo independente."""
+        if self.model is None and self.training_features.size == 0:
+            raise ValueError("Não há modelo ou dados de treinamento disponíveis para exportar.")
+        payload = {
+            "model": self.model,
+            "training_features": self.training_features,
+            "training_labels": self.training_labels,
+            "feature_names": self.feature_names,
+            "version": "3.0",
+            "timestamp": time.time(),
+        }
+        with open(filepath, "wb") as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return True
+
+    def import_model_file(self, filepath):
+        """Carrega e valida um modelo de treinamento exportado anteriormente."""
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
+        with open(filepath, "rb") as f:
+            payload = pickle.load(f)
+        if not isinstance(payload, dict):
+            raise ValueError("Formato de arquivo de treinamento inválido.")
+
+        features = np.asarray(payload.get("training_features", []), dtype=float)
+        labels = np.asarray(payload.get("training_labels", []), dtype=int)
+        model = payload.get("model")
+
+        if model is None and features.size > 0 and labels.size > 0:
+            self.training_features = features
+            self.training_labels = labels
+            if np.unique(labels).size >= 2:
+                self.model = self._build_model()
+                self.model.fit(self.training_features, self.training_labels)
+        elif model is not None and hasattr(model, "predict"):
+            self.model = model
+            if features.size > 0 and labels.size > 0:
+                self.training_features = features
+                self.training_labels = labels
+        else:
+            raise ValueError("O arquivo não contém um classificador válido.")
+
+        self.save_persisted_training()
+        self.save_to_config()
+        return True
+
     def reset(self):
         """Zera completamente o modelo, dados de treino e arquivos persistidos."""
         self.model = None
-        self.training_features = np.empty((0, 7), dtype=float)
+        self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
         self.training_labels = np.empty((0,), dtype=int)
         if os.path.exists(self.persistence_path):
             try:
@@ -2040,6 +2134,12 @@ class MainWindow(QMainWindow):
         self.action_report_config = QAction(I18N[self.lang]["gen_settings"], self)
         self.action_report_config.triggered.connect(self.open_report_settings)
         self.settings_menu.addAction(self.action_report_config)
+        self.action_export_training = QAction(I18N[self.lang]["export_training"], self)
+        self.action_export_training.triggered.connect(self.export_training_model)
+        self.settings_menu.addAction(self.action_export_training)
+        self.action_import_training = QAction(I18N[self.lang]["import_training"], self)
+        self.action_import_training.triggered.connect(self.import_training_model)
+        self.settings_menu.addAction(self.action_import_training)
         self.action_save_settings = QAction(I18N[self.lang]["save_settings"], self)
         self.action_save_settings.triggered.connect(self.save_settings)
         self.settings_menu.addAction(self.action_save_settings)
@@ -2059,6 +2159,8 @@ class MainWindow(QMainWindow):
         self.settings_menu.setTitle(I18N[l]["settings"])
         self.action_algo_config.setText(I18N[l]["algo_settings"])
         self.action_report_config.setText(I18N[l]["gen_settings"])
+        self.action_export_training.setText(I18N[l]["export_training"])
+        self.action_import_training.setText(I18N[l]["import_training"])
         self.action_save_settings.setText(I18N[l]["save_settings"])
         self.action_reset_settings.setText(I18N[l]["reset_settings"])
         self.help_menu.setTitle(I18N[l]["help"])
@@ -2764,12 +2866,84 @@ class MainWindow(QMainWindow):
                     reply = QMessageBox.question(self, "Reanalisar?", "Configurações alteradas! Deseja refazer as análises no cache?", QMessageBox.Yes | QMessageBox.No)
                     if reply == QMessageBox.Yes:
                         curr = self.list_widget.currentItem()
-                        curr_name = curr.text() if curr else None
+                        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
                         for fname in list(self.analysis_cache.keys()):
                             if fname != curr_name:
                                 self.run_analysis(fname, self.algo_params, render=False)
                         if curr_name and curr_name in self.loaded_files:
                             self.run_analysis(curr_name, self.algo_params, render=True)
+
+    def export_training_model(self):
+        """Abre caixa de diálogo para salvar o arquivo com o treinamento ativo."""
+        if not hasattr(self, "pulse_learner") or not self.pulse_learner:
+            QMessageBox.warning(self, "Sem Modelo", "Não há módulo de aprendizado ativo.")
+            return
+        if not self.pulse_learner.is_trained() and len(self.pulse_learner.training_features) == 0:
+            QMessageBox.warning(self, "Sem Treinamento", "Não há nenhum treinamento de modelo realizado para salvar.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar Arquivo de Treinamento",
+            "modelo_treinado_crinometro.pkl",
+            "Modelos Treinados (*.pkl *.crntrain);;Todos os Arquivos (*)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.pulse_learner.export_model_file(file_path)
+            QMessageBox.information(
+                self,
+                I18N[self.lang]["success"],
+                f"Treinamento salvo com sucesso em:\n{file_path}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                I18N[self.lang]["error"],
+                f"Falha ao exportar arquivo de treinamento:\n{exc}"
+            )
+
+    def import_training_model(self):
+        """Abre caixa de diálogo para carregar um arquivo de treinamento previamente salvo."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Carregar Arquivo de Treinamento",
+            "",
+            "Modelos Treinados (*.pkl *.crntrain);;Todos os Arquivos (*)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.pulse_learner.import_model_file(file_path)
+            self._adapt_advanced_params()
+
+            n_samples = len(self.pulse_learner.training_features)
+            msg = f"Treinamento carregado com sucesso!\n• Amostras de treino: {n_samples}\n• Classificador Random Forest (500 árvores) ativo."
+
+            # Se houver arquivo carregado, pergunta se deseja reanalisar agora
+            curr = self.list_widget.currentItem()
+            curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+            if curr_name and curr_name in self.loaded_files:
+                reply = QMessageBox.question(
+                    self,
+                    "Reanalisar com Novo Treinamento?",
+                    msg + "\n\nDeseja reanalisar o áudio atual com este novo modelo de treinamento?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    self.run_analysis(curr_name, self.algo_params, render=True)
+            else:
+                QMessageBox.information(self, I18N[self.lang]["success"], msg)
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                I18N[self.lang]["error"],
+                f"Falha ao carregar arquivo de treinamento:\n{exc}"
+            )
 
     def reset_to_defaults(self):
         """Restaura todos os parâmetros para os valores padrão de fábrica,
@@ -2813,9 +2987,10 @@ class MainWindow(QMainWindow):
 
         # 5. Se houver arquivo ativo, reanalisa do zero com os padrões
         curr = self.list_widget.currentItem()
-        if curr and curr.text() in self.loaded_files:
+        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if curr_name and curr_name in self.loaded_files:
             self.analysis_cache.clear()
-            self.run_analysis(curr.text(), self.algo_params, render=True)
+            self.run_analysis(curr_name, self.algo_params, render=True)
         else:
             self.analysis_cache.clear()
 
@@ -2895,10 +3070,8 @@ class MainWindow(QMainWindow):
     # ---------- análise ----------
     def force_reanalyze(self):
         curr = self.list_widget.currentItem()
-        if not curr:
-            return
-        filename = curr.text()
-        if filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
+        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if not filename or filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
             QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de reanalisar.")
             return
 
@@ -3707,10 +3880,10 @@ class MainWindow(QMainWindow):
 
     def learn_from_corrections(self):
         curr = self.list_widget.currentItem()
-        if not curr:
+        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if not filename:
             QMessageBox.warning(self, "Nenhum arquivo", "Selecione um arquivo antes de treinar.")
             return
-        filename = curr.text()
         QTimer.singleShot(0, lambda: self._learn_from_corrections_now(filename))
 
     def on_double_click(self, event):
