@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QDialog, QDialogButtonBox, QFileDialog, QGridLayout, QLineEdit,
                              QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction, QToolTip,
                              QTextBrowser)
-from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
+from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen, QCursor
 from PyQt5.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
@@ -37,7 +37,7 @@ from matplotlib.patches import Patch
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.2.3"
+APP_VERSION = "3.3.0"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -66,6 +66,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.3.0": [
+        "Eliminação de travamentos ao editar pulsos manualmente com resposta imediata em tempo real.",
+        "Execução assíncrona em background para Reanálise, Aprendizado Ativo e Análise em Lote.",
+        "Indicador visual dinâmico com Loading Spinner animado diretamente dentro dos botões acionados."
+    ],
     "3.2.3": [
         "Compatibilidade retroativa com modelos anteriores (tolerância automática entre 7 e 12 features).",
         "Verificação de compatibilidade de versão ao importar arquivos de treinamento (.pkl).",
@@ -369,6 +374,83 @@ def make_ui_icon(kind, color="#B9C0C8", size=20):
 
     painter.end()
     return QIcon(pm)
+
+
+def make_spinner_icon(angle=0, color="#FFFFFF", size=18):
+    """Gera um ícone de carregamento rotativo vetorial."""
+    size = int(size)
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    pen = QPen(QColor(color), 2.2)
+    pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+
+    margin = 3.0
+    rect = QRectF(margin, margin, size - 2 * margin, size - 2 * margin)
+    painter.drawArc(rect, int(angle * 16), int(270 * 16))
+    painter.end()
+    return QIcon(pm)
+
+
+class GenericWorker(QThread):
+    """Executa tarefas computacionalmente intensas em background sem travar a interface gráfica."""
+    finished_signal = pyqtSignal(object)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, target_fn, *args, **kwargs):
+        super().__init__()
+        self.target_fn = target_fn
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            res = self.target_fn(*self.args, **self.kwargs)
+            self.finished_signal.emit(res)
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
+
+
+class ButtonSpinner:
+    """Controlador de animação de carregamento e spinner diretamente dentro de um QPushButton."""
+    def __init__(self, button, active_text=None):
+        self.button = button
+        self.active_text = active_text
+        self.original_text = button.text()
+        self.original_icon = button.icon()
+        self.angle = 0
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._rotate)
+
+    def start(self, text=None):
+        self.original_text = self.button.text()
+        self.original_icon = self.button.icon()
+        if text:
+            self.button.setText(text)
+        elif self.active_text:
+            self.button.setText(self.active_text)
+        self.button.setEnabled(False)
+        self.angle = 0
+        self.timer.start(50)
+        self._rotate()
+
+    def _rotate(self):
+        self.angle = (self.angle - 30) % 360
+        self.button.setIcon(make_spinner_icon(self.angle, color="#FFFFFF", size=17))
+
+    def stop(self, restore_icon=None, restore_text=None):
+        self.timer.stop()
+        self.button.setText(restore_text if restore_text is not None else self.original_text)
+        if restore_icon is not None:
+            self.button.setIcon(restore_icon)
+        else:
+            self.button.setIcon(self.original_icon)
+        self.button.setEnabled(True)
+
 
 # ==========================================
 # 1. MOTOR GRÁFICO PARA SINAIS 1D (ONDA ACÚSTICA)
@@ -3231,7 +3313,7 @@ class MainWindow(QMainWindow):
                 break
 
     def analyze_selected_audios(self):
-        """Analisa em lote todos os áudios marcados com a caixinha de seleção."""
+        """Analisa em lote todos os áudios marcados com a caixinha de seleção em background sem travar a interface."""
         checked_files = self.get_checked_files()
         if not checked_files:
             QMessageBox.warning(
@@ -3241,32 +3323,56 @@ class MainWindow(QMainWindow):
             )
             return
 
-        total = len(checked_files)
-        success_count = 0
-        errors = []
+        spinner = ButtonSpinner(self.btn_analyze_selected, "Analisando...")
+        spinner.start()
 
         curr = self.list_widget.currentItem()
-        curr_name = self._get_item_filename(curr)
+        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        effective_params = {**self.algo_params, **self._adaptive_overrides}
 
-        for fname in checked_files:
-            if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
-                continue
-            try:
-                is_curr = (fname == curr_name)
-                self.run_analysis(fname, self.algo_params, render=is_curr)
-                success_count += 1
-            except Exception as exc:
-                errors.append(f"{fname}: {exc}")
+        def _task():
+            success_count = 0
+            errors = []
+            results = {}
+            for fname in checked_files:
+                if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
+                    continue
+                try:
+                    fpath = self.loaded_files[fname]
+                    res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=self.pulse_learner)
+                    results[fname] = res
+                    success_count += 1
+                except Exception as exc:
+                    errors.append(f"{fname}: {exc}")
+            return success_count, errors, results
 
-        if curr_name not in checked_files and checked_files:
-            self.select_file_by_name(checked_files[0])
+        worker = GenericWorker(_task)
+        self._batch_worker = worker
 
-        msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
-        if errors:
-            msg += f"\n\nFalhas ({len(errors)}):\n" + "\n".join(errors[:5])
-            QMessageBox.warning(self, "Análise em Lote", msg)
-        else:
-            QMessageBox.information(self, I18N[self.lang]["success"], msg)
+        def _on_finished(payload):
+            success_count, errors, results = payload
+            for fname, res in results.items():
+                self._apply_analysis_results(fname, res, render=(fname == curr_name))
+
+            if curr_name not in checked_files and checked_files and checked_files[0] in results:
+                self.select_file_by_name(checked_files[0])
+
+            spinner.stop(None, "⚡ Analisar Selecionados")
+            total = len(checked_files)
+            msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
+            if errors:
+                msg += f"\n\nFalhas ({len(errors)}):\n" + "\n".join(errors[:5])
+                QMessageBox.warning(self, "Análise em Lote", msg)
+            else:
+                QMessageBox.information(self, I18N[self.lang]["success"], msg)
+
+        def _on_error(err_msg):
+            spinner.stop(None, "⚡ Analisar Selecionados")
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
+
+        worker.finished_signal.connect(_on_finished)
+        worker.error_signal.connect(_on_error)
+        worker.start()
 
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()
@@ -3587,87 +3693,106 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de reanalisar.")
             return
 
-        # 1. Se o usuário fez correções no arquivo atual (triângulos azuis / X vermelhos),
-        # treinamos o modelo e adaptamos os parâmetros para incorporar o feedback.
-        if self.active_heavy_data and self.peaks_user_verified:
-            rate = float(self.active_heavy_data.get("rate", 1.0))
-            env = self.active_heavy_data.get("env")
-            if env is not None:
-                try:
-                    self.pulse_learner.update_from_corrections(
-                        self.peaks_detected, self.peaks_user_verified, rate, env
-                    )
-                    self._adapt_advanced_params()
-                    self.pulse_learner.save_to_config()
-                except Exception:
-                    pass
+        spinner = ButtonSpinner(self.btn_reanalisar_main, "Reanalisando...")
+        spinner.start()
 
-        # 2. Re-executa a análise com os parâmetros atuais / adaptados
-        # e integra os pulsos validados para que virem bolinhas verdes (validate_all=True)
-        self.btn_reanalisar_main.setText("Reanalisar")
-        self.btn_reanalisar_main.setToolTip("")
-        self.run_analysis(filename, self.algo_params, render=True, validate_all=True)
+        def _task():
+            # 1. Se o usuário fez correções no arquivo atual, atualizamos o modelo
+            if self.active_heavy_data and self.peaks_user_verified:
+                rate = float(self.active_heavy_data.get("rate", 1.0))
+                env = self.active_heavy_data.get("env")
+                if env is not None:
+                    try:
+                        self.pulse_learner.update_from_corrections(
+                            self.peaks_detected, self.peaks_user_verified, rate, env
+                        )
+                        self._adapt_advanced_params()
+                        self.pulse_learner.save_to_config()
+                    except Exception:
+                        pass
+
+            effective_params = {**self.algo_params, **self._adaptive_overrides}
+            file_path = self.loaded_files[filename]
+            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=self.pulse_learner)
+            return res
+
+        worker = GenericWorker(_task)
+        self._reanalyze_worker = worker
+
+        def _on_finished(results):
+            spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
+            self._apply_analysis_results(filename, results, render=True, validate_all=True)
+
+        def _on_error(err_msg):
+            spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na reanálise:\n{err_msg}")
+
+        worker.finished_signal.connect(_on_finished)
+        worker.error_signal.connect(_on_error)
+        worker.start()
 
     def run_analysis(self, filename, params, render=True, validate_all=False):
         file_path = self.loaded_files[filename]
         try:
-            # Mescla os parâmetros base com as sobreposições adaptativas.
-            # Desta forma, as adaptações tomam efeito na análise sem contaminar
-            # o self.algo_params que o usuário configurou.
             effective_params = {**params, **self._adaptive_overrides}
-            rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=self.pulse_learner)
-            self.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
-            self.active_filename = filename
+            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=self.pulse_learner)
+            self._apply_analysis_results(filename, res, render=render, validate_all=validate_all, params=params)
+        except Exception as e:
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
 
-            stored_corrections = self.corrections_by_file.get(filename)
-            if validate_all and (stored_corrections is not None or self.peaks_user_verified):
-                # Na reanálise explícita, todos os triângulos azuis validados são integrados
-                # e viram bolinhas verdes; os pulsos excluídos continuam de fora.
-                working_set = stored_corrections if stored_corrections is not None else self.peaks_user_verified
-                self.peaks_detected = list(sorted(set(working_set)))
-                self.peaks_user_verified = list(self.peaks_detected)
-                self.corrections_by_file[filename] = list(self.peaks_user_verified)
-                if len(self.peaks_detected) >= 2:
+    def _apply_analysis_results(self, filename, results, render=True, validate_all=False, params=None):
+        if params is None:
+            params = self.algo_params.copy()
+        rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results
+        self.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
+        self.active_filename = filename
+
+        stored_corrections = self.corrections_by_file.get(filename)
+        effective_params = {**params, **self._adaptive_overrides}
+        if validate_all and (stored_corrections is not None or self.peaks_user_verified):
+            working_set = stored_corrections if stored_corrections is not None else self.peaks_user_verified
+            self.peaks_detected = list(sorted(set(working_set)))
+            self.peaks_user_verified = list(self.peaks_detected)
+            self.corrections_by_file[filename] = list(self.peaks_user_verified)
+            if len(self.peaks_detected) >= 2:
+                try:
+                    chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+                        self.peaks_detected, effective_params, rate, env
+                    )
+                except Exception:
+                    pass
+        elif stored_corrections is not None:
+            self.peaks_user_verified = list(stored_corrections)
+            peaks_added = sorted(set(stored_corrections) - set(self.peaks_detected))
+            peaks_removed = sorted(set(self.peaks_detected) - set(stored_corrections))
+            if peaks_added or peaks_removed:
+                effective_peaks = np.asarray(
+                    sorted(set(self.peaks_detected) | set(peaks_added) - set(peaks_removed)),
+                    dtype=int
+                )
+                if len(effective_peaks) >= 2:
                     try:
                         chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                            self.peaks_detected, effective_params, rate, env
+                            effective_peaks, effective_params, rate, env
                         )
                     except Exception:
                         pass
-            elif stored_corrections is not None:
-                # O usuário já editou este arquivo. Usar as correções salvas como
-                # conjunto verificado — triângulos azuis = adicionados, X = removidos.
-                self.peaks_user_verified = list(stored_corrections)
-                peaks_added = sorted(set(stored_corrections) - set(self.peaks_detected))
-                peaks_removed = sorted(set(self.peaks_detected) - set(stored_corrections))
-                if peaks_added or peaks_removed:
-                    effective_peaks = np.asarray(
-                        sorted(set(self.peaks_detected) | set(peaks_added) - set(peaks_removed)),
-                        dtype=int
-                    )
-                    if len(effective_peaks) >= 2:
-                        try:
-                            chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                                effective_peaks, effective_params, rate, env
-                            )
-                        except Exception:
-                            pass
-            else:
-                self.peaks_user_verified = list(self.peaks_detected)
+        else:
+            self.peaks_user_verified = list(self.peaks_detected)
 
-            self.analysis_cache[filename] = {"chirps": chirps, "media": media, "moda": moda, "duration": audio_duration, "params": params.copy()}
-            self.active_heavy_data = {
-                "rate": rate, "data": data, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
-                "chirp_peaks_list": chirp_peaks_list, "media": media, "moda": moda,
-                "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
-                "duration": audio_duration, "params": params.copy(),
-                "peaks_detected": list(self.peaks_detected),
-                "peaks_user_verified": list(self.peaks_user_verified),
-            }
-            if render:
-                self.render_dashboard(filename)
-        except Exception as e:
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
+        self.analysis_cache[filename] = {
+            "chirps": chirps, "media": media, "moda": moda, "duration": audio_duration, "params": params.copy()
+        }
+        self.active_heavy_data = {
+            "rate": rate, "data": data, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
+            "chirp_peaks_list": chirp_peaks_list, "media": media, "moda": moda,
+            "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
+            "duration": audio_duration, "params": params.copy(),
+            "peaks_detected": list(self.peaks_detected),
+            "peaks_user_verified": list(self.peaks_user_verified),
+        }
+        if render:
+            self.render_dashboard(filename)
 
 
 
@@ -4180,7 +4305,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _toggle_peak_marker(self, time_sec):
-        """Alterna a classificação do pico mais próximo ou adiciona um novo pico."""
+        """Alterna a classificação do pico mais próximo ou adiciona um novo pico de forma instantânea."""
         if not self.active_heavy_data:
             return
         rate = float(self.active_heavy_data.get('rate', 1.0))
@@ -4194,7 +4319,6 @@ class MainWindow(QMainWindow):
             nearest = None
 
         self._pulse_edit_history.append(list(self.peaks_user_verified))
-        # Limite de 50 estados no histórico para evitar crescimento ilimitado de memória (BUG 2)
         if len(self._pulse_edit_history) > 50:
             self._pulse_edit_history = self._pulse_edit_history[-50:]
 
@@ -4209,19 +4333,12 @@ class MainWindow(QMainWindow):
         if self.active_filename:
             self.corrections_by_file[self.active_filename] = list(self.peaks_user_verified)
             self._save_corrections_state()
-        self.pulse_learner.update_from_corrections(
-            self.peaks_detected,
-            self.peaks_user_verified,
-            rate,
-            self.active_heavy_data['env'],
-        )
-        self._adapt_advanced_params()
-        self.pulse_learner.save_to_config()
+
         for panel in self.all_panels:
             if hasattr(panel, "btn_pulse_undo"):
                 panel.btn_pulse_undo.setEnabled(True)
 
-        # Recalcula chilreios e métricas imediatamente após a alteração do usuário
+        # Recalcula chilreios e métricas imediatamente após a alteração do usuário de forma ultra rápida
         if self.peaks_user_verified and len(self.peaks_user_verified) >= 2:
             try:
                 effective_params = {**self.algo_params, **self._adaptive_overrides}
@@ -4349,13 +4466,20 @@ class MainWindow(QMainWindow):
                 json.dump(config, f, indent=4, ensure_ascii=False)
         except (OSError, ValueError, TypeError) as exc:
             print(f"Erro ao persistir correções: {exc}")
-    def _learn_from_corrections_now(self, filename):
+
+    def learn_from_corrections(self):
+        curr = self.list_widget.currentItem()
+        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if not filename:
+            QMessageBox.warning(self, "Nenhum arquivo", "Selecione um arquivo antes de treinar.")
+            return
+
         if not self.active_heavy_data:
             QMessageBox.warning(self, "Sem dados", "Primeiro carregue um arquivo WAV antes de treinar o classificador.")
             return
 
-        detected = self.peaks_detected
-        verified = self.peaks_user_verified
+        detected = list(self.peaks_detected)
+        verified = list(self.peaks_user_verified)
         detected_set = set(int(p) for p in detected)
         verified_set = set(int(p) for p in verified)
 
@@ -4364,39 +4488,51 @@ class MainWindow(QMainWindow):
             return
 
         if detected_set == verified_set:
-            QMessageBox.information(self, "Sem mudanças", "Nenhuma correção foi feita no arquivo atual.")
+            QMessageBox.information(self, "Sem mudanças", "Nenhuma correção manual foi feita no arquivo atual.")
             return
 
-        try:
-            # update_from_corrections já chama build_training_matrix internamente.
-            # A chamada duplicada anterior criava X, y que eram descartados logo em seguida.
+        spinner = ButtonSpinner(self.btn_learn_corrections, "Treinando...")
+        spinner.start()
+
+        rate = float(self.active_heavy_data.get('rate', 1.0))
+        env = self.active_heavy_data.get('env')
+
+        def _task():
             self.pulse_learner.update_from_corrections(
-                detected, verified,
-                self.active_heavy_data['rate'],
-                self.active_heavy_data['env'],
+                detected, verified, rate, env
             )
+            self._adapt_advanced_params()
             self.pulse_learner.save_to_config()
-            num_corrections = len(detected_set ^ verified_set)
+            return len(detected_set ^ verified_set)
+
+        worker = GenericWorker(_task)
+        self._learn_worker = worker
+
+        def _on_finished(num_corrections):
+            spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
+            if hasattr(self, 'lbl_model_status'):
+                model_status_text = "🧠 Modelo: ✓ treinado" if self.pulse_learner.is_trained() else "🧠 Modelo: não treinado"
+                model_status_color = "#10B981" if self.pulse_learner.is_trained() else "#F97316"
+                self.lbl_model_status.setText(model_status_text)
+                self.lbl_model_status.setStyleSheet(f"color: {model_status_color};")
             QMessageBox.information(
                 self, 
                 I18N[self.lang]['success'], 
                 f'Modelo treinado com sucesso!\n\n'
                 f'Arquivo: {filename}\n'
                 f'Picos analisados: {len(detected)}\n'
-                f'Correções do usuário: {num_corrections}\n'
+                f'Correções aprendidas: {num_corrections}\n'
                 f'Picos verificados: {len(verified)}\n\n'
-                f'O modelo foi persistido e será aplicado na próxima análise.'
+                f'O modelo com 500 árvores foi atualizado e salvo.'
             )
-        except Exception as exc:
-            QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{exc}')
 
-    def learn_from_corrections(self):
-        curr = self.list_widget.currentItem()
-        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        if not filename:
-            QMessageBox.warning(self, "Nenhum arquivo", "Selecione um arquivo antes de treinar.")
-            return
-        QTimer.singleShot(0, lambda: self._learn_from_corrections_now(filename))
+        def _on_error(err_msg):
+            spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
+            QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{err_msg}')
+
+        worker.finished_signal.connect(_on_finished)
+        worker.error_signal.connect(_on_error)
+        worker.start()
 
     def on_double_click(self, event):
         if event.inaxes == self.panel_wave.ax and event.xdata is not None:
