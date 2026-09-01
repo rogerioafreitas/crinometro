@@ -68,7 +68,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.3"
+APP_VERSION = "3.4.4"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -97,6 +97,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.4.4": [
+        "Abertura instantânea do Launcher com reprodução contínua de loading.mp4 em segundo plano.",
+        "Transição sincronizada para loaded.mp4 assim que os módulos são carregados.",
+        "Exibição fluida e encerramento automático do launcher sem piscamentos ou travamentos."
+    ],
     "3.4.3": [
         "Padronização do cursor de clique (hand pointer) em todos os botões e ferramentas da interface.",
         "Remoção de tarjas e aplicação de transparência total no contêiner 'Selecionar tudo'."

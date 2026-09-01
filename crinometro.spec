@@ -3,7 +3,7 @@
 block_cipher = None
 
 a = Analysis(
-    ['crinometro.py'],
+    ['crinometro_laucher.py'],
     pathex=['M:\\Documentos\\Faculdade\\Biologia'],
     binaries=[],
     datas=[
@@ -13,8 +13,10 @@ a = Analysis(
         ('grilinho.png', '.'),
         ('crinometro_config.json', '.'),
         ('modelo_treinado.pkl', '.'),
+        ('crinometro.py', '.'),
     ],
     hiddenimports=[
+        'crinometro',
         'scipy',
         'scipy.io',
         'scipy.io.wavfile',

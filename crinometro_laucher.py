@@ -1,11 +1,11 @@
-﻿import os
+import os
 import sys
 import tempfile
-from PyQt6.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
-from PyQt6.QtGui import QIcon
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
+from PyQt5.QtGui import QIcon
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist
+from PyQt5.QtMultimediaWidgets import QVideoWidget
 
 
 RATE = 1.15
@@ -57,9 +57,9 @@ class Launcher(QWidget):
 
         self.setObjectName("Launcher")
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
+            Qt.Tool
         )
         self.setStyleSheet("""
             QWidget#Launcher {
@@ -84,34 +84,35 @@ class Launcher(QWidget):
 
         for video in (self.loaded_video, self.loading_video):
             video.setStyleSheet("background:#FFFFFF; border:0;")
-            video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+            video.setAspectRatioMode(Qt.KeepAspectRatio)
 
         self.loaded_video.lower()
         self.loading_video.raise_()
 
-        # Loading
+        # Loading Player
         self.loading_player = QMediaPlayer(self)
-        self.loading_audio = QAudioOutput(self)
-        self.loading_audio.setVolume(0.0)
-        self.loading_player.setAudioOutput(self.loading_audio)
+        self.loading_player.setVolume(0)
         self.loading_player.setVideoOutput(self.loading_video)
         self.loading_player.setPlaybackRate(RATE)
-        self.loading_player.setLoops(QMediaPlayer.Loops.Infinite)
         self.loading_player.durationChanged.connect(self._loading_duration_changed)
         self.loading_player.mediaStatusChanged.connect(self._loading_media_status)
-        self.loading_player.errorOccurred.connect(self._loading_error)
+        if hasattr(self.loading_player, "errorOccurred"):
+            self.loading_player.errorOccurred.connect(self._loading_error)
+        elif hasattr(self.loading_player, "error"):
+            self.loading_player.error.connect(self._loading_error)
 
-        # Loaded
+        # Loaded Player
         self.loaded_player = QMediaPlayer(self)
-        self.loaded_audio = QAudioOutput(self)
-        self.loaded_audio.setVolume(0.0)
-        self.loaded_player.setAudioOutput(self.loaded_audio)
+        self.loaded_player.setVolume(0)
         self.loaded_player.setVideoOutput(self.loaded_video)
         self.loaded_player.setPlaybackRate(RATE)
         self.loaded_player.mediaStatusChanged.connect(self._loaded_media_status)
-        self.loaded_player.playbackStateChanged.connect(self._loaded_playback_state)
+        self.loaded_player.stateChanged.connect(self._loaded_playback_state)
         self.loaded_player.positionChanged.connect(self._loaded_position_changed)
-        self.loaded_player.errorOccurred.connect(self._loaded_error)
+        if hasattr(self.loaded_player, "errorOccurred"):
+            self.loaded_player.errorOccurred.connect(self._loaded_error)
+        elif hasattr(self.loaded_player, "error"):
+            self.loaded_player.error.connect(self._loaded_error)
 
         self.loading_duration = 0
         self.loading_media_ok = False
@@ -153,11 +154,15 @@ class Launcher(QWidget):
         if not os.path.isfile(loaded):
             raise FileNotFoundError(f"loaded.mp4 não encontrado: {loaded}")
 
-        self.loading_player.setSource(QUrl.fromLocalFile(loading))
-        self.loaded_player.setSource(QUrl.fromLocalFile(loaded))
-
-        self.loading_audio.setVolume(0.0)
+        # Playlist para reproduzir loading em loop
+        self.loading_playlist = QMediaPlaylist(self)
+        self.loading_playlist.addMedia(QMediaContent(QUrl.fromLocalFile(loading)))
+        self.loading_playlist.setPlaybackMode(QMediaPlaylist.Loop)
+        self.loading_player.setPlaylist(self.loading_playlist)
+        self.loading_player.setVolume(0)
         self.loading_player.play()
+
+        self.loaded_player.setMedia(QMediaContent(QUrl.fromLocalFile(loaded)))
 
         # Inicia importação e preparação dos módulos em segundo plano
         self.loader_thread = CoreLoaderThread()
@@ -174,8 +179,8 @@ class Launcher(QWidget):
 
     def _loading_media_status(self, status):
         if status in (
-            QMediaPlayer.MediaStatus.LoadedMedia,
-            QMediaPlayer.MediaStatus.BufferedMedia,
+            QMediaPlayer.LoadedMedia,
+            QMediaPlayer.BufferedMedia,
         ):
             self.loading_media_ok = True
 
@@ -207,7 +212,7 @@ class Launcher(QWidget):
             return
 
         self.loaded_ready = True
-        self.loaded_audio.setVolume(0.0)
+        self.loaded_player.setVolume(0)
         self.loaded_player.setPosition(0)
         self.loaded_player.play()
 
@@ -225,16 +230,16 @@ class Launcher(QWidget):
 
     def _loaded_media_status(self, status):
         if status in (
-            QMediaPlayer.MediaStatus.LoadedMedia,
-            QMediaPlayer.MediaStatus.BufferedMedia,
+            QMediaPlayer.LoadedMedia,
+            QMediaPlayer.BufferedMedia,
         ):
             self.loaded_media_ok = True
-        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
+        elif status == QMediaPlayer.EndOfMedia:
             if self.loaded_playing:
                 self._on_loaded_finished()
 
     def _loaded_playback_state(self, state):
-        if self.loaded_playing and state == QMediaPlayer.PlaybackState.StoppedState:
+        if self.loaded_playing and state == QMediaPlayer.StoppedState:
             self._on_loaded_finished()
 
     def _loaded_position_changed(self, position):
@@ -273,7 +278,7 @@ class Launcher(QWidget):
         self.transition_check_timer.stop()
         self.loaded_playing = True
 
-        self.loaded_audio.setVolume(1.0)
+        self.loaded_player.setVolume(100)
         self.loaded_video.show()
         self.loaded_video.raise_()
 
@@ -301,10 +306,6 @@ class Launcher(QWidget):
             self.loaded_player.stop()
             self.loading_player.setVideoOutput(None)
             self.loaded_player.setVideoOutput(None)
-            self.loading_player.setAudioOutput(None)
-            self.loaded_player.setAudioOutput(None)
-            self.loading_audio.setVolume(0.0)
-            self.loaded_audio.setVolume(0.0)
         except Exception:
             pass
 
@@ -356,7 +357,7 @@ def main():
     QApplication.processEvents()
     splash.start()
 
-    return app.exec()
+    return app.exec_()
 
 
 if __name__ == "__main__":
