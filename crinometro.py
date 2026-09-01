@@ -37,13 +37,18 @@ from matplotlib.patches import Patch
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.2.1"
+APP_VERSION = "3.2.2"
 # ==============================================================================
 
 # ==========================================
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.2.2": [
+        "Ajuste visual de pop-ups removendo containers de fundo destoantes nas legendas.",
+        "Novo design moderno para a barra de rolagem (scroll) com tom azulado e bordas arredondadas.",
+        "Menu hambúrguer aprimorado com cantos arredondados e hover/clique azul vívido mais responsivo."
+    ],
     "3.2.1": [
         "Correção e alinhamento visual dos submenus do menu hambúrguer no hover.",
         "Suporte completo ao tema claro para todas as janelas de diálogo e pop-ups.",
@@ -577,8 +582,8 @@ class AlgoSettingsDialog(QDialog):
         
         if dark:
             self.setStyleSheet("""
-                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; background: transparent; background-color: transparent; border: none; }
                 QSpinBox, QDoubleSpinBox { 
                     background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
                     border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
@@ -594,7 +599,7 @@ class AlgoSettingsDialog(QDialog):
         else:
             self.setStyleSheet("""
                 QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; background: transparent; background-color: transparent; border: none; }
                 QSpinBox, QDoubleSpinBox { 
                     background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
                     border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
@@ -666,8 +671,8 @@ class AdvancedAlgoSettingsDialog(QDialog):
 
         if dark:
             self.setStyleSheet("""
-                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; background: transparent; background-color: transparent; border: none; }
                 QDoubleSpinBox { 
                     background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
                     border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
@@ -679,7 +684,7 @@ class AdvancedAlgoSettingsDialog(QDialog):
         else:
             self.setStyleSheet("""
                 QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; background: transparent; background-color: transparent; border: none; }
                 QDoubleSpinBox { 
                     background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
                     border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
@@ -743,15 +748,15 @@ class GeneralSettingsDialog(QDialog):
 
         if dark:
             self.setStyleSheet("""
-                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; }
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #E7E9EC; background: transparent; background-color: transparent; border: none; }
                 QLineEdit, QComboBox { 
                     background-color: #262A30; color: #4ADE80; font-weight: bold; font-size: 13px;
                     border: 1px solid #3F444D; border-radius: 5px; padding: 4px 8px;
                 }
                 QLineEdit:focus, QComboBox:focus { border-color: #3B82F6; }
                 QComboBox QAbstractItemView {
-                    background-color: #1B1E22; color: #E7E9EC; selection-background-color: #2D8CD8;
+                    background-color: #171A1E; color: #E7E9EC; selection-background-color: #2563EB;
                 }
                 QComboBox::drop-down { border: 0px; }
                 QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
@@ -760,7 +765,7 @@ class GeneralSettingsDialog(QDialog):
         else:
             self.setStyleSheet("""
                 QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #334155; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; background: transparent; background-color: transparent; border: none; }
                 QLineEdit, QComboBox { 
                     background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
                     border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
@@ -788,15 +793,16 @@ class ChangelogDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Notas de Atualização - v{APP_VERSION}")
-        self.setMinimumSize(480, 360)
+        self.setMinimumSize(490, 370)
         self.apply_styles()
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
         
         lbl_header = QLabel(f"📋 Histórico de Versões e Mudanças")
-        lbl_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #3B82F6;")
+        lbl_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #3B82F6; background: transparent;")
+        lbl_header.setAttribute(Qt.WA_TranslucentBackground, True)
         layout.addWidget(lbl_header)
         
         text_browser = QTextBrowser()
@@ -829,16 +835,44 @@ class ChangelogDialog(QDialog):
 
         if dark:
             self.setStyleSheet("""
-                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
-                QTextBrowser { background-color: #262A30; color: #E7E9EC; border: 1px solid #3F444D; border-radius: 6px; padding: 8px; }
-                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #444C56; }
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { background: transparent; background-color: transparent; border: none; color: #E7E9EC; }
+                QTextBrowser { 
+                    background-color: #1F2329; color: #E7E9EC; border: 1px solid #333A44; 
+                    border-radius: 8px; padding: 10px; 
+                }
+                QScrollBar:vertical {
+                    background: #171A1E; width: 8px; margin: 4px 1px 4px 1px; border-radius: 4px; border: none;
+                }
+                QScrollBar::handle:vertical {
+                    background: #2563EB; min-height: 26px; border-radius: 4px;
+                }
+                QScrollBar::handle:vertical:hover { background: #3B82F6; }
+                QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
             """)
         else:
             self.setStyleSheet("""
                 QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QTextBrowser { background-color: #F8FAFC; color: #1E293B; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }
-                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #CBD5E1; }
+                QLabel { background: transparent; background-color: transparent; border: none; color: #334155; }
+                QTextBrowser { 
+                    background-color: #F8FAFC; color: #1E293B; border: 1px solid #CBD5E1; 
+                    border-radius: 8px; padding: 10px; 
+                }
+                QScrollBar:vertical {
+                    background: #F1F5F9; width: 8px; margin: 4px 1px 4px 1px; border-radius: 4px; border: none;
+                }
+                QScrollBar::handle:vertical {
+                    background: #3B82F6; min-height: 26px; border-radius: 4px;
+                }
+                QScrollBar::handle:vertical:hover { background: #2563EB; }
+                QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
             """)
 
@@ -847,27 +881,28 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Sobre o Crinômetro")
-        self.setFixedSize(450, 270)
+        self.setFixedSize(450, 275)
         self.apply_styles()
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(6)
         
         lbl_title = QLabel("🦗 Crinômetro")
-        lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #3B82F6; margin-bottom: 2px;")
+        lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #3B82F6; margin-bottom: 2px; background: transparent;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_version = QLabel(f"<a href='changelog' style='color:#3B82F6; text-decoration: underline; font-weight: 600;'>Versão: {APP_VERSION} (ver mudanças)</a>")
         lbl_version.setTextFormat(Qt.RichText)
         lbl_version.setTextInteractionFlags(Qt.TextBrowserInteraction)
         lbl_version.setCursor(Qt.PointingHandCursor)
-        lbl_version.setStyleSheet("font-size: 12px;")
+        lbl_version.setStyleSheet("font-size: 12px; background: transparent; outline: none;")
         lbl_version.setAlignment(Qt.AlignCenter)
         lbl_version.linkActivated.connect(self._open_changelog)
         
         lbl_dev = QLabel("Criado por: <b>Rogério de Araújo Freitas</b><br><a href='https://github.com/rogerioafreitas' style='color:#3B82F6; text-decoration:none;'>github.com/rogerioafreitas</a>")
         lbl_dev.setOpenExternalLinks(True)
-        lbl_dev.setStyleSheet("font-size: 13px; margin-top: 10px; margin-bottom: 8px;")
+        lbl_dev.setStyleSheet("font-size: 13px; margin-top: 8px; margin-bottom: 8px; background: transparent;")
         lbl_dev.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel(
@@ -875,7 +910,11 @@ class AboutDialog(QDialog):
             "Ferramenta de bioacústica focada em detecção, análise e geração de relatórios de chilreios e pulsos."
         )
         lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("font-size: 12px; text-align: justify;")
+        lbl_desc.setStyleSheet("font-size: 12px; text-align: justify; background: transparent;")
+        
+        for _lbl in (lbl_title, lbl_version, lbl_dev, lbl_desc):
+            _lbl.setAttribute(Qt.WA_TranslucentBackground, True)
+            _lbl.setAutoFillBackground(False)
         
         btn_close = QPushButton("Fechar")
         btn_close.setObjectName("btn_secondary")
@@ -899,16 +938,18 @@ class AboutDialog(QDialog):
 
         if dark:
             self.setStyleSheet("""
-                QDialog { background-color: #1B1E22; color: #E7E9EC; font-family: 'Segoe UI'; }
-                QLabel { color: #E7E9EC; }
-                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #444C56; }
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel { background: transparent; background-color: transparent; border: none; color: #E7E9EC; }
+                QLabel:focus { outline: none; border: none; }
+                QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
             """)
         else:
             self.setStyleSheet("""
                 QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QLabel { color: #334155; }
-                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 14px; border-radius: 5px; font-weight: bold; border: 1px solid #CBD5E1; }
+                QLabel { background: transparent; background-color: transparent; border: none; color: #334155; }
+                QLabel:focus { outline: none; border: none; }
+                QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
             """)
 
@@ -2249,30 +2290,38 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 font-weight: 600;
                 color: #AEB4BD;
+            }
             QMenu {
-                background: #1B1E22;
-                color: #E7E9EC;
-                border: 1px solid #34383E;
-                border-radius: 6px;
-                padding: 4px;
+                background-color: #1E232A;
+                color: #E2E8F0;
+                border: 1px solid #384252;
+                border-radius: 8px;
+                padding: 6px;
             }
             QMenu::item {
-                padding: 6px 24px 6px 12px;
-                border-radius: 4px;
-                margin: 1px 2px;
-                background: transparent;
+                padding: 8px 26px 8px 12px;
+                border-radius: 6px;
+                margin: 2px 2px;
+                background-color: transparent;
+                color: #E2E8F0;
+                font-size: 12px;
             }
             QMenu::item:selected {
-                background: #2D8CD8;
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: 600;
+            }
+            QMenu::item:pressed {
+                background-color: #1D4ED8;
                 color: #FFFFFF;
             }
             QMenu::separator {
                 height: 1px;
-                background: #34383E;
-                margin: 4px 6px;
+                background-color: #2E3846;
+                margin: 5px 6px;
             }
             QMenu::right-arrow {
-                margin-right: 6px;
+                margin-right: 8px;
             }
             QToolTip { background: #22262B; color: #F0F2F4; border: 1px solid #3B4047; }
             QLabel#elapsedLabel { color: #AEB4BD; background: transparent; border: 0; padding: 0; }
@@ -2347,30 +2396,36 @@ class MainWindow(QMainWindow):
                 QPushButton#playButton:hover { background: #3B9BE7; }
                 QPushButton#playButton:focus { outline: none; border: 0; }
                 QMenu {
-                    background: #FFFFFF;
-                    color: #2D353D;
-                    border: 1px solid #D4DAE0;
-                    border-radius: 6px;
-                    padding: 4px;
+                    background-color: #FFFFFF;
+                    color: #1E293B;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 8px;
+                    padding: 6px;
                 }
                 QMenu::item {
-                    padding: 6px 24px 6px 12px;
-                    border-radius: 4px;
-                    margin: 1px 2px;
-                    color: #2D353D;
-                    background: transparent;
+                    padding: 8px 26px 8px 12px;
+                    border-radius: 6px;
+                    margin: 2px 2px;
+                    background-color: transparent;
+                    color: #1E293B;
+                    font-size: 12px;
                 }
                 QMenu::item:selected {
-                    background: #E2F0FC;
-                    color: #194D76;
+                    background-color: #2563EB;
+                    color: #FFFFFF;
+                    font-weight: 600;
+                }
+                QMenu::item:pressed {
+                    background-color: #1D4ED8;
+                    color: #FFFFFF;
                 }
                 QMenu::separator {
                     height: 1px;
-                    background: #E5E9EE;
-                    margin: 4px 6px;
+                    background-color: #E2E8F0;
+                    margin: 5px 6px;
                 }
                 QMenu::right-arrow {
-                    margin-right: 6px;
+                    margin-right: 8px;
                 }
                 QCheckBox { spacing: 6px; color: #374151; background: transparent; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #9CA3AF; background-color: #FFFFFF; }
