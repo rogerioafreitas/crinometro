@@ -26,3 +26,6 @@ audios/
 *.pkl
 *.tmp
 
+# Antigo Launcher
+crinometro_laucher_old.py
+
