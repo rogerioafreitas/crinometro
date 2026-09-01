@@ -2,11 +2,9 @@ import sys
 import os
 import math
 import random
-import tempfile
-import subprocess
-from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF
+from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QThread, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath
-from PyQt5.QtWidgets import QWidget, QApplication
+from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox
 
 class ZParticle:
     """Partícula do Zzz: surge perto da cabeça, sobe, cresce e desvanece."""
@@ -41,6 +39,24 @@ class ZParticle:
         elif self.progress > 0.65:
             return max(0.0, 1.0 - (self.progress - 0.65) / 0.35)
         return 1.0
+
+
+class CoreLoaderThread(QThread):
+    loaded = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def run(self):
+        try:
+            import scipy.special
+            import scipy.integrate
+            import scipy.signal
+            import matplotlib
+            import sklearn
+            import crinometro
+            self.loaded.emit()
+        except Exception as e:
+            import traceback
+            self.error.emit(traceback.format_exc())
 
 
 class LauncherLoadingScreen(QWidget):
@@ -79,7 +95,7 @@ class LauncherLoadingScreen(QWidget):
         "O grilo meteu um 'é sobre isso e tá tudo bem' em alta frequência."
     ]
 
-    def __init__(self, ready_file, release_file, shown_file, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(
             Qt.FramelessWindowHint |
@@ -88,9 +104,8 @@ class LauncherLoadingScreen(QWidget):
         )
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         
-        self.ready_file = ready_file
-        self.release_file = release_file
-        self.shown_file = shown_file
+        self.main_window = None
+        self.core_ready = False
 
         self.resize(760, 460)
         self._center_on_screen()
@@ -121,12 +136,6 @@ class LauncherLoadingScreen(QWidget):
         self.fps_timer.timeout.connect(self._update_animation)
         self.fps_timer.start(16)
 
-        # Monitoramento do processo principal (IPC)
-        self.ipc_timer = QTimer(self)
-        self.ipc_timer.setInterval(30)
-        self.ipc_timer.timeout.connect(self._check_app_ready)
-        self.ipc_timer.start()
-
     def _center_on_screen(self):
         screen = QApplication.primaryScreen()
         if screen:
@@ -138,10 +147,35 @@ class LauncherLoadingScreen(QWidget):
         candidates = [p for p in self.MEME_PHRASES if p != self.current_phrase]
         self.current_phrase = random.choice(candidates)
 
-    def _check_app_ready(self):
-        if self.anim_state == "sleeping" and os.path.exists(self.ready_file):
-            self.ipc_timer.stop()
-            self.anim_state = "waking"
+    def start_loader(self):
+        self.loader_thread = CoreLoaderThread()
+        self.loader_thread.loaded.connect(self._on_core_loaded)
+        self.loader_thread.error.connect(self._on_core_error)
+        self.loader_thread.start()
+
+    def _on_core_loaded(self):
+        try:
+            import crinometro
+            self.main_window = crinometro.MainWindow()
+            self.core_ready = True
+            if self.anim_state == "sleeping":
+                self.anim_state = "waking"
+        except Exception as e:
+            import traceback
+            self._on_core_error(traceback.format_exc())
+
+    def _on_core_error(self, err_trace: str):
+        print(f"Erro ao carregar Crinômetro:\n{err_trace}")
+        self.fps_timer.stop()
+        self.phrase_timer.stop()
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle("Erro de Inicialização - Crinômetro")
+        msg.setText("Ocorreu um erro ao carregar o aplicativo:")
+        msg.setDetailedText(err_trace)
+        msg.exec_()
+        self.close()
+        QApplication.quit()
 
     def _update_animation(self):
         dt = 0.016
@@ -173,13 +207,11 @@ class LauncherLoadingScreen(QWidget):
             if self.scale_factor >= 3.8:
                 self.fps_timer.stop()
                 self.phrase_timer.stop()
-                try:
-                    with open(self.release_file, "w", encoding="utf-8") as f:
-                        f.write("release")
-                except Exception as e:
-                    print(f"Aviso launcher release: {e}")
+                if self.main_window is not None:
+                    self.main_window.show()
+                    self.main_window.raise_()
+                    self.main_window.activateWindow()
                 self.close()
-                QApplication.quit()
                 return
 
         self.update()
@@ -345,60 +377,22 @@ class LauncherLoadingScreen(QWidget):
 
         painter.restore()
 
+    def closeEvent(self, event):
+        app = QApplication.instance()
+        if app:
+            app.setQuitOnLastWindowClosed(True)
+        super().closeEvent(event)
+
+
 def main():
-    if "--launcher-managed" in sys.argv:
-        import crinometro
-        return crinometro.main()
-
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    app.setStyle("Fusion")
 
-    temp_dir = tempfile.gettempdir()
-    session_id = f"crino_{os.getpid()}"
-    ready_file = os.path.join(temp_dir, f"{session_id}_ready.sig")
-    release_file = os.path.join(temp_dir, f"{session_id}_release.sig")
-    shown_file = os.path.join(temp_dir, f"{session_id}_shown.sig")
-
-    for sig in [ready_file, release_file, shown_file]:
-        if os.path.exists(sig):
-            try:
-                os.remove(sig)
-            except OSError:
-                pass
-
-    splash = LauncherLoadingScreen(ready_file, release_file, shown_file)
+    splash = LauncherLoadingScreen()
     splash.show()
-
-    if getattr(sys, 'frozen', False):
-        cmd = [
-            sys.executable,
-            "--launcher-managed",
-            f"--ready-file={ready_file}",
-            f"--release-file={release_file}",
-            f"--shown-file={shown_file}"
-        ]
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        candidates = ["crinometro.py", "crinometro_3.py", "crinometro_2.py", "app_grilos.py"]
-        target_script = None
-        for cand in candidates:
-            full_path = os.path.join(base_dir, cand)
-            if os.path.exists(full_path):
-                target_script = full_path
-                break
-
-        if not target_script:
-            target_script = os.path.join(base_dir, "crinometro.py")
-
-        cmd = [
-            sys.executable,
-            target_script,
-            "--launcher-managed",
-            f"--ready-file={ready_file}",
-            f"--release-file={release_file}",
-            f"--shown-file={shown_file}"
-        ]
-
-    subprocess.Popen(cmd)
+    app.processEvents()
+    splash.start_loader()
 
     return app.exec_()
 
