@@ -8,6 +8,9 @@ import datetime
 import json
 import base64
 import traceback
+import scipy
+import scipy.special
+import scipy.integrate
 from scipy.io import wavfile
 from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram
 
@@ -1615,7 +1618,7 @@ class PulseLearner:
             if model is not None and hasattr(model, "predict"):
                 self.model = model
             return self.model is not None or self.training_features.size > 0
-        except (OSError, EOFError, pickle.PickleError, ValueError, TypeError) as exc:
+        except Exception as exc:
             print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
             return False
 
@@ -5113,11 +5116,14 @@ class MainWindow(QMainWindow):
             self._sync_render([mapping[ax]], new_xmin, new_xmax)
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--no-splash", action="store_true")
+    parser.add_argument("--launcher-managed", action="store_true")
+    parser.add_argument("--ready-file", default="")
+    parser.add_argument("--release-file", default="")
+    parser.add_argument("--shown-file", default="")
     args, _ = parser.parse_known_args()
 
     app = QApplication(sys.argv)
@@ -5129,16 +5135,53 @@ if __name__ == "__main__":
 
     window = MainWindow()
 
-    def show_main():
+    def write_signal(path, content):
+        if not path:
+            return
+        try:
+            path = os.path.abspath(path)
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            pass
+
+    if not args.launcher_managed:
         window.show()
         window.raise_()
         window.activateWindow()
-
-    video_file = LoadingScreen._asset_path("loading.mp4")
-    if not args.no_splash and os.path.isfile(video_file):
-        splash = LoadingScreen(finish_callback=show_main)
-        splash.show()
     else:
-        show_main()
+        # Sinaliza que MainWindow terminou de ser construída, mas NÃO a exibe.
+        write_signal(args.ready_file, "ready")
 
-    sys.exit(app.exec_())
+        release_timer = QTimer()
+        release_timer.setInterval(25)
+        wait_ticks = [0]
+
+        def release_when_requested():
+            wait_ticks[0] += 1
+            if not args.release_file:
+                return
+            if os.path.exists(args.release_file):
+                release_timer.stop()
+                try:
+                    window.show()
+                    window.raise_()
+                    window.activateWindow()
+                    write_signal(args.shown_file, "shown")
+                except Exception as e:
+                    print(f"Erro ao exibir janela principal: {e}")
+            elif wait_ticks[0] > 4800:  # 120s sem sinal
+                release_timer.stop()
+                sys.exit(0)
+
+        release_timer.timeout.connect(release_when_requested)
+        release_timer.start()
+
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
