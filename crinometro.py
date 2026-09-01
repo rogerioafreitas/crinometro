@@ -71,7 +71,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.5"
+APP_VERSION = "3.5.0"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -100,6 +100,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.5.0": [
+        "Novo launcher temático e vetorial com animação interativa do mascote e frases dinâmicas.",
+        "Sincronização refinada de abertura com transição suave para a tela principal após o carregamento.",
+        "Disponibilização de manuais estruturados em PDF para pesquisadores e público geral."
+    ],
     "3.4.5": [
         "Paleta expandida com 10 cores distintas e de alto contraste para chilreios de 2 a 10 pulsos (+ cor extra).",
         "Correção do estado visual do botão de edição manual, desativando o destaque azul ao acionar reanálise.",

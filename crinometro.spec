@@ -3,23 +3,20 @@
 block_cipher = None
 
 a = Analysis(
-    ['crinometro_laucher.py'],
+    ['crinometro__laucher.py'],
     pathex=['M:\\Documentos\\Faculdade\\Biologia'],
     binaries=[],
     datas=[
-        ('launcher_assets', 'launcher_assets'),
-        ('loaded_fast.wav', '.'),
-        ('loaded.wav', '.'),
-        ('loading.mp4', '.'),
-        ('loaded.mp4', '.'),
         ('grilinho.ico', '.'),
         ('grilinho.png', '.'),
         ('crinometro_config.json', '.'),
         ('modelo_treinado.pkl', '.'),
         ('crinometro.py', '.'),
+        ('crinometro__laucher.py', '.'),
     ],
     hiddenimports=[
         'crinometro',
+        'crinometro__laucher',
         'scipy',
         'scipy.io',
         'scipy.io.wavfile',
@@ -57,7 +54,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Crinômetro_v3.4.5',
+    name='Crinômetro_v3.5.0',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -44,7 +44,7 @@ class ZParticle:
 
 
 class LauncherLoadingScreen(QWidget):
-    APP_VERSION = "v3.4.5"
+    APP_VERSION = "v3.5.0"
 
     MEME_PHRASES = [
         "Intankável o grilo às 3 da manhã mandando áudio sem fone...",
@@ -346,6 +346,10 @@ class LauncherLoadingScreen(QWidget):
         painter.restore()
 
 def main():
+    if "--launcher-managed" in sys.argv:
+        import crinometro
+        return crinometro.main()
+
     app = QApplication(sys.argv)
 
     temp_dir = tempfile.gettempdir()
@@ -364,30 +368,40 @@ def main():
     splash = LauncherLoadingScreen(ready_file, release_file, shown_file)
     splash.show()
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    candidates = ["crinometro.py", "crinometro_3.py", "crinometro_2.py", "app_grilos.py"]
-    target_script = None
-    for cand in candidates:
-        full_path = os.path.join(base_dir, cand)
-        if os.path.exists(full_path):
-            target_script = full_path
-            break
+    if getattr(sys, 'frozen', False):
+        cmd = [
+            sys.executable,
+            "--launcher-managed",
+            f"--ready-file={ready_file}",
+            f"--release-file={release_file}",
+            f"--shown-file={shown_file}"
+        ]
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates = ["crinometro.py", "crinometro_3.py", "crinometro_2.py", "app_grilos.py"]
+        target_script = None
+        for cand in candidates:
+            full_path = os.path.join(base_dir, cand)
+            if os.path.exists(full_path):
+                target_script = full_path
+                break
 
-    if not target_script:
-        target_script = os.path.join(base_dir, "crinometro.py")
+        if not target_script:
+            target_script = os.path.join(base_dir, "crinometro.py")
 
-    cmd = [
-        sys.executable,
-        target_script,
-        "--launcher-managed",
-        f"--ready-file={ready_file}",
-        f"--release-file={release_file}",
-        f"--shown-file={shown_file}"
-    ]
+        cmd = [
+            sys.executable,
+            target_script,
+            "--launcher-managed",
+            f"--ready-file={ready_file}",
+            f"--release-file={release_file}",
+            f"--shown-file={shown_file}"
+        ]
+
     subprocess.Popen(cmd)
 
-    sys.exit(app.exec_())
+    return app.exec_()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
