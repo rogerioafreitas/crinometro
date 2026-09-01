@@ -1256,6 +1256,7 @@ class TimelineWidget(QWidget):
         self.duration = 0.0
         self.position = 0.0
         self.markers = []
+        self.is_dragging = False
         self.setMinimumHeight(92)
         self.setMaximumHeight(104)
         self.setMouseTracking(True)
@@ -1268,20 +1269,56 @@ class TimelineWidget(QWidget):
         self.update()
 
     def set_position(self, seconds):
-        self.position = max(0.0, min(float(seconds), self.duration or 0.0))
-        self.update()
+        if not self.is_dragging:
+            self.position = max(0.0, min(float(seconds), self.duration or 0.0))
+            self.update()
 
     def _x_for(self, seconds, left, right):
         if self.duration <= 0:
             return left
         return left + (right - left) * (seconds / self.duration)
 
+    def _seconds_from_event(self, event):
+        left, right = 18, max(19, self.width() - 18)
+        if hasattr(event, "pos"):
+            ex = float(event.pos().x())
+        elif hasattr(event, "position"):
+            ex = float(event.position().x())
+        else:
+            ex = float(getattr(event, "x", lambda: 0)())
+
+        ratio = max(0.0, min(1.0, (ex - left) / max(1.0, float(right - left))))
+        return ratio * self.duration
+
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            left, right = 18, max(19, self.width() - 18)
-            ratio = max(0.0, min(1.0, (event.position().x() - left) / max(1, right-left)))
-            self.position_callback(ratio * self.duration * 1000.0)
+        if event.button() == Qt.LeftButton and self.duration > 0:
+            self.is_dragging = True
+            sec = self._seconds_from_event(event)
+            self.position = sec
+            self.update()
+            if self.position_callback:
+                self.position_callback(sec * 1000.0, is_final=False)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.is_dragging and self.duration > 0:
+            sec = self._seconds_from_event(event)
+            self.position = sec
+            self.update()
+            if self.position_callback:
+                self.position_callback(sec * 1000.0, is_final=False)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            if self.is_dragging and self.duration > 0:
+                sec = self._seconds_from_event(event)
+                self.position = sec
+                self.update()
+                if self.position_callback:
+                    self.position_callback(sec * 1000.0, is_final=True)
+            self.is_dragging = False
+        super().mouseReleaseEvent(event)
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -3295,40 +3332,72 @@ class MainWindow(QMainWindow):
         markers = self.timeline.markers if hasattr(self, 'timeline') else []
         self.timeline.set_data(duration_s, markers)
 
-    def set_position(self, position_ms):
-        self.player.setPosition(int(position_ms))
-        self.update_playback_cursor(int(position_ms))
+    def set_position(self, position_ms, is_final=False):
+        """Atualiza a posição de reprodução com throttling seguro contra sobrecarga de seeks no driver de áudio."""
+        pos_ms = max(0, int(position_ms))
+        self.update_playback_cursor(pos_ms)
+
+        current_time = time.time()
+        # Throttling de chamadas de seek ao player para evitar crash em drivers de áudio/WMF (Windows)
+        if is_final or (current_time - getattr(self, '_last_seek_time', 0) > 0.04):
+            self._last_seek_time = current_time
+            try:
+                self.player.setPosition(pos_ms)
+            except Exception as exc:
+                print(f"Aviso ao posicionar reprodução: {exc}")
 
     def update_playback_cursor(self, position_ms):
         if hasattr(self, 'slider') and not self.slider.isSliderDown():
-            self.slider.setValue(position_ms)
-        position_sec = position_ms / 1000.0
+            try:
+                self.slider.setValue(int(position_ms))
+            except Exception:
+                pass
+        position_sec = float(position_ms) / 1000.0
         if hasattr(self, 'lbl_elapsed'):
-            duration_sec = self.player.duration() / 1000.0
-            self.lbl_elapsed.setText(f"{self._format_playback_time(position_sec)} / {self._format_playback_time(duration_sec)}")
+            try:
+                duration_sec = self.player.duration() / 1000.0
+                self.lbl_elapsed.setText(f"{self._format_playback_time(position_sec)} / {self._format_playback_time(duration_sec)}")
+            except Exception:
+                pass
         if hasattr(self, 'timeline'):
-            self.timeline.set_position(position_sec)
+            try:
+                self.timeline.set_position(position_sec)
+            except Exception:
+                pass
         for line in self.cursor_lines:
-            line.set_xdata([position_sec, position_sec])
+            try:
+                line.set_xdata([position_sec, position_sec])
+            except Exception:
+                pass
+
         if not getattr(self, 'bg_cache_valid', False) or getattr(self, 'panning', False):
             current_time = time.time()
             if current_time - self.last_draw_time > 0.01:
                 for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                    panel.canvas.draw_idle()
+                    try:
+                        panel.canvas.draw_idle()
+                    except Exception:
+                        pass
                 self.last_draw_time = current_time
             return
+
         if not self.backgrounds:
             return
+
         try:
             active_panels = [self.panel_wave, self.panel_freq, self.panel_spec]
-            # Usa zip() para evitar IndexError caso cursor_lines e active_panels
-            # estejam dessincronizados (BUG 4)
             for panel, bg, line in zip(active_panels, self.backgrounds, self.cursor_lines):
-                panel.canvas.restore_region(bg)
-                panel.ax.draw_artist(line)
-                panel.canvas.blit(panel.ax.bbox)
+                if bg is not None and hasattr(panel, 'ax') and panel.ax.bbox.width > 0 and panel.ax.bbox.height > 0:
+                    panel.canvas.restore_region(bg)
+                    panel.ax.draw_artist(line)
+                    panel.canvas.blit(panel.ax.bbox)
         except Exception:
-            pass
+            self.bg_cache_valid = False
+            for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                try:
+                    panel.canvas.draw_idle()
+                except Exception:
+                    pass
 
     def _refresh_user_peak_markers(self):
         """Renderiza marcadores de picos do usuário em todos os gráficos relevantes (onda, freq, spec)."""
@@ -3651,8 +3720,9 @@ class MainWindow(QMainWindow):
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self.bg_cache_valid = False
         if hasattr(self, "all_panels") and self.active_heavy_data and not getattr(self, "_resize_refresh_pending", False) and not getattr(self, "_swapping_panels", False) and not getattr(self, "_refreshing_canvases", False):
-            self._resize_refresh_pending=True
+            self._resize_refresh_pending = True
             QTimer.singleShot(0, self._finish_resize_refresh)
 
     def _finish_resize_refresh(self):
