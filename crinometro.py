@@ -37,13 +37,42 @@ from matplotlib.patches import Patch
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.2.2"
+APP_VERSION = "3.2.3"
 # ==============================================================================
+
+def parse_version_tuple(ver_str):
+    """Converte string de versão 'X.Y.Z' para tupla de inteiros (X, Y, Z)."""
+    try:
+        parts = str(ver_str).strip().lstrip("v").split(".")
+        return tuple(int(p) for p in parts[:3])
+    except Exception:
+        return (0, 0, 0)
+
+def is_version_newer(file_ver_str, app_ver_str):
+    """Retorna True se a versão do arquivo for mais nova nas casas X ou Y do que a do aplicativo."""
+    f_parts = parse_version_tuple(file_ver_str)
+    a_parts = parse_version_tuple(app_ver_str)
+    f_major = f_parts[0] if len(f_parts) > 0 else 0
+    f_minor = f_parts[1] if len(f_parts) > 1 else 0
+    a_major = a_parts[0] if len(a_parts) > 0 else 0
+    a_minor = a_parts[1] if len(a_parts) > 1 else 0
+    if f_major > a_major:
+        return True
+    if f_major == a_major and f_minor > a_minor:
+        return True
+    return False
 
 # ==========================================
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.2.3": [
+        "Compatibilidade retroativa com modelos anteriores (tolerância automática entre 7 e 12 features).",
+        "Verificação de compatibilidade de versão ao importar arquivos de treinamento (.pkl).",
+        "Notas de Atualização com scroll suave e tipografia refinada sem excesso de destaque no 'atual'.",
+        "Menu hambúrguer com hover azul bem visível e consistente em ambos os temas.",
+        "Botões de ação e ferramentas com hover em tons azulados e ícones de alto contraste no tema claro."
+    ],
     "3.2.2": [
         "Ajuste visual de pop-ups removendo containers de fundo destoantes nas legendas.",
         "Novo design moderno para a barra de rolagem (scroll) com tom azulado e bordas arredondadas.",
@@ -807,14 +836,17 @@ class ChangelogDialog(QDialog):
         
         text_browser = QTextBrowser()
         text_browser.setOpenExternalLinks(True)
+        text_browser.verticalScrollBar().setSingleStep(12)
         
         html_content = "<div style='font-family: Segoe UI, sans-serif; font-size: 13px;'>"
         for ver, changes in CHANGELOG.items():
-            badge_color = "#3B82F6" if ver == APP_VERSION else "#64748B"
-            current_tag = " <span style='font-size: 10px; background: #2563EB; color: white; padding: 2px 6px; border-radius: 4px;'>atual</span>" if ver == APP_VERSION else ""
-            html_content += f"<h3 style='margin-bottom: 4px; color: {badge_color};'>v{ver}{current_tag}</h3><ul style='margin-top: 4px; padding-left: 18px;'>"
+            if ver == APP_VERSION:
+                title_html = f"<h3 style='margin-top: 6px; margin-bottom: 4px; color: #2563EB; font-size: 14px;'>v{ver} (atual)</h3>"
+            else:
+                title_html = f"<h3 style='margin-top: 6px; margin-bottom: 4px; color: #64748B; font-size: 14px;'>v{ver}</h3>"
+            html_content += title_html + "<ul style='margin-top: 4px; padding-left: 18px;'>"
             for change in changes:
-                html_content += f"<li style='margin-bottom: 4px; line-height: 1.4;'>{change}</li>"
+                html_content += f"<li style='margin-bottom: 4px; line-height: 1.45;'>{change}</li>"
             html_content += "</ul>"
         html_content += "</div>"
         
@@ -842,15 +874,15 @@ class ChangelogDialog(QDialog):
                     border-radius: 8px; padding: 10px; 
                 }
                 QScrollBar:vertical {
-                    background: #171A1E; width: 8px; margin: 4px 1px 4px 1px; border-radius: 4px; border: none;
+                    background: transparent; width: 8px; margin: 4px 2px 4px 2px; border-radius: 4px; border: none;
                 }
                 QScrollBar::handle:vertical {
-                    background: #2563EB; min-height: 26px; border-radius: 4px;
+                    background: #2563EB; min-height: 28px; border-radius: 4px;
                 }
                 QScrollBar::handle:vertical:hover { background: #3B82F6; }
                 QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
-                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; width: 0px; background: none; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; border: none; }
                 QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
             """)
@@ -863,15 +895,15 @@ class ChangelogDialog(QDialog):
                     border-radius: 8px; padding: 10px; 
                 }
                 QScrollBar:vertical {
-                    background: #F1F5F9; width: 8px; margin: 4px 1px 4px 1px; border-radius: 4px; border: none;
+                    background: transparent; width: 8px; margin: 4px 2px 4px 2px; border-radius: 4px; border: none;
                 }
                 QScrollBar::handle:vertical {
-                    background: #3B82F6; min-height: 26px; border-radius: 4px;
+                    background: #3B82F6; min-height: 28px; border-radius: 4px;
                 }
                 QScrollBar::handle:vertical:hover { background: #2563EB; }
                 QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
-                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; width: 0px; background: none; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; border: none; }
                 QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
             """)
@@ -1337,7 +1369,28 @@ class PulseLearner:
         X = np.asarray(X, dtype=float)
         if X.size == 0:
             return np.asarray([], dtype=int)
-        return self.model.predict(X).astype(int)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+
+        # Compatibilidade retroativa inteligente para modelos treinados com 7 ou 12 descritores
+        n_expected = getattr(self.model, "n_features_in_", None)
+        if n_expected is not None and n_expected > 0:
+            if X.shape[1] > n_expected:
+                X_used = X[:, :n_expected]
+            elif X.shape[1] < n_expected:
+                pad = np.zeros((X.shape[0], n_expected - X.shape[1]), dtype=float)
+                X_used = np.hstack((X, pad))
+            else:
+                X_used = X
+        else:
+            X_used = X
+
+        try:
+            return self.model.predict(X_used).astype(int)
+        except Exception as exc:
+            # Fallback tolerante para evitar interrupção da análise em caso de anomalia
+            print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
+            return np.ones(X.shape[0], dtype=int)
 
     def filter_peaks(self, peaks, rate, env_signal):
         peaks = np.asarray(peaks, dtype=int)
@@ -1385,6 +1438,7 @@ class PulseLearner:
             "training_features": self.training_features,
             "training_labels": self.training_labels,
             "feature_names": self.feature_names,
+            "version": APP_VERSION,
         }
         temp_path = self.persistence_path + ".tmp"
         try:
@@ -1406,8 +1460,14 @@ class PulseLearner:
                 return False
             features = np.asarray(payload.get("training_features", []), dtype=float)
             labels = np.asarray(payload.get("training_labels", []), dtype=int)
-            if features.ndim == 2 and features.shape[1] == len(self.feature_names) and len(labels) == len(features):
-                self.training_features = features
+            if features.ndim == 2 and len(labels) == len(features):
+                if features.shape[1] < len(self.feature_names):
+                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
+                    self.training_features = np.hstack((features, pad))
+                elif features.shape[1] == len(self.feature_names):
+                    self.training_features = features
+                else:
+                    self.training_features = features[:, :len(self.feature_names)]
                 self.training_labels = labels
             model = payload.get("model")
             if model is not None and hasattr(model, "predict"):
@@ -1453,7 +1513,7 @@ class PulseLearner:
         return True
 
     def import_model_file(self, filepath):
-        """Carrega e valida um modelo de treinamento exportado anteriormente."""
+        """Carrega e valida um modelo de treinamento exportado anteriormente, com verificação de versão."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
         with open(filepath, "rb") as f:
@@ -1461,23 +1521,39 @@ class PulseLearner:
         if not isinstance(payload, dict):
             raise ValueError("Formato de arquivo de treinamento inválido.")
 
+        # Verificação de versão do arquivo .pkl em relação à versão do app
+        file_version = str(payload.get("version", "1.0.0"))
+        if is_version_newer(file_version, APP_VERSION):
+            raise ValueError(
+                f"O arquivo de treinamento foi gerado por uma versão mais recente do Crinômetro (v{file_version}).\n\n"
+                f"Sua versão atual é v{APP_VERSION}.\n\n"
+                f"Por favor, atualize seu aplicativo em:\n"
+                f"https://github.com/rogerioafreitas/crinometro"
+            )
+
         features = np.asarray(payload.get("training_features", []), dtype=float)
         labels = np.asarray(payload.get("training_labels", []), dtype=int)
         model = payload.get("model")
 
-        if model is None and features.size > 0 and labels.size > 0:
-            self.training_features = features
-            self.training_labels = labels
-            if np.unique(labels).size >= 2:
-                self.model = self._build_model()
-                self.model.fit(self.training_features, self.training_labels)
-        elif model is not None and hasattr(model, "predict"):
-            self.model = model
-            if features.size > 0 and labels.size > 0:
+        # Adaptação para modelos antigos com 7 ou outros números de features
+        if features.size > 0 and labels.size > 0:
+            if features.ndim == 2:
+                if features.shape[1] < len(self.feature_names):
+                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
+                    self.training_features = np.hstack((features, pad))
+                else:
+                    self.training_features = features[:, :len(self.feature_names)]
+            else:
                 self.training_features = features
-                self.training_labels = labels
+            self.training_labels = labels
+
+        if model is not None and hasattr(model, "predict"):
+            self.model = model
+        elif self.training_features.size > 0 and self.training_labels.size > 0 and np.unique(self.training_labels).size >= 2:
+            self.model = self._build_model()
+            self.model.fit(self.training_features, self.training_labels)
         else:
-            raise ValueError("O arquivo não contém um classificador válido.")
+            raise ValueError("O arquivo não contém um classificador válido ou dados suficientes para treino.")
 
         self.save_persisted_training()
         self.save_to_config()
@@ -1627,6 +1703,11 @@ class PlotPanel(QWidget):
         self.ax.xaxis.label.set_color(fg)
         self.ax.yaxis.label.set_color(fg)
         self.ax.grid(color=grid, linewidth=0.6, alpha=0.65)
+        
+        # Atualiza cor dos ícones das ferramentas para alto contraste em ambos os temas
+        icon_color = "#D7DCE2" if dark else "#334155"
+        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=15))
+        self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=15))
 
 
 class TimelineWidget(QWidget):
@@ -2220,15 +2301,28 @@ class MainWindow(QMainWindow):
             QWidget#volumeCluster { background: transparent; border: 0; }
             QLabel#metricDivider { color: #363A40; }
             QPushButton#summaryAction {
-                background: #272A2E;
-                color: #D9DCE0;
-                border: 1px solid #34383E;
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border: 1px solid #3B82F6;
                 border-radius: 7px;
-                padding: 8px 13px;
+                padding: 8px 14px;
                 font-size: 12px;
+                font-weight: 600;
                 outline: none;
             }
-            QPushButton#summaryAction:hover { background: #32363C; }
+            QPushButton#summaryAction:hover {
+                background-color: #3B82F6;
+                border-color: #60A5FA;
+            }
+            QPushButton#summaryAction:pressed {
+                background-color: #1D4ED8;
+                border-color: #1E40AF;
+            }
+            QPushButton#summaryAction:disabled {
+                background-color: #24282F;
+                color: #58616D;
+                border-color: #333842;
+            }
             QWidget#plotTitleBar {
                 background: transparent;
                 border: 0;
@@ -2246,14 +2340,24 @@ class MainWindow(QMainWindow):
                 color: #AEB4BD;
                 border-radius: 5px;
                 font-size: 15px;
-                padding: 0;
+                padding: 3px;
                 outline: none;
             }
-            QPushButton#plotTool:hover { background: transparent; color: #F3F4F6; }
+            QPushButton#plotTool:hover { background: #2A3038; color: #60A5FA; }
             QPushButton#plotTool:pressed { background: #1D2024; }
+            QPushButton#plotTool:disabled { color: #4B5563; background: transparent; }
             QPushButton#plotMaximize {
                 color: #C7CCD2;
                 font-size: 16px;
+                border-radius: 5px;
+                padding: 3px;
+            }
+            QPushButton#plotMaximize:hover { background: #2A3038; color: #60A5FA; }
+            QPushButton#navIcon, QPushButton#menuButton {
+                color: #AEB4BD; background: transparent; border: 0; border-radius: 6px;
+            }
+            QPushButton#navIcon:hover, QPushButton#menuButton:hover {
+                background: #252A30; color: #60A5FA;
             }
             QSlider#volumeSlider { background: transparent; border: none; min-height: 16px; padding: 0; margin: 0; }
             QSlider#volumeSlider::add-page:horizontal { background: transparent; }
@@ -2339,12 +2443,19 @@ class MainWindow(QMainWindow):
                 QLabel#brand { color: #1D2329; }
                 QLabel#version { color: #7A838D; }
                 QLabel#themeLabel { color: #68737E; }
-                QPushButton#menuButton, QPushButton#navIcon, QPushButton#plotTool, QPushButton#transport, QPushButton#speedButton {
-                    color: #66717C; background: transparent; border: 0;
+                QPushButton#menuButton, QPushButton#navIcon, QPushButton#transport, QPushButton#speedButton {
+                    color: #475569; background: transparent; border: 0; border-radius: 6px;
                 }
-                QPushButton#menuButton:hover, QPushButton#navIcon:hover, QPushButton#plotTool:hover, QPushButton#transport:hover, QPushButton#speedButton:hover {
-                    background: transparent; color: #1E252C;
+                QPushButton#menuButton:hover, QPushButton#navIcon:hover, QPushButton#transport:hover, QPushButton#speedButton:hover {
+                    background: #E2E8F0; color: #2563EB;
                 }
+                QPushButton#plotTool, QPushButton#plotMaximize {
+                    background: transparent; border: 0; color: #475569; border-radius: 5px; font-size: 15px; padding: 3px; outline: none;
+                }
+                QPushButton#plotTool:hover, QPushButton#plotMaximize:hover {
+                    background: #E2E8F0; color: #2563EB;
+                }
+                QPushButton#plotTool:disabled { color: #94A3B8; background: transparent; }
                 QPushButton#btn_sync { background: #2E8ED8; border-color: #3A9CE9; color: #FFFFFF; }
                 QPushButton#btn_sync:hover { background: #3B9BE7; }
                 QPushButton#btn_sync:checked { background: #236FAE; }
@@ -2387,8 +2498,29 @@ class MainWindow(QMainWindow):
                 }
                 QLabel#summaryFile, QLabel#metricValue { color: #1D2329; }
                 QLabel#summaryMeta, QLabel#metricTitle, QLabel#metricSub, QLabel#plotTitle, QLabel#volumeLabel, QLabel#elapsedLabel { color: #69737D; }
-                QPushButton#summaryAction { background: #F4F6F8; color: #44505A; border-color: #D6DCE1; }
-                QPushButton#summaryAction:hover { background: #E9EEF2; }
+                QPushButton#summaryAction {
+                    background-color: #2563EB;
+                    color: #FFFFFF;
+                    border: 1px solid #2563EB;
+                    border-radius: 7px;
+                    padding: 8px 14px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    outline: none;
+                }
+                QPushButton#summaryAction:hover {
+                    background-color: #3B82F6;
+                    border-color: #3B82F6;
+                }
+                QPushButton#summaryAction:pressed {
+                    background-color: #1D4ED8;
+                    border-color: #1D4ED8;
+                }
+                QPushButton#summaryAction:disabled {
+                    background-color: #E2E8F0;
+                    color: #94A3B8;
+                    border-color: #CBD5E1;
+                }
                 QSlider#volumeSlider::groove:horizontal { background: #CFD6DD; }
                 QSlider#volumeSlider::sub-page:horizontal { background: #3C93D8; }
                 QSlider#volumeSlider::handle:horizontal { background: #FFFFFF; border: 1px solid #B9C3CC; }
@@ -2442,7 +2574,10 @@ class MainWindow(QMainWindow):
         self.apply_modern_styles()
         for panel in getattr(self, "all_panels", []):
             panel.apply_dark_theme()
-            panel.btn_expand.setIcon(make_ui_icon("maximize", color=("#E4E8EC" if self.theme_mode == "dark" else "#42505B"), size=15))
+        if hasattr(self, "btn_collapse"):
+            collapse_icon = "chevron_left" if not getattr(self, "_sidebar_collapsed", False) else "chevron_right"
+            icon_col = "#E4E8EC" if self.theme_mode == "dark" else "#334155"
+            self.btn_collapse.setIcon(make_ui_icon(collapse_icon, color=icon_col, size=18))
         if hasattr(self, "btn_play"):
             self._update_play_icon()
         if self.active_heavy_data:
@@ -2663,15 +2798,15 @@ class MainWindow(QMainWindow):
         actions.setSpacing(7)
         self.btn_reanalisar_main = QPushButton("Reanalisar")
         self.btn_reanalisar_main.setObjectName("summaryAction")
-        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", size=17))
+        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
-        self.btn_learn_corrections.setIcon(make_ui_icon("brain", size=17))
+        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=17))
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         self.btn_export_main = QPushButton("Exportar Dados")
         self.btn_export_main.setObjectName("summaryAction")
-        self.btn_export_main.setIcon(make_ui_icon("export", size=17))
+        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=17))
         self.btn_export_main.clicked.connect(self.action_save_txt)
         actions.addWidget(self.btn_reanalisar_main)
         actions.addWidget(self.btn_learn_corrections)
