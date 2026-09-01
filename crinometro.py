@@ -1623,6 +1623,11 @@ class MainWindow(QMainWindow):
         self.player.durationChanged.connect(self.update_duration)
         self.player.stateChanged.connect(self._on_playback_state)
 
+        # Timer de alta precisão (10 ms) para atualização suave e responsiva da timeline e cursor
+        self.playback_timer = QTimer(self)
+        self.playback_timer.setInterval(10)
+        self.playback_timer.timeout.connect(self._on_playback_timer_tick)
+
         self.loaded_files = {}
         self.cursor_lines = []
         self.backgrounds = []
@@ -3250,6 +3255,14 @@ class MainWindow(QMainWindow):
 
     def _on_playback_state(self, state):
         self._update_play_icon()
+        if state == QMediaPlayer.PlayingState:
+            self.playback_timer.start(10)
+        else:
+            self.playback_timer.stop()
+
+    def _on_playback_timer_tick(self):
+        if self.player.state() == QMediaPlayer.PlayingState:
+            self.update_playback_cursor(self.player.position())
 
     def cycle_playback_speed(self):
         """Alterna entre velocidade normal e velocidades reduzidas, sem alterar o áudio original."""
@@ -3299,7 +3312,7 @@ class MainWindow(QMainWindow):
             line.set_xdata([position_sec, position_sec])
         if not getattr(self, 'bg_cache_valid', False) or getattr(self, 'panning', False):
             current_time = time.time()
-            if current_time - self.last_draw_time > 0.05:
+            if current_time - self.last_draw_time > 0.01:
                 for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
                     panel.canvas.draw_idle()
                 self.last_draw_time = current_time
