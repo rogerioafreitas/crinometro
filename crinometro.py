@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QSlider, QSpinBox, QDoubleSpinBox, QFormLayout, 
                              QDialog, QDialogButtonBox, QFileDialog, QGridLayout, QLineEdit,
                              QComboBox, QFrame, QListWidgetItem, QSizePolicy, QMenu, QCheckBox, QAction, QToolTip,
-                             QTextBrowser)
+                             QTextBrowser, QGroupBox)
 from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QPolygonF, QPen, QCursor
 from PyQt5.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaContent
@@ -37,7 +37,7 @@ from matplotlib.patches import Patch
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.3.0"
+APP_VERSION = "3.4.0"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -66,6 +66,15 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.4.0": [
+        "Tolerância e resiliência total na análise: arquivos com 0 chilreios são exibidos normalmente para edição manual.",
+        "Parâmetro padrão de chilreios atualizado de fábrica para a faixa de 2 a 10 pulsos.",
+        "Botão contextual dinâmico 'Analisar' / 'Reanalisar' com Loading Spinner animado e indicador na lista de arquivos.",
+        "Desativação automática da ferramenta de edição manual ao acionar reanálise.",
+        "Novo design de barras de rolagem (Scrollbar) com trilho e puxador arredondados em cinza suave.",
+        "Loading Spinner discreto semi-transparente adicionado à tela de carregamento do launcher.",
+        "Correção de encerramento inesperado ao abrir as preferências de algoritmo."
+    ],
     "3.3.0": [
         "Eliminação de travamentos ao editar pulsos manualmente com resposta imediata em tempo real.",
         "Execução assíncrona em background para Reanálise, Aprendizado Ativo e Análise em Lote.",
@@ -209,7 +218,7 @@ DEFAULT_ALGO_PARAMS = {
     "amp_min": 0.04, "amp_max": 1.00, "amp_var": 0.40,
     "dur_min": 14.0, "dur_max": 80.0,
     "gap_min": 25.0, "gap_max": 35.0,
-    "min_p": 3, "max_p": 7, "b1_min": 3200, "b1_max": 6000,
+    "min_p": 2, "max_p": 10, "b1_min": 3200, "b1_max": 6000,
     "prominence": 0.01, "width_min_ms": 0.0, "width_max_ms": 0.0,
     "smooth_window_ms": 15.0, "noise_floor": 0.90,
     "adaptation_rate": 0.10,
@@ -625,7 +634,11 @@ class AlgoSettingsDialog(QDialog):
             widget = WidgetClass()
             widget.setRange(vmin, vmax)
             widget.setSingleStep(step)
-            widget.setValue(current_params[key])
+            val = current_params.get(key, DEFAULT_ALGO_PARAMS.get(key, vmin))
+            if WidgetClass == QSpinBox:
+                widget.setValue(int(round(float(val))))
+            else:
+                widget.setValue(float(val))
             self.inputs[key] = widget
             form.addRow(label, widget)
 
@@ -956,15 +969,18 @@ class ChangelogDialog(QDialog):
                     border-radius: 8px; padding: 10px; 
                 }
                 QScrollBar:vertical {
-                    background: transparent; width: 8px; margin: 4px 2px 4px 2px; border-radius: 4px; border: none;
+                    background: transparent; width: 10px; margin: 4px 2px 4px 2px; border-radius: 5px; border: none;
+                }
+                QScrollBar::track:vertical {
+                    background-color: #16191E; border-radius: 5px; border: none;
                 }
                 QScrollBar::handle:vertical {
-                    background: #2563EB; min-height: 28px; border-radius: 4px;
+                    background-color: #64748B; min-height: 28px; border-radius: 5px; border: none;
                 }
-                QScrollBar::handle:vertical:hover { background: #3B82F6; }
-                QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
+                QScrollBar::handle:vertical:hover { background-color: #94A3B8; }
+                QScrollBar::handle:vertical:pressed { background-color: #475569; }
                 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; width: 0px; background: none; border: none; }
-                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; border: none; }
                 QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
             """)
@@ -977,15 +993,18 @@ class ChangelogDialog(QDialog):
                     border-radius: 8px; padding: 10px; 
                 }
                 QScrollBar:vertical {
-                    background: transparent; width: 8px; margin: 4px 2px 4px 2px; border-radius: 4px; border: none;
+                    background: transparent; width: 10px; margin: 4px 2px 4px 2px; border-radius: 5px; border: none;
+                }
+                QScrollBar::track:vertical {
+                    background-color: #E2E8F0; border-radius: 5px; border: none;
                 }
                 QScrollBar::handle:vertical {
-                    background: #3B82F6; min-height: 28px; border-radius: 4px;
+                    background-color: #94A3B8; min-height: 28px; border-radius: 5px; border: none;
                 }
-                QScrollBar::handle:vertical:hover { background: #2563EB; }
-                QScrollBar::handle:vertical:pressed { background: #1D4ED8; }
+                QScrollBar::handle:vertical:hover { background-color: #64748B; }
+                QScrollBar::handle:vertical:pressed { background-color: #475569; }
                 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; width: 0px; background: none; border: none; }
-                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; border: none; }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; border: none; }
                 QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
             """)
@@ -1111,7 +1130,6 @@ class CricketAnalyzer:
         
         dom_freq_idx = np.argmax(Sxx, axis=0)
         dom_freqs = f_spec[dom_freq_idx]
-
         dist_samples = max(1, int(rate * (params["gap_min"] / 1000.0)))
         
         noise_floor = float(params.get("noise_floor", 0.90))
@@ -1125,80 +1143,73 @@ class CricketAnalyzer:
                                distance=dist_samples, prominence=prominence_val,
                                width=(width_min, width_max))
 
-        if len(raw_peaks) == 0: raise ValueError("Nenhum pico encontrado com a amplitude informada.")
-
         valid_peaks_stage1 = []
-        for p in raw_peaks:
-            p_time = p / rate
-            spec_col_idx = np.argmin(np.abs(t_spec - p_time))
-            br = band_ratio[spec_col_idx]
-            if br > 0.35:
-                valid_peaks_stage1.append(p)
+        if len(raw_peaks) > 0:
+            for p in raw_peaks:
+                p_time = p / rate
+                spec_col_idx = np.argmin(np.abs(t_spec - p_time))
+                br = band_ratio[spec_col_idx]
+                if br > 0.35:
+                    valid_peaks_stage1.append(p)
                 
         peaks_filtered = np.array(valid_peaks_stage1)
-        if len(peaks_filtered) == 0: raise ValueError("Nenhum pulso validado no espectrograma.")
-
-        widths_samples, _, _, _ = peak_widths(env1_smooth, peaks_filtered, rel_height=0.7)
-        pulse_durations_s = widths_samples / rate
-        peak_dur_dict = dict(zip(peaks_filtered, pulse_durations_s))
-        
-        dur_tol = 0.5
-
         valid_peaks_stage2 = []
-        for p in peaks_filtered:
-            dur = peak_dur_dict[p]
-            if (params["dur_min"]/1000.0)*(1-dur_tol) <= dur <= (params["dur_max"]/1000.0)*(1+dur_tol):
-                valid_peaks_stage2.append(p)
+        if len(peaks_filtered) > 0:
+            widths_samples, _, _, _ = peak_widths(env1_smooth, peaks_filtered, rel_height=0.7)
+            pulse_durations_s = widths_samples / rate
+            peak_dur_dict = dict(zip(peaks_filtered, pulse_durations_s))
+            
+            dur_tol = 0.5
+            for p in peaks_filtered:
+                dur = peak_dur_dict[p]
+                if (params["dur_min"]/1000.0)*(1-dur_tol) <= dur <= (params["dur_max"]/1000.0)*(1+dur_tol):
+                    valid_peaks_stage2.append(p)
                 
         candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
-        if pulse_learner is not None and pulse_learner.is_trained():
+        if pulse_learner is not None and pulse_learner.is_trained() and len(candidate_peaks) > 0:
             candidate_peaks = pulse_learner.filter_peaks(candidate_peaks, rate, env1_smooth)
-            if len(candidate_peaks) == 0:
-                raise ValueError("Nenhum pulso passou no filtro do aprendizado ativo.")
 
         peaks = np.asarray(candidate_peaks, dtype=int)
-        if len(peaks) == 0: raise ValueError("Nenhum pulso passou pelo filtro de duração.")
-
-        pulse_times_s = peaks / rate
+        pulse_times_s = peaks / rate if len(peaks) > 0 else np.array([])
         chirp_peaks_list = []
-        current_chirp = [peaks[0]]
+        if len(pulse_times_s) > 0:
+            current_chirp = [peaks[0]]
+            for i in range(1, len(pulse_times_s)):
+                gap_s = pulse_times_s[i] - pulse_times_s[i - 1]
+                expected_gap_min = params["gap_min"] / 1000.0
+                expected_gap_max = params["gap_max"] / 1000.0
+                
+                if expected_gap_min <= gap_s <= expected_gap_max:
+                    current_chirp.append(peaks[i])
+                else:
+                    if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
+                    current_chirp = [peaks[i]]
 
-        for i in range(1, len(pulse_times_s)):
-            gap_s = pulse_times_s[i] - pulse_times_s[i - 1]
-            expected_gap_min = params["gap_min"] / 1000.0
-            expected_gap_max = params["gap_max"] / 1000.0
-            
-            if expected_gap_min <= gap_s <= expected_gap_max:
-                current_chirp.append(peaks[i])
-            else:
-                if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
-                current_chirp = [peaks[i]]
-
-        if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
+            if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
 
         refined_chirps = []
+        min_pulses = params.get("min_p", 2)
+        max_pulses = params.get("max_p", 10)
         for chirp in chirp_peaks_list:
             if len(chirp) <= 1: continue
             
             amps = env1_smooth[chirp]
             ref_amp = np.median(amps)
             valid_in_chirp = []
-            allowed_var = params["amp_var"] * 1.2
+            allowed_var = params.get("amp_var", 0.40) * 1.2
             
             for i in range(len(chirp)):
                 amp_deviation = abs(amps[i] - ref_amp) / (ref_amp + 1e-6)
                 if amp_deviation <= allowed_var:
                     valid_in_chirp.append(chirp[i])
             
-            if params["min_p"] <= len(valid_in_chirp) <= params["max_p"]:
+            if min_pulses <= len(valid_in_chirp) <= max_pulses:
                 refined_chirps.append(valid_in_chirp)
                 
         chirp_peaks_list = refined_chirps
         chirps = [len(cp) for cp in chirp_peaks_list]
-        if len(chirps) == 0: raise ValueError("Nenhum chilreio validado após agrupamento.")
-
-        media = statistics.mean(chirps)
-        moda = CricketAnalyzer._safe_mode(chirps)
+        media = statistics.mean(chirps) if len(chirps) > 0 else 0.0
+        moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0
 
         return rate, data, data_b1, env1_smooth, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec
 
@@ -1211,7 +1222,7 @@ class CricketAnalyzer:
         Retorna (chirps, chirp_peaks_list, media, moda).
         """
         if len(peaks) < 2:
-            raise ValueError("Picos insuficientes para reagrupar em chilreios.")
+            return [], [], 0.0, 0
         peaks = np.asarray(sorted(peaks), dtype=int)
         pulse_times_s = peaks / float(rate)
         gap_min_s = params.get("gap_min", 25.0) / 1000.0
@@ -1231,8 +1242,8 @@ class CricketAnalyzer:
         # Filtra por variação de amplitude e contagem de pulsos
         refined_chirps = []
         amp_var = params.get("amp_var", 0.40) * 1.2
-        min_p = params.get("min_p", 3)
-        max_p = params.get("max_p", 7)
+        min_p = params.get("min_p", 2)
+        max_p = params.get("max_p", 10)
         for chirp in chirp_peaks_list:
             if len(chirp) <= 1:
                 continue
@@ -1249,11 +1260,10 @@ class CricketAnalyzer:
             ]
             if min_p <= len(valid_in_chirp) <= max_p:
                 refined_chirps.append(valid_in_chirp)
-        if not refined_chirps:
-            raise ValueError("Nenhum chilreio validado após reagrupamento com correções.")
+        
         chirps = [len(cp) for cp in refined_chirps]
-        media = statistics.mean(chirps)
-        moda = CricketAnalyzer._safe_mode(chirps)
+        media = statistics.mean(chirps) if len(chirps) > 0 else 0.0
+        moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0
         return chirps, refined_chirps, media, moda
 
 
@@ -1986,20 +1996,30 @@ class LoadingScreen(QWidget):
         layout.addWidget(self.video)
 
         self.player = QMediaPlayer(self)
-        self.audio = QAudioOutput(self)
-        self.audio.setVolume(1.0)  # reproduz também a trilha de áudio do loading.mp4
         self.player.setVolume(100)
         self.player.setVideoOutput(self.video)
 
         self.player.mediaStatusChanged.connect(self._on_media_status)
-        self.player.errorOccurred.connect(self._on_error)
-        self.finished.connect(lambda: None) if False else None
+        if hasattr(self.player, "errorOccurred"):
+            self.player.errorOccurred.connect(self._on_error)
+        elif hasattr(self.player, "error"):
+            self.player.error.connect(self._on_error)
 
         self._fallback = QTimer(self)
         self._fallback.setSingleShot(True)
         self._fallback.timeout.connect(self.finish)
 
         self._finished = False
+
+        # Loading Spinner discreto no canto inferior direito (fundo branco do vídeo com spinner preto ~90% opaco)
+        self.lbl_spinner = QLabel(self)
+        self.lbl_spinner.setFixedSize(32, 32)
+        self.lbl_spinner.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.lbl_spinner.setStyleSheet("background: transparent; border: none;")
+        self.spinner_angle = 0
+        self.spinner_timer = QTimer(self)
+        self.spinner_timer.timeout.connect(self._rotate_launcher_spinner)
+        self.spinner_timer.start(40)
 
         video_path = self._asset_path("loading.mp4")
         if os.path.exists(video_path):
@@ -2034,6 +2054,19 @@ class LoadingScreen(QWidget):
         geo.moveCenter(available.center())
         self.setGeometry(geo)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "lbl_spinner"):
+            margin = 16
+            self.lbl_spinner.move(self.width() - self.lbl_spinner.width() - margin,
+                                  self.height() - self.lbl_spinner.height() - margin)
+            self.lbl_spinner.raise_()
+
+    def _rotate_launcher_spinner(self):
+        self.spinner_angle = (self.spinner_angle - 25) % 360
+        icon = make_spinner_icon(self.spinner_angle, color="#000000E6", size=22)
+        self.lbl_spinner.setPixmap(icon.pixmap(22, 22))
+
     def _on_media_status(self, status):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.finish()
@@ -2045,6 +2078,8 @@ class LoadingScreen(QWidget):
         if self._finished:
             return
         self._finished = True
+        if hasattr(self, "spinner_timer"):
+            self.spinner_timer.stop()
         self._fallback.stop()
         self.player.stop()
         callback = self.finish_callback
@@ -2125,6 +2160,24 @@ class AudioListItemWidget(QWidget):
 
         # Evento de clique no card para selecionar o áudio
         self.card.mousePressEvent = self._on_card_clicked
+
+    def set_loading(self, is_loading):
+        """Ativa ou desativa a animação de spinner no ícone do arquivo na lista."""
+        if is_loading:
+            if not hasattr(self, '_loading_timer'):
+                self._loading_timer = QTimer(self)
+                self._loading_timer.timeout.connect(self._rotate_item_spinner)
+                self._loading_angle = 0
+            self._loading_timer.start(50)
+            self._rotate_item_spinner()
+        else:
+            if hasattr(self, '_loading_timer'):
+                self._loading_timer.stop()
+            self.lbl_icon.setPixmap(make_ui_icon("play", color="#8B949E", size=10).pixmap(10, 10))
+
+    def _rotate_item_spinner(self):
+        self._loading_angle = (self._loading_angle - 30) % 360
+        self.lbl_icon.setPixmap(make_spinner_icon(self._loading_angle, color="#3B82F6", size=11).pixmap(11, 11))
 
     def _on_card_clicked(self, event):
         if self.on_select:
@@ -2517,6 +2570,36 @@ class MainWindow(QMainWindow):
             QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #4B5563; background-color: #1F242C; }
             QCheckBox::indicator:hover { border-color: #3B82F6; }
             QCheckBox::indicator:checked { background-color: #2563EB; border-color: #2563EB; }
+            QScrollBar:vertical {
+                background: transparent;
+                width: 10px;
+                margin: 4px 2px 4px 2px;
+                border-radius: 5px;
+                border: none;
+            }
+            QScrollBar::track:vertical {
+                background-color: #16191E;
+                border-radius: 5px;
+                border: none;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #64748B;
+                min-height: 28px;
+                border-radius: 5px;
+                border: none;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #94A3B8;
+            }
+            QScrollBar::handle:vertical:pressed {
+                background-color: #475569;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px; width: 0px; background: none; border: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none; border: none;
+            }
         """)
         if self.theme_mode == "light":
             self.setStyleSheet(self.styleSheet() + r"""
@@ -2547,6 +2630,36 @@ class MainWindow(QMainWindow):
                 QListWidget::item { background: transparent; border: none; padding: 0; margin: 2px 0; }
                 QListWidget::item:hover { background: transparent; }
                 QListWidget::item:selected { background: transparent; }
+                QScrollBar:vertical {
+                    background: transparent;
+                    width: 10px;
+                    margin: 4px 2px 4px 2px;
+                    border-radius: 5px;
+                    border: none;
+                }
+                QScrollBar::track:vertical {
+                    background-color: #E2E8F0;
+                    border-radius: 5px;
+                    border: none;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #94A3B8;
+                    min-height: 28px;
+                    border-radius: 5px;
+                    border: none;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #64748B;
+                }
+                QScrollBar::handle:vertical:pressed {
+                    background-color: #475569;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px; width: 0px; background: none; border: none;
+                }
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                    background: none; border: none;
+                }
                 QFrame#audioFileCard {
                     background: #FFFFFF;
                     border: 1px solid #D9DEE4;
@@ -3323,8 +3436,16 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # Desativa a ferramenta de edição caso esteja ativa
+        self._update_pulse_edit_buttons(None)
+
         spinner = ButtonSpinner(self.btn_analyze_selected, "Analisando...")
         spinner.start()
+
+        for fname in checked_files:
+            w = self._get_item_widget_by_name(fname)
+            if w and hasattr(w, "set_loading"):
+                w.set_loading(True)
 
         curr = self.list_widget.currentItem()
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
@@ -3350,9 +3471,19 @@ class MainWindow(QMainWindow):
         self._batch_worker = worker
 
         def _on_finished(payload):
+            for fname in checked_files:
+                w = self._get_item_widget_by_name(fname)
+                if w and hasattr(w, "set_loading"):
+                    w.set_loading(False)
+
             success_count, errors, results = payload
             for fname, res in results.items():
                 self._apply_analysis_results(fname, res, render=(fname == curr_name))
+
+            if curr_name in self.analysis_cache:
+                self.btn_reanalisar_main.setText("Reanalisar")
+                self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
+                self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
 
             if curr_name not in checked_files and checked_files and checked_files[0] in results:
                 self.select_file_by_name(checked_files[0])
@@ -3367,6 +3498,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, I18N[self.lang]["success"], msg)
 
         def _on_error(err_msg):
+            for fname in checked_files:
+                w = self._get_item_widget_by_name(fname)
+                if w and hasattr(w, "set_loading"):
+                    w.set_loading(False)
             spinner.stop(None, "⚡ Analisar Selecionados")
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
@@ -3469,9 +3604,46 @@ class MainWindow(QMainWindow):
         self._update_play_icon()
         self.player.setMedia(QMediaContent(QUrl.fromLocalFile(self.loaded_files[filename])))
         self.btn_play.setEnabled(True)
-        # Sempre usa os parâmetros ATUAIS (BUG A fix): o cache antigo continha os
-        # parâmetros no momento da primeira análise, o que fazia mudanças serem ignoradas.
-        self.run_analysis(filename, self.algo_params, render=True)
+
+        if filename in self.analysis_cache:
+            self.btn_reanalisar_main.setText("Reanalisar")
+            self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
+            self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
+            self.active_heavy_data = self.analysis_cache[filename]
+            self.render_dashboard(filename)
+        else:
+            self.btn_reanalisar_main.setText("Analisar")
+            self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
+            self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
+            self._update_summary_ready_for_analysis(filename)
+
+    def _get_item_widget_by_name(self, filename):
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            name = self._get_item_filename(item)
+            if name == filename:
+                return self.list_widget.itemWidget(item)
+        return None
+
+    def _update_summary_ready_for_analysis(self, filename):
+        self.lbl_summary_file.setText(filename)
+        try:
+            rate, data = wavfile.read(self.loaded_files[filename])
+            if len(data.shape) > 1:
+                data = data[:, 0]
+            dur = len(data) / float(rate)
+            mins = int(dur // 60)
+            secs = dur % 60
+            self.lbl_summary_meta.setText(f"Duração: {mins:02d}:{secs:04.1f}   •   Taxa: {int(rate):,} Hz   •   Pronto para análise")
+            self.timeline.set_data(dur, [])
+        except Exception:
+            self.lbl_summary_meta.setText("Áudio carregado • Clique em 'Analisar'")
+            self.timeline.set_data(0.0, [])
+        self.lbl_total.setText("--")
+        self.lbl_metric_sub.setText("Moda: --   |   Média: --")
+        for panel in self.all_panels:
+            panel.ax.clear()
+            panel.canvas.draw_idle()
 
     # ---------- configurações ----------
     def open_algo_settings(self):
@@ -3690,11 +3862,20 @@ class MainWindow(QMainWindow):
         curr = self.list_widget.currentItem()
         filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
         if not filename or filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
-            QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de reanalisar.")
+            QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de analisar.")
             return
 
-        spinner = ButtonSpinner(self.btn_reanalisar_main, "Reanalisando...")
+        # Desativa a ferramenta de edição caso esteja ativa
+        self._update_pulse_edit_buttons(None)
+
+        is_first_time = (filename not in self.analysis_cache)
+        loading_text = "Analisando..." if is_first_time else "Reanalisando..."
+        spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
         spinner.start()
+
+        item_widget = self._get_item_widget_by_name(filename)
+        if item_widget and hasattr(item_widget, "set_loading"):
+            item_widget.set_loading(True)
 
         def _task():
             # 1. Se o usuário fez correções no arquivo atual, atualizamos o modelo
@@ -3720,12 +3901,19 @@ class MainWindow(QMainWindow):
         self._reanalyze_worker = worker
 
         def _on_finished(results):
+            if item_widget and hasattr(item_widget, "set_loading"):
+                item_widget.set_loading(False)
             spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
+            self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
             self._apply_analysis_results(filename, results, render=True, validate_all=True)
 
         def _on_error(err_msg):
-            spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na reanálise:\n{err_msg}")
+            if item_widget and hasattr(item_widget, "set_loading"):
+                item_widget.set_loading(False)
+            restore_text = "Analisar" if is_first_time else "Reanalisar"
+            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
+            spinner.stop(restore_icon, restore_text)
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise:\n{err_msg}")
 
         worker.finished_signal.connect(_on_finished)
         worker.error_signal.connect(_on_error)
