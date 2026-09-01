@@ -71,7 +71,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.4.4"
+APP_VERSION = "3.4.5"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -100,6 +100,11 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.4.5": [
+        "Paleta expandida com 10 cores distintas e de alto contraste para chilreios de 2 a 10 pulsos (+ cor extra).",
+        "Correção do estado visual do botão de edição manual, desativando o destaque azul ao acionar reanálise.",
+        "Sincronização de áudio e aceleração a 1.2x na reprodução das animações de inicialização do launcher."
+    ],
     "3.4.4": [
         "Abertura instantânea do Launcher com reprodução contínua de loading.mp4 em segundo plano.",
         "Transição sincronizada para loaded.mp4 assim que os módulos são carregados.",
@@ -4106,21 +4111,20 @@ class MainWindow(QMainWindow):
 
         paleta_cores = ['#03A9F4', '#4CAF50', '#FF5252', '#E040FB', '#FFAB40', '#00E676', '#FF4081', '#FFEA00']
         # Visual solicitado: verde/orange/magenta como categorias dominantes.
-        # Paleta canônica por quantidade de pulsos. O mesmo mapa é usado no
-        # histograma e em TODOS os marcadores 'x' dos demais gráficos.
-        # Paleta canônica por quantidade de pulsos, disponível de 3 a 10.
+        # Paleta canônica por quantidade de pulsos (2 a 10 + 1 extra para escopos maiores).
         # A mesma cor é usada no histograma, nos X da onda, frequência e espectrograma.
         pulse_colors = {
-            2: '#3B82F6',  # azul
-            3: '#8C4CC5',  # roxo
-            4: '#F0A84B',  # laranja
-            5: '#10C978',  # verde
-            6: '#D74486',  # magenta
-            7: '#3F94D5',  # azul claro
-            8: '#00A6A6',  # teal
-            9: '#E06C9F',  # rosa
-            10: '#C9A227', # dourado
+            2: '#2563EB',   # Azul Royal
+            3: '#8B5CF6',   # Roxo / Violeta
+            4: '#F97316',   # Laranja
+            5: '#10B981',   # Verde Esmeralda
+            6: '#EC4899',   # Rosa Magenta
+            7: '#06B6D4',   # Ciano Turquesa
+            8: '#EAB308',   # Amarelo Dourado
+            9: '#6366F1',   # Índigo
+            10: '#14B8A6',  # Teal Menta
         }
+        extra_pulse_color = '#F43F5E'  # Vermelho Rubi (cor extra para > 10 pulsos ou outros escopos)
         marker_colors = pulse_colors
 
         picos_por_contagem = {}
@@ -4138,7 +4142,7 @@ class MainWindow(QMainWindow):
         ax1.plot(time_sec[::decimation], env[::decimation], color='#6E747C', alpha=0.55, linewidth=0.8, zorder=2)
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
-            ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.7, zorder=3)
+            ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=3)
 
         self._refresh_user_peak_markers()
         ax1.set_xlabel("seconds")
@@ -4149,16 +4153,10 @@ class MainWindow(QMainWindow):
         ax2 = self.panel_hist.ax
         ax2.clear()
         unique_pulses, counts = np.unique(chirps, return_counts=True)
-        hist_palette = {
-            3: '#8C4CC5',
-            4: '#F0A84B',
-            5: '#10C978',
-            6: '#D74486',
-            7: '#3F94D5',
-        }
+        hist_palette = pulse_colors
         bars = ax2.bar(
             unique_pulses, counts,
-            color=[hist_palette.get(int(x), '#5F9ED1') for x in unique_pulses],
+            color=[hist_palette.get(int(x), extra_pulse_color) for x in unique_pulses],
             edgecolor='none', linewidth=0, width=0.68, zorder=3
         )
         ax2.grid(axis='y', color='#292D32' if self.theme_mode == 'dark' else '#DDE2E7', linewidth=0.6, alpha=0.8, zorder=0)
@@ -4173,7 +4171,7 @@ class MainWindow(QMainWindow):
         ax2.tick_params(axis='y', labelsize=8, colors='#A9ADB5' if self.theme_mode == 'dark' else '#59616B')
         ax2.set_ylim(0, max_count * 1.20)
         ax2.figure.subplots_adjust(left=0.08, right=0.98, top=0.92, bottom=0.30)
-        legend_handles = [Patch(facecolor=hist_palette.get(int(x), '#5F9ED1'), edgecolor='none', label=f'{int(x)} pulsos')
+        legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
                           for x in unique_pulses]
         if legend_handles:
             leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.16),
@@ -4910,6 +4908,8 @@ class MainWindow(QMainWindow):
                 if hasattr(panel, 'btn_pulse_edit'):
                     panel.btn_pulse_edit.blockSignals(True)
                     panel.btn_pulse_edit.setChecked(False)
+                    panel.btn_pulse_edit.setStyleSheet("")
+                    panel.btn_pulse_edit.setToolTip("Ativar modo de edição de pulsos (clique para adicionar/remover)")
                     panel.btn_pulse_edit.blockSignals(False)
 
     def on_release(self, event):

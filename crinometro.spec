@@ -7,6 +7,9 @@ a = Analysis(
     pathex=['M:\\Documentos\\Faculdade\\Biologia'],
     binaries=[],
     datas=[
+        ('launcher_assets', 'launcher_assets'),
+        ('loaded_fast.wav', '.'),
+        ('loaded.wav', '.'),
         ('loading.mp4', '.'),
         ('loaded.mp4', '.'),
         ('grilinho.ico', '.'),
@@ -54,7 +57,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Crinômetro_v3.4.4',
+    name='Crinômetro_v3.4.5',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
