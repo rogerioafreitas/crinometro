@@ -26,13 +26,13 @@ Você pode baixar os executáveis prontos para uso diretamente no Google Drive o
 
 ---
 
-## 📌 Regra de Versionamento (`vX.Y.x`)
+## 📌 Regra de Versionamento (`vX.Y.Z`)
 
 O projeto adota o padrão semântico de versionamento estructurado em três níveis:
 
 - **Major ($X$):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito.
 - **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica**. Obrigatoriamente incrementa $Y$ (ex: `v3.4.5` $\rightarrow$ `v3.5.0`).
-- **Patch / Correções ($x$ ou $Z$):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**.
+- **Patch / Correções ($Z$):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**.
 
 ---
 
