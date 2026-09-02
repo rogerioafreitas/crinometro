@@ -108,6 +108,15 @@ python crinometro__laucher.py
 
 ---
 
+## 📬 Feedbacks, Dúvidas e Sugestões
+
+Para enviar dúvidas, relatar problemas ou sugerir novas melhorias para o aplicativo, entre em contato diretamente pelo e-mail:
+
+📧 **rogerio.rdaf@gmail.com**  
+*(Por favor, envie sua mensagem com o assunto **"Crinômetro"**).*
+
+---
+
 ## 👤 Autor
 - **rogerioafreitas**
 
