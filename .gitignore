@@ -26,6 +26,14 @@ audios/
 *.pkl
 *.tmp
 
-# Antigo Launcher
+# Antigo Launcher e Mídias Legadas
+crinometro_laucher.py
 crinometro_laucher_old.py
+launcher_assets/
+*.mp4
+*.wav
+*.spec
+*.bat
+app bash.txt
+app_grilos.py
 
