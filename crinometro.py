@@ -71,7 +71,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.5.1"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
@@ -100,6 +100,12 @@ def is_version_newer(file_ver_str, app_ver_str):
 # HISTÓRICO DE VERSÕES / NOTAS DE ATUALIZAÇÃO
 # ==========================================
 CHANGELOG = {
+    "3.5.1": [
+        "Aprimoramento abrangente da árvore de aprendizado com conjunto de 14 descritores físicos invariantes a ganho.",
+        "Mineração automática de amostras de ruído de fundo (negative background mining) e regularização do ensemble para eliminar desbalanceamentos.",
+        "Filtro probabilístico e contextual de pulsos (Chirp-Aware Contextual Gating), garantindo que pulsos rítmicos nunca fragmentem chilreios.",
+        "Normalização robusta de sinal em banda no pipeline DSP, imune a ruídos e impactos de baixa frequência (<100 Hz)."
+    ],
     "3.5.0": [
         "Novo launcher temático e vetorial com animação interativa do mascote e frases dinâmicas.",
         "Sincronização refinada de abertura com transição suave para a tela principal após o carregamento.",
@@ -1164,123 +1170,126 @@ class CricketAnalyzer:
     @staticmethod
     def analyze(file_path, params, pulse_learner=None):
         rate, data = wavfile.read(file_path)
-        if len(data.shape) > 1: data = data[:, 0]
+        if len(data.shape) > 1:
+            data = data[:, 0]
 
         data = data.astype(np.float64)
-        max_val = np.max(np.abs(data))
-        if max_val == 0: raise ValueError("O arquivo de áudio está mudo.")
-        data = data / max_val
+        if len(data) == 0:
+            raise ValueError("O arquivo de áudio está vazio.")
+
+        # Remove offset DC
+        data = data - np.mean(data)
+        max_abs = np.max(np.abs(data))
+        if max_abs == 0:
+            raise ValueError("O arquivo de áudio está mudo.")
 
         audio_duration_sec = len(data) / rate
 
+        # Filtragem passa-faixa Butterworth IIR em unidades físicas (isolamento da banda estridulatória)
         nyq = 0.5 * rate
-        sos_b1 = butter(4, [params["b1_min"]/nyq, params["b1_max"]/nyq], btype='band', output='sos')
+        b1_min = max(20.0, float(params.get("b1_min", 3200)))
+        b1_max = min(nyq - 20.0, float(params.get("b1_max", 6000)))
+        sos_b1 = butter(4, [b1_min / nyq, b1_max / nyq], btype='band', output='sos')
         data_b1 = sosfiltfilt(sos_b1, data)
         env1 = np.abs(hilbert(data_b1))
 
+        # Normalização robusta baseada na energia da banda estridulatória (imune a estalos e ruído grave)
+        scale_p99 = float(np.percentile(env1, 99.85)) if len(env1) > 1000 else float(np.max(env1))
+        if scale_p99 <= 0 or not np.isfinite(scale_p99):
+            scale_p99 = float(np.max(env1))
+        if scale_p99 <= 0 or not np.isfinite(scale_p99):
+            scale_p99 = 1.0
+
+        env1 = env1 / scale_p99
+        data_b1 = data_b1 / scale_p99
+
+        # Sinal original normalizado de forma segura para exibição visual
+        raw_scale = float(np.percentile(np.abs(data), 99.9)) if len(data) > 1000 else float(max_abs)
+        raw_scale = max(raw_scale, 1e-9)
+        data = np.clip(data / raw_scale, -1.0, 1.0)
+
+        # Suavização por janela de Hanning/retangular conforme configurado
         smooth_window = max(9, int(rate * params.get("smooth_window_ms", 15.0) / 1000.0))
         if smooth_window % 2 == 0:
             smooth_window += 1
         kernel = np.ones(smooth_window) / smooth_window
         env1_smooth = np.convolve(env1, kernel, mode='same')
 
+        # Espectrograma para verificação espectral
         f_spec, t_spec, Sxx = spectrogram(data_b1, rate, nperseg=1024, noverlap=768)
-        Sxx_db = 10 * np.log10(Sxx + 1e-10) 
-        
-        freq_mask = (f_spec >= params["b1_min"]) & (f_spec <= params["b1_max"])
+        Sxx_db = 10 * np.log10(Sxx + 1e-10)
+
+        freq_mask = (f_spec >= b1_min) & (f_spec <= b1_max)
         Sxx_band = Sxx[freq_mask, :]
         band_ratio = np.sum(Sxx_band, axis=0) / (np.sum(Sxx, axis=0) + 1e-10)
-        
+
         dom_freq_idx = np.argmax(Sxx, axis=0)
         dom_freqs = f_spec[dom_freq_idx]
-        dist_samples = max(1, int(rate * (params["gap_min"] / 1000.0)))
-        
-        noise_floor = float(params.get("noise_floor", 0.90))
-        search_thresh = max(params["amp_min"] * noise_floor, float(np.percentile(env1_smooth, 25)))
-        prominence_val = float(params.get("prominence", search_thresh * 0.01))
+        dist_samples = max(1, int(rate * (params.get("gap_min", 25.0) / 1000.0 * 0.75)))
+
+        # Limiar adaptativo robusto
+        noise_floor_param = float(params.get("noise_floor", 0.90))
+        noise_est = float(np.percentile(env1_smooth, 25))
+        search_thresh = max(params["amp_min"] * noise_floor_param, noise_est * 1.8)
+        p98 = float(np.percentile(env1_smooth, 98)) if len(env1_smooth) > 100 else 1.0
+        search_thresh = min(search_thresh, p98 * 0.55)
+        search_thresh = max(0.005, search_thresh)
+
+        prominence_val = max(0.002, float(params.get("prominence", search_thresh * 0.15)))
         width_min = max(0.0, float(params.get("width_min_ms", 0.0)) * rate / 1000.0)
         width_max_ms = float(params.get("width_max_ms", 0.0))
         width_max = None if width_max_ms <= 0 else width_max_ms * rate / 1000.0
-             
-        raw_peaks, _ = find_peaks(env1_smooth, height=(search_thresh, params["amp_max"]), 
-                               distance=dist_samples, prominence=prominence_val,
-                               width=(width_min, width_max))
 
+        raw_peaks, _ = find_peaks(env1_smooth, height=(search_thresh, params.get("amp_max", 2.0)),
+                                  distance=dist_samples, prominence=prominence_val,
+                                  width=(width_min, width_max))
+
+        # Estágio 1: Coerência espectral na banda
         valid_peaks_stage1 = []
         if len(raw_peaks) > 0:
             for p in raw_peaks:
                 p_time = p / rate
                 spec_col_idx = np.argmin(np.abs(t_spec - p_time))
                 br = band_ratio[spec_col_idx]
-                if br > 0.35:
+                if br > 0.25:
                     valid_peaks_stage1.append(p)
-                
+
         peaks_filtered = np.array(valid_peaks_stage1)
         valid_peaks_stage2 = []
         if len(peaks_filtered) > 0:
             widths_samples, _, _, _ = peak_widths(env1_smooth, peaks_filtered, rel_height=0.7)
             pulse_durations_s = widths_samples / rate
             peak_dur_dict = dict(zip(peaks_filtered, pulse_durations_s))
-            
-            dur_tol = 0.5
+
+            dur_tol = 0.65
+            dur_min_lim = (params["dur_min"] / 1000.0) * (1 - dur_tol)
+            dur_max_lim = (params["dur_max"] / 1000.0) * (1 + dur_tol)
             for p in peaks_filtered:
                 dur = peak_dur_dict[p]
-                if (params["dur_min"]/1000.0)*(1-dur_tol) <= dur <= (params["dur_max"]/1000.0)*(1+dur_tol):
+                if dur_min_lim <= dur <= dur_max_lim:
                     valid_peaks_stage2.append(p)
-                
+
         candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
+
+        # Classificação contextual pelo motor de Machine Learning
         if pulse_learner is not None and pulse_learner.is_trained() and len(candidate_peaks) > 0:
-            candidate_peaks = pulse_learner.filter_peaks(candidate_peaks, rate, env1_smooth)
+            gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.70
+            gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.30
+            candidate_peaks = pulse_learner.filter_peaks(candidate_peaks, rate, env1_smooth,
+                                                         gap_min_s=gap_min_s, gap_max_s=gap_max_s)
 
-        peaks = np.asarray(candidate_peaks, dtype=int)
-        pulse_times_s = peaks / rate if len(peaks) > 0 else np.array([])
-        chirp_peaks_list = []
-        if len(pulse_times_s) > 0:
-            current_chirp = [peaks[0]]
-            for i in range(1, len(pulse_times_s)):
-                gap_s = pulse_times_s[i] - pulse_times_s[i - 1]
-                expected_gap_min = params["gap_min"] / 1000.0
-                expected_gap_max = params["gap_max"] / 1000.0
-                
-                if expected_gap_min <= gap_s <= expected_gap_max:
-                    current_chirp.append(peaks[i])
-                else:
-                    if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
-                    current_chirp = [peaks[i]]
-
-            if len(current_chirp) >= 2: chirp_peaks_list.append(current_chirp)
-
-        refined_chirps = []
-        min_pulses = params.get("min_p", 2)
-        max_pulses = params.get("max_p", 10)
-        for chirp in chirp_peaks_list:
-            if len(chirp) <= 1: continue
-            
-            amps = env1_smooth[chirp]
-            ref_amp = np.median(amps)
-            valid_in_chirp = []
-            allowed_var = params.get("amp_var", 0.40) * 1.2
-            
-            for i in range(len(chirp)):
-                amp_deviation = abs(amps[i] - ref_amp) / (ref_amp + 1e-6)
-                if amp_deviation <= allowed_var:
-                    valid_in_chirp.append(chirp[i])
-            
-            if min_pulses <= len(valid_in_chirp) <= max_pulses:
-                refined_chirps.append(valid_in_chirp)
-                
-        chirp_peaks_list = refined_chirps
-        chirps = [len(cp) for cp in chirp_peaks_list]
-        media = statistics.mean(chirps) if len(chirps) > 0 else 0.0
-        moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0
+        # Agrupamento determinístico de chilreios
+        peaks = np.asarray(sorted(candidate_peaks), dtype=int)
+        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+            peaks, params, rate, env1_smooth
+        )
 
         return rate, data, data_b1, env1_smooth, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec
 
     @staticmethod
     def regroup_chirps(peaks, params, rate, env):
-        """Reagrupa um conjunto de picos (possivelmente corrigido pelo usuário)
-        em chilreios usando os mesmos critérios de gap, amplitude e contagem de
-        pulsos que o algoritmo principal usa em analyze().
+        """Reagrupa um conjunto de picos (detectados ou editados pelo usuário)
+        em chilreios com tolerância rítmica e preservação fisiológica.
 
         Retorna (chirps, chirp_peaks_list, media, moda).
         """
@@ -1288,8 +1297,10 @@ class CricketAnalyzer:
             return [], [], 0.0, 0
         peaks = np.asarray(sorted(peaks), dtype=int)
         pulse_times_s = peaks / float(rate)
-        gap_min_s = params.get("gap_min", 25.0) / 1000.0
-        gap_max_s = params.get("gap_max", 35.0) / 1000.0
+        # Tolerância fisiológica no intervalo inter-pulso (gap)
+        gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.70
+        gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.30
+
         chirp_peaks_list = []
         current_chirp = [peaks[0]]
         for i in range(1, len(pulse_times_s)):
@@ -1302,30 +1313,30 @@ class CricketAnalyzer:
                 current_chirp = [peaks[i]]
         if len(current_chirp) >= 2:
             chirp_peaks_list.append(current_chirp)
-        # Filtra por variação de amplitude e contagem de pulsos
+
+        # Refinamento por consistência e contagem mínima de pulsos
         refined_chirps = []
-        amp_var = params.get("amp_var", 0.40) * 1.2
-        min_p = params.get("min_p", 2)
-        max_p = params.get("max_p", 10)
+        min_p = int(params.get("min_p", 2))
+
         for chirp in chirp_peaks_list:
-            if len(chirp) <= 1:
+            if len(chirp) < min_p:
                 continue
-            # Protege índices fora dos bounds do envelope
             valid_idx = [p for p in chirp if 0 <= p < len(env)]
-            if not valid_idx:
+            if len(valid_idx) < min_p:
                 continue
+
             amps = env[valid_idx]
             ref_amp = float(np.median(amps))
+            # Remove apenas anomalias extremas (ruídos espúrios que não acompanham a estridulação)
             valid_in_chirp = [
-                chirp[i] for i in range(len(chirp))
-                if 0 <= chirp[i] < len(env)
-                and abs(env[chirp[i]] - ref_amp) / (ref_amp + 1e-6) <= amp_var
+                p for p in valid_idx
+                if 0.15 * ref_amp <= env[p] <= 3.5 * ref_amp
             ]
-            if min_p <= len(valid_in_chirp) <= max_p:
+            if len(valid_in_chirp) >= min_p:
                 refined_chirps.append(valid_in_chirp)
-        
+
         chirps = [len(cp) for cp in refined_chirps]
-        media = statistics.mean(chirps) if len(chirps) > 0 else 0.0
+        media = float(statistics.mean(chirps)) if len(chirps) > 0 else 0.0
         moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0
         return chirps, refined_chirps, media, moda
 
@@ -1344,18 +1355,20 @@ class PulseLearner:
         self.persistence_path = os.path.join(config_dir, "modelo_treinado.pkl")
         self.model = None
         self.feature_names = [
-            "peak_amp",
-            "peak_width_s",
-            "local_snr_db",
-            "energy",
-            "median_amp",
-            "std_amp",
-            "prominence_ratio",
-            "peak_sharpness",
-            "crest_factor",
-            "skewness_local",
-            "norm_height",
-            "local_density",
+            "peak_amp_rel",        # 1. Amplitude do pico relativa à mediana local
+            "peak_width_s",        # 2. Largura temporal a 50% (FWHM)
+            "peak_width_75_s",     # 3. Largura temporal a 75%
+            "local_snr_db",        # 4. SNR local em dB
+            "energy_rel",          # 5. Energia local normalizada por pico²
+            "std_amp_rel",         # 6. Desvio padrão local relativo
+            "prominence_ratio",    # 7. Razão de proeminência sobre vales circundantes
+            "peak_sharpness_rel",  # 8. Curvatura no ápice normalizada
+            "crest_factor",        # 9. Fator de crista (Peak / RMS local)
+            "skewness_local",      # 10. Assimetria do flanco de subida vs decaimento
+            "local_density_rel",   # 11. Densidade de energia em 10 ms
+            "autocorr_1ms",        # 12. Autocorrelação do envelope em lag de ~1 ms
+            "band_energy_ratio",   # 13. Proporção de energia na janela curta vs longa
+            "rise_slope_rel",      # 14. Inclinação de subida normalizada
         ]
         self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
         self.training_labels = np.empty((0,), dtype=int)
@@ -1369,11 +1382,12 @@ class PulseLearner:
         if RandomForestClassifier is None:
             raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
         return RandomForestClassifier(
-            n_estimators=500,
-            max_depth=14,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            class_weight="balanced_subsample",
+            n_estimators=300,
+            max_depth=8,              # Limita a profundidade para evitar memorização espúria
+            min_samples_split=8,      # Mínimo para divisão de nó interno
+            min_samples_leaf=4,       # Mínimo de amostras em nó folha
+            max_features="sqrt",
+            class_weight="balanced",  # Ponderação controlada
             random_state=42,
             n_jobs=-1,
         )
@@ -1381,11 +1395,12 @@ class PulseLearner:
     @staticmethod
     def extract_features_for_peak(peak_idx, rate, env_signal):
         peak_idx = int(np.asarray(peak_idx).item())
-        n_features = 12
+        n_features = 14
         if peak_idx < 0 or peak_idx >= len(env_signal):
             return np.zeros(n_features, dtype=float)
 
-        half_window = max(4, int(rate * 0.03))  # janela local de 30 ms
+        rate = float(rate)
+        half_window = max(4, int(rate * 0.030))  # Janela local de 30 ms
         start = max(0, peak_idx - half_window)
         end = min(len(env_signal), peak_idx + half_window + 1)
         segment = env_signal[start:end]
@@ -1393,63 +1408,93 @@ class PulseLearner:
         if segment.size == 0:
             return np.zeros(n_features, dtype=float)
 
-        peak_amp = float(env_signal[peak_idx])
+        peak_amp = max(1e-9, float(env_signal[peak_idx]))
         median_amp = float(np.median(segment))
         std_amp = float(np.std(segment))
-        energy = float(np.sum(segment ** 2))
+        local_rms = float(np.sqrt(np.mean(segment ** 2))) if segment.size else 1e-6
+
+        # 1. Amplitude relativa à mediana local
+        peak_amp_rel = float(peak_amp / (median_amp + 1e-6))
+
+        # 2. Largura temporal a 50%
+        w50, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.5)
+        peak_width_s = float(w50[0] / rate) if w50.size else 0.0
+
+        # 3. Largura temporal a 75%
+        w75, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.75)
+        peak_width_75_s = float(w75[0] / rate) if w75.size else 0.0
+
+        # 4. SNR local em dB
         local_noise = max(std_amp, 1e-6)
+        local_snr_db = float(20.0 * np.log10((peak_amp + 1e-6) / (local_noise + 1e-6)))
 
-        if local_noise > 0:
-            snr_db = 20.0 * np.log10((peak_amp + 1e-6) / (local_noise + 1e-6))
-        else:
-            snr_db = 0.0
+        # 5. Energia local normalizada (independente de ganho global)
+        energy_rel = float(np.sum(segment ** 2) / (segment.size * (peak_amp ** 2) + 1e-9))
 
-        prominence_ratio = peak_amp / (median_amp + 1e-6)
+        # 6. Desvio padrão relativo
+        std_amp_rel = float(std_amp / (peak_amp + 1e-6))
 
-        widths, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.5)
-        width_s = float(widths[0] / rate) if widths.size else 0.0
+        # 7. Razão de proeminência sobre vales circundantes
+        left_valley = float(np.min(env_signal[start:peak_idx])) if peak_idx > start else peak_amp
+        right_valley = float(np.min(env_signal[peak_idx + 1:end])) if end > peak_idx + 1 else peak_amp
+        base_valley = max(left_valley, right_valley)
+        prominence_ratio = float((peak_amp - base_valley) / (peak_amp + 1e-6))
 
-        # 8. Curvatura / Nitidez no vértice do pico (segunda derivada discreta)
+        # 8. Curvatura no ápice normalizada (2ª derivada)
         left_val = float(env_signal[peak_idx - 1]) if peak_idx > 0 else peak_amp
         right_val = float(env_signal[peak_idx + 1]) if peak_idx < len(env_signal) - 1 else peak_amp
-        peak_sharpness = float(2.0 * peak_amp - left_val - right_val)
+        peak_sharpness_rel = float((2.0 * peak_amp - left_val - right_val) / (peak_amp + 1e-6))
 
-        # 9. Fator de crista (Peak / RMS local)
-        local_rms = float(np.sqrt(np.mean(segment ** 2))) if segment.size else 1e-6
+        # 9. Fator de crista
         crest_factor = float(peak_amp / (local_rms + 1e-6))
 
-        # 10. Assimetria local (diferença normalizada de flanco de subida vs decaimento)
+        # 10. Assimetria local
         left_subseg = env_signal[start:peak_idx]
         right_subseg = env_signal[peak_idx + 1:end]
         mean_left = float(np.mean(left_subseg)) if left_subseg.size else peak_amp
         mean_right = float(np.mean(right_subseg)) if right_subseg.size else peak_amp
         skewness_local = float((mean_left - mean_right) / (peak_amp + 1e-6))
 
-        # 11. Altura normalizada em relação ao máximo global
-        max_global = float(np.max(env_signal)) if env_signal.size else 1.0
-        norm_height = float(peak_amp / (max_global + 1e-6))
-
-        # 12. Densidade de energia na vizinhança curta (10 ms)
-        short_half = max(2, int(rate * 0.01))
+        # 11. Densidade de energia na vizinhança curta (10 ms)
+        short_half = max(2, int(rate * 0.010))
         short_start = max(0, peak_idx - short_half)
         short_end = min(len(env_signal), peak_idx + short_half + 1)
         short_seg = env_signal[short_start:short_end]
-        local_density = float(np.sum(short_seg ** 2) / max(1, short_seg.size))
+        local_density_rel = float(np.mean(short_seg) / (peak_amp + 1e-6))
 
-        return np.asarray([
-            peak_amp,
-            width_s,
-            snr_db,
-            energy,
-            median_amp,
-            std_amp,
+        # 12. Autocorrelação do envelope em lag de ~1 ms
+        lag_1ms = max(1, int(rate * 0.001))
+        if len(segment) > lag_1ms + 2:
+            seg_norm = segment - np.mean(segment)
+            denom = np.sum(seg_norm ** 2)
+            autocorr_1ms = float(np.sum(seg_norm[:-lag_1ms] * seg_norm[lag_1ms:]) / denom) if denom > 1e-9 else 0.0
+        else:
+            autocorr_1ms = 0.0
+
+        # 13. Razão de energia na janela curta vs janela longa
+        band_energy_ratio = float((np.sum(short_seg ** 2) + 1e-9) / (np.sum(segment ** 2) + 1e-9))
+
+        # 14. Inclinação de subida normalizada
+        dt_rise = max(1, peak_idx - start)
+        rise_slope_rel = float((peak_amp - left_valley) / (dt_rise / rate * peak_amp + 1e-6))
+
+        feat = np.asarray([
+            peak_amp_rel,
+            peak_width_s,
+            peak_width_75_s,
+            local_snr_db,
+            energy_rel,
+            std_amp_rel,
             prominence_ratio,
-            peak_sharpness,
+            peak_sharpness_rel,
             crest_factor,
             skewness_local,
-            norm_height,
-            local_density,
+            local_density_rel,
+            autocorr_1ms,
+            band_energy_ratio,
+            rise_slope_rel,
         ], dtype=float)
+        return np.nan_to_num(feat, nan=0.0, posinf=100.0, neginf=-100.0)
 
     @staticmethod
     def build_training_matrix(peaks_detected, peaks_user_verified, rate, env_signal,
@@ -1462,11 +1507,63 @@ class PulseLearner:
 
         X_rows = []
         y_rows = []
-        for peak_idx in sorted(detected | verified):
-            feature_row = PulseLearner.extract_features_for_peak(peak_idx, rate, env_signal)
-            label = 1 if peak_idx in verified else 0
-            X_rows.append(feature_row)
-            y_rows.append(label)
+
+        # 1. Picos verificados (Positivos - estridulações reais)
+        for peak_idx in sorted(verified):
+            if 0 <= peak_idx < len(env_signal):
+                X_rows.append(PulseLearner.extract_features_for_peak(peak_idx, rate, env_signal))
+                y_rows.append(1)
+
+        # 2. Falsos positivos removidos pelo usuário (Negativos explícitos)
+        explicit_negatives = detected - verified
+        for peak_idx in sorted(explicit_negatives):
+            if 0 <= peak_idx < len(env_signal):
+                X_rows.append(PulseLearner.extract_features_for_peak(peak_idx, rate, env_signal))
+                y_rows.append(0)
+
+        # 3. Mineração Automática de Ruído de Fundo (Negative Mining)
+        # Garante que a base aprenda a morfologia do ruído/silêncio e nunca sofra com desbalanceamento extremo
+        num_pos = len(y_rows)
+        num_neg = len(explicit_negatives)
+        target_min_neg = max(10, int(num_pos * 0.30))
+
+        if num_neg < target_min_neg and len(env_signal) > 1000:
+            needed_neg = target_min_neg - num_neg
+            exclusion_samples = int(rate * 0.100)  # 100 ms de distância de qualquer estridulação
+            sorted_v = sorted(verified)
+            candidate_silence = []
+
+            # Coleta os pontos de maior flutuação no silêncio inter-chilreio
+            for i in range(len(sorted_v) - 1):
+                p_cur = sorted_v[i]
+                p_next = sorted_v[i + 1]
+                if (p_next - p_cur) > 2 * exclusion_samples:
+                    mid_s = p_cur + exclusion_samples
+                    mid_e = p_next - exclusion_samples
+                    chunk = env_signal[mid_s:mid_e]
+                    if chunk.size > 0:
+                        candidate_silence.append(mid_s + int(np.argmax(chunk)))
+
+            if sorted_v and sorted_v[0] > 2 * exclusion_samples:
+                lead_chunk = env_signal[exclusion_samples : sorted_v[0] - exclusion_samples]
+                if lead_chunk.size > 0:
+                    candidate_silence.append(exclusion_samples + int(np.argmax(lead_chunk)))
+
+            if sorted_v and (len(env_signal) - sorted_v[-1]) > 2 * exclusion_samples:
+                trail_chunk = env_signal[sorted_v[-1] + exclusion_samples : len(env_signal) - exclusion_samples]
+                if trail_chunk.size > 0:
+                    candidate_silence.append(sorted_v[-1] + exclusion_samples + int(np.argmax(trail_chunk)))
+
+            if len(candidate_silence) > needed_neg:
+                rng = np.random.RandomState(42)
+                selected_silence = rng.choice(candidate_silence, size=needed_neg, replace=False)
+            else:
+                selected_silence = candidate_silence
+
+            for neg_idx in selected_silence:
+                if 0 <= neg_idx < len(env_signal):
+                    X_rows.append(PulseLearner.extract_features_for_peak(neg_idx, rate, env_signal))
+                    y_rows.append(0)
 
         X = np.asarray(X_rows, dtype=float)
         y = np.asarray(y_rows, dtype=int)
@@ -1494,7 +1591,6 @@ class PulseLearner:
             require_both_classes=False,
         )
         if self.training_features.size:
-            # Compatibilidade caso o conjunto anterior tivesse dimensão diferente
             if self.training_features.shape[1] != X_new.shape[1]:
                 self.training_features = np.empty((0, X_new.shape[1]), dtype=float)
                 self.training_labels = np.empty((0,), dtype=int)
@@ -1505,14 +1601,16 @@ class PulseLearner:
         samples = np.unique(np.column_stack((X, y)), axis=0)
         self.training_features = samples[:, :-1]
         self.training_labels = samples[:, -1].astype(int)
-        # Limita o conjunto de treino a 5000 amostras
+
         _MAX_SAMPLES = 5000
         if len(self.training_features) > _MAX_SAMPLES:
             self.training_features = self.training_features[-_MAX_SAMPLES:]
             self.training_labels = self.training_labels[-_MAX_SAMPLES:]
+
         if np.unique(self.training_labels).size < 2:
             self.save_persisted_training()
             return False
+
         self.model = self._build_model()
         self.model.fit(self.training_features, self.training_labels)
         self.save_persisted_training()
@@ -1527,7 +1625,6 @@ class PulseLearner:
         if X.ndim == 1:
             X = X.reshape(1, -1)
 
-        # Compatibilidade retroativa inteligente para modelos treinados com 7 ou 12 descritores
         n_expected = getattr(self.model, "n_features_in_", None)
         if n_expected is not None and n_expected > 0:
             if X.shape[1] > n_expected:
@@ -1543,20 +1640,79 @@ class PulseLearner:
         try:
             return self.model.predict(X_used).astype(int)
         except Exception as exc:
-            # Fallback tolerante para evitar interrupção da análise em caso de anomalia
             print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
             return np.ones(X.shape[0], dtype=int)
 
-    def filter_peaks(self, peaks, rate, env_signal):
-        peaks = np.asarray(peaks, dtype=int)
+    def filter_peaks(self, peaks, rate, env_signal, gap_min_s=0.020, gap_max_s=0.040):
+        """Filtro inteligente e contextual de pulsos (Chirp-Aware Contextual Gating).
+
+        Evita a quebra indevida de chilreios: pulsos de alta confiança são aceitos diretamente;
+        pulsos com probabilidade intermediária são validados pela coerência temporal com
+        o ritmo estridulatório esperado, nunca fragmentando chilreios legítimos.
+        """
+        peaks = np.asarray(sorted(peaks), dtype=int)
         if self.model is None or peaks.size == 0:
             return peaks
+
         features = np.asarray([
-            self.extract_features_for_peak(int(peak_idx), rate, env_signal)
-            for peak_idx in peaks
+            self.extract_features_for_peak(int(p), rate, env_signal)
+            for p in peaks
         ], dtype=float)
-        predictions = self.predict(features)
-        return peaks[predictions == 1]
+
+        n_expected = getattr(self.model, "n_features_in_", None)
+        if n_expected is not None and n_expected > 0:
+            if features.shape[1] > n_expected:
+                X_used = features[:, :n_expected]
+            elif features.shape[1] < n_expected:
+                pad = np.zeros((features.shape[0], n_expected - features.shape[1]), dtype=float)
+                X_used = np.hstack((features, pad))
+            else:
+                X_used = features
+        else:
+            X_used = features
+
+        try:
+            if hasattr(self.model, "predict_proba"):
+                probs = self.model.predict_proba(X_used)
+                classes = list(self.model.classes_)
+                class1_idx = classes.index(1) if 1 in classes else -1
+                pos_probs = probs[:, class1_idx] if class1_idx >= 0 else np.ones(len(peaks))
+            else:
+                pos_probs = self.model.predict(X_used).astype(float)
+        except Exception as exc:
+            print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
+            return peaks
+
+        pulse_times = peaks / float(rate)
+        n = len(peaks)
+        kept_mask = np.zeros(n, dtype=bool)
+
+        HIGH_CONF_THRESH = 0.58
+        LOW_CONF_THRESH = 0.32
+
+        # 1. Pulsos de alta confiança: aprovados diretamente
+        kept_mask[pos_probs >= HIGH_CONF_THRESH] = True
+
+        # 2. Pulsos na zona intermediária: mantidos se estiverem em cadência temporal
+        for i in range(n):
+            if not kept_mask[i] and pos_probs[i] >= LOW_CONF_THRESH:
+                t_cur = pulse_times[i]
+                has_prev_match = False
+                if i > 0:
+                    dt_prev = t_cur - pulse_times[i - 1]
+                    if gap_min_s <= dt_prev <= gap_max_s and kept_mask[i - 1]:
+                        has_prev_match = True
+
+                has_next_match = False
+                if i < n - 1:
+                    dt_next = pulse_times[i + 1] - t_cur
+                    if gap_min_s <= dt_next <= gap_max_s and pos_probs[i + 1] >= LOW_CONF_THRESH:
+                        has_next_match = True
+
+                if has_prev_match or has_next_match:
+                    kept_mask[i] = True
+
+        return peaks[kept_mask]
 
     def serialize(self):
         if self.model is None:
@@ -4668,36 +4824,33 @@ class MainWindow(QMainWindow):
             PulseLearner.extract_features_for_peak(p, rate, env)
             for p in self.peaks_user_verified
         ])
-        if features.size == 0:
+        if features.size == 0 or features.shape[1] < 14:
             return
+
         adaptation = float(self.algo_params.get("adaptation_rate", 0.10))
-        adaptation = min(1.0, max(0.0, adaptation))
-        target_prominence = float(np.percentile(features[:, 0], 25) * 0.01)
-        target_noise = float(np.median(features[:, 0]) / (np.max(features[:, 0]) + 1e-9))
-        target_width_ms = float(np.median(features[:, 1]) * 1000.0)
-        # Escrita em _adaptive_overrides, NUNCA em algo_params (evita contaminação)
+        adaptation = min(0.15, max(0.0, adaptation))
+
+        # Ajuste seguro e fisiológico de proeminência relativa
+        target_prom = float(np.percentile(features[:, 6], 20)) * 0.08
         current_prominence = float(self._adaptive_overrides.get(
-            "prominence", self.algo_params.get("prominence", target_prominence)
+            "prominence", self.algo_params.get("prominence", 0.01)
         ))
-        self._adaptive_overrides["prominence"] = (
-            (1.0 - adaptation) * current_prominence
-            + adaptation * max(0.0001, target_prominence)
-        )
+        new_prom = (1.0 - adaptation) * current_prominence + adaptation * target_prom
+        self._adaptive_overrides["prominence"] = float(np.clip(new_prom, 0.002, 0.08))
+
+        # Manutenção de noise_floor em faixa segura (0.85 a 1.05)
         current_noise = float(self._adaptive_overrides.get(
             "noise_floor", self.algo_params.get("noise_floor", 0.90)
         ))
-        self._adaptive_overrides["noise_floor"] = (
-            (1.0 - adaptation) * current_noise
-            + adaptation * min(1.5, max(0.1, target_noise))
-        )
+        self._adaptive_overrides["noise_floor"] = float(np.clip(current_noise, 0.85, 1.05))
+
+        target_width_ms = float(np.median(features[:, 1]) * 1000.0)
         if target_width_ms > 0:
             current_width = float(self._adaptive_overrides.get(
                 "width_min_ms", self.algo_params.get("width_min_ms", 0.0)
             ))
-            self._adaptive_overrides["width_min_ms"] = (
-                (1.0 - adaptation) * current_width
-                + adaptation * max(0.0, target_width_ms * 0.5)
-            )
+            new_width = (1.0 - adaptation) * current_width + adaptation * (target_width_ms * 0.40)
+            self._adaptive_overrides["width_min_ms"] = float(np.clip(new_width, 0.0, 25.0))
 
     def _undo_pulse_edit(self):
         if not self._pulse_edit_history:
