@@ -1,4 +1,4 @@
-# 🦗 Crinômetro v3.5.0
+# 🦗 Crinômetro v4.0.x
 
 > **Software Avançado para Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -7,7 +7,7 @@
 ## 🤖 Declaração de Assistência por Inteligência Artificial
 > [!NOTE]
 > **Aviso de Desenvolvimento com IA:**
-> Este projeto foi desenvolvido, refatorado e otimizado com o auxílio de **Inteligência Artificial (Google DeepMind / Antigravity / Gemini)** em colaboração com o autor, incluindo o design do fluxo do launcher, algoritmos de bioacústica, plasticidade ativa com Random Forest e empacotamento.
+> Este projeto foi desenvolvido, refatorado e otimizado com o auxílio de **Inteligência Artificial (Google DeepMind / Antigravity / Gemini)** em colaboração com o autor, incluindo o design do fluxo do launcher, algoritmos de bioacústica, plasticidade ativa com HistGradientBoosting / Random Forest e empacotamento.
 
 ---
 
@@ -30,7 +30,7 @@ Você pode baixar os executáveis prontos para uso diretamente no Google Drive o
 
 O projeto adota o padrão semântico de versionamento estructurado em três níveis:
 
-- **Major ($X$):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito.
+- **Major ($X$):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: `v4.0.x` introduzindo a segregação acústica focal vs. coro distante).
 - **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica**. Obrigatoriamente incrementa $Y$ (ex: `v3.4.5` $\rightarrow$ `v3.5.0`).
 - **Patch / Correções ($Z$):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**.
 
@@ -40,7 +40,7 @@ O projeto adota o padrão semântico de versionamento estructurado em três nív
 
 Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](docs/):
 
-1. 📄 **[Manual Técnico e Científico](docs/Crinometro_Manual_Tecnico_Cientifico.pdf):** Destinado a pesquisadores, biólogos e ecólogos. Detalha a formulação matemática de filtros Butterworth, demodulação de Hilbert, arquitetura do classificador Random Forest (500 árvores) e descritores físicos.
+1. 📄 **[Manual Técnico e Científico](docs/Crinometro_Manual_Tecnico_Cientifico.pdf):** Destinado a pesquisadores, biólogos e ecólogos. Detalha a formulação matemática de filtros Butterworth, demodulação de Hilbert, arquitetura do classificador supervisionado e segregação focal via GMM.
 2. 📘 **[Guia Prático e Descomplicado](docs/Crinometro_Guia_Pratico_Didatico.pdf):** Destinado a estudantes, leigos e entusiastas. Explicação didática passo a passo, guia visual das 10 cores e dicas práticas de gravação em campo.
 
 ---
@@ -54,10 +54,14 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - Envoltória analítica contínua via Transformada de Hilbert.
   - Filtro digital Butterworth passa-faixa IIR de fase zero (`sosfiltfilt`).
   - Detecção adaptativa de picos, pulsos e agrupamento em chilreios.
-- 🧠 **Machine Learning com Plasticidade Ativa (PulseLearner):**
-  - Classificador *Random Forest* (500 árvores) treinado sobre 12 descritores físicos.
-  - Aprendizado ativo contínuo: edições manuais na onda realimentam o modelo com o botão *"Aprender com as Correções"*.
-  - Persistência e interoperabilidade de modelos via arquivos `.pkl`.
+- 🧠 **Bioacústica Avançada & Segregação Focal vs. Coro Distante (PulseLearner):**
+  - **Segregação não-supervisionada via GMM Bimodal:** Estima o prior físico $P(\text{focal})$ combinando atenuação atmosférica espectral e amplitude relativa.
+  - **Classificador Supervisionado HistGradientBoosting (com fallback para Random Forest):** Treinado sobre 20 descritores físicos de morfologia, atenuação e propagação temporal.
+  - **Agrupamento com Coerência de Trilha (*Track Linking*) em tempo linear $O(N)$:** Expulga intrusos rítmicos sem fragmentar chilreios.
+  - **Botão de Alternância Rápida na Interface:** Permite ligar ou desligar instantaneamente a análise com IA (`🧠 IA: Ativada / Desativada`).
+  - **Feedback Visual Mudo:** Marcadores sutis em cinza na forma de onda e espectrograma identificando pulsos de fundo e ecos descartados.
+  - **Aprendizado ativo contínuo:** Edições manuais na onda realimentam o modelo com o botão *"Aprender com as Correções"*.
+  - Persistência e interoperabilidade de modelos via arquivos `.pkl` e JSON.
 - 📊 **Histograma de Distribuição:** Contagem, média, moda e legenda individual por classe de pulso.
 - 📈 **Frequência Dominante vs. Tempo:** Rastreamento espectral instante a instante com interpolação precisa.
 - 🌈 **Espectrograma STFT Multirresolução:** Mapa tempo-frequência (dB) com engine adaptativa LOD.
@@ -72,7 +76,7 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
 - **Linguagem:** Python 3.10+
 - **Interface Gráfica:** PyQt5 / QtMultimedia
 - **Processamento Numérico e Sinal:** NumPy, SciPy (Signal, Integrate, Special, IO)
-- **Machine Learning:** Scikit-Learn (RandomForestClassifier)
+- **Machine Learning:** Scikit-Learn (HistGradientBoostingClassifier, RandomForestClassifier, GaussianMixture)
 - **Visualização de Dados:** Matplotlib
 - **Geração de Documentos:** ReportLab, Pillow
 - **Empacotamento:** PyInstaller

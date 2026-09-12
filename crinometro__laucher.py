@@ -1,10 +1,12 @@
 import sys
 import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import math
 import random
-from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QThread, pyqtSignal
-from PyQt5.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath
-from PyQt5.QtWidgets import QWidget, QApplication, QMessageBox
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, QThread, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath
+from PyQt6.QtWidgets import QWidget, QApplication, QMessageBox
 
 class ZParticle:
     """Partícula do Zzz: surge perto da cabeça, sobe, cresce e desvanece."""
@@ -60,7 +62,7 @@ class CoreLoaderThread(QThread):
 
 
 class LauncherLoadingScreen(QWidget):
-    APP_VERSION = "v3.5.0"
+    APP_VERSION = "v4.0.0"
 
     MEME_PHRASES = [
         "Intankável o grilo às 3 da manhã mandando áudio sem fone...",
@@ -98,11 +100,11 @@ class LauncherLoadingScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.FramelessWindowHint |
-            Qt.WindowStaysOnTopHint |
-            Qt.Tool
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
         )
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         
         self.main_window = None
         self.core_ready = False
@@ -169,11 +171,11 @@ class LauncherLoadingScreen(QWidget):
         self.fps_timer.stop()
         self.phrase_timer.stop()
         msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Critical)
+        msg.setIcon(QMessageBox.Icon.Critical)
         msg.setWindowTitle("Erro de Inicialização - Crinômetro")
         msg.setText("Ocorreu um erro ao carregar o aplicativo:")
         msg.setDetailedText(err_trace)
-        msg.exec_()
+        msg.exec()
         self.close()
         QApplication.quit()
 
@@ -218,8 +220,8 @@ class LauncherLoadingScreen(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
         w, h = self.width(), self.height()
         center_x = w / 2.0
@@ -237,18 +239,18 @@ class LauncherLoadingScreen(QWidget):
 
         # Versão no canto inferior esquerdo
         painter.setPen(QColor(115, 105, 130, 160))
-        painter.setFont(QFont("Segoe UI", 8, QFont.DemiBold))
-        painter.drawText(QRectF(22, h - 28, 120, 18), Qt.AlignLeft | Qt.AlignVCenter, self.APP_VERSION)
+        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+        painter.drawText(QRectF(22, h - 28, 120, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.APP_VERSION)
 
         # Textos e spinner somem imediatamente na expansão
         if self.anim_state != "expanding":
             painter.setPen(QColor(253, 242, 248))
-            painter.setFont(QFont("Segoe UI", 21, QFont.Bold))
-            painter.drawText(QRectF(0, h * 0.58, w, 32), Qt.AlignCenter, "Crinômetro")
+            painter.setFont(QFont("Segoe UI", 21, QFont.Weight.Bold))
+            painter.drawText(QRectF(0, h * 0.58, w, 32), Qt.AlignmentFlag.AlignCenter, "Crinômetro")
 
             painter.setPen(QColor(244, 114, 182))
-            painter.setFont(QFont("Segoe UI", 8, QFont.DemiBold))
-            painter.drawText(QRectF(0, h * 0.65, w, 18), Qt.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+            painter.drawText(QRectF(0, h * 0.65, w, 18), Qt.AlignmentFlag.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
 
             spinner_size = 30
             spinner_rect = QRectF(w / 2.0 - (spinner_size / 2.0), h * 0.72, spinner_size, spinner_size)
@@ -256,13 +258,13 @@ class LauncherLoadingScreen(QWidget):
             painter.drawEllipse(spinner_rect)
 
             pen_spinner = QPen(QColor(244, 114, 182), 2.5)
-            pen_spinner.setCapStyle(Qt.RoundCap)
+            pen_spinner.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen_spinner)
             painter.drawArc(spinner_rect, int(-self.spinner_angle * 16), int(105 * 16))
 
             painter.setPen(QColor(233, 213, 255, 210))
             painter.setFont(QFont("Segoe UI", 9))
-            painter.drawText(QRectF(40, h * 0.83, w - 80, 26), Qt.AlignCenter, self.current_phrase)
+            painter.drawText(QRectF(40, h * 0.83, w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.current_phrase)
 
         # Renderização do Mascote
         painter.save()
@@ -287,7 +289,7 @@ class LauncherLoadingScreen(QWidget):
         painter.drawEllipse(QPointF(0, 0), 58, 58)
 
         # Corpo
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(74, 222, 128)))
         painter.drawEllipse(QPointF(0, 9), 28, 22)
 
@@ -302,9 +304,9 @@ class LauncherLoadingScreen(QWidget):
 
         # Antenas
         pen_ant = QPen(QColor(74, 222, 128), 2.2)
-        pen_ant.setCapStyle(Qt.RoundCap)
+        pen_ant.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen_ant)
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
 
         path_ant_l = QPainterPath()
         path_ant_l.moveTo(-5, -24)
@@ -316,23 +318,23 @@ class LauncherLoadingScreen(QWidget):
         path_ant_r.quadTo(15, -39, 22, -35)
         painter.drawPath(path_ant_r)
 
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(253, 224, 71)))
         painter.drawEllipse(QPointF(-22, -35), 3.0, 3.0)
         painter.drawEllipse(QPointF(22, -35), 3.0, 3.0)
 
         # Fones de Ouvido
         pen_phone = QPen(QColor(244, 114, 182), 4.0)
-        pen_phone.setCapStyle(Qt.RoundCap)
+        pen_phone.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen_phone)
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
 
         path_phone = QPainterPath()
         path_phone.moveTo(-25, -10)
         path_phone.cubicTo(-25, -38, 25, -38, 25, -10)
         painter.drawPath(path_phone)
 
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(251, 113, 133)))
         painter.drawRoundedRect(QRectF(-32, -18, 9, 18), 4, 4)
         painter.drawRoundedRect(QRectF(23, -18, 9, 18), 4, 4)
@@ -340,9 +342,9 @@ class LauncherLoadingScreen(QWidget):
         # Olhos
         if self.anim_state == "sleeping":
             pen_eye = QPen(QColor(20, 83, 45), 2.2)
-            pen_eye.setCapStyle(Qt.RoundCap)
+            pen_eye.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen_eye)
-            painter.setBrush(Qt.NoBrush)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
 
             eye_l = QPainterPath()
             eye_l.moveTo(-11, -10)
@@ -355,7 +357,7 @@ class LauncherLoadingScreen(QWidget):
             painter.drawPath(eye_r)
         else:
             eye_size = 4.5 + 3.8 * self.wake_progress
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(255, 255, 255)))
             painter.drawEllipse(QPointF(-7, -10), eye_size, eye_size)
             painter.drawEllipse(QPointF(7, -10), eye_size, eye_size)
@@ -372,7 +374,7 @@ class LauncherLoadingScreen(QWidget):
         if self.anim_state == "sleeping":
             for p in self.z_particles:
                 painter.setPen(QColor(253, 224, 71, int(255 * p.opacity)))
-                painter.setFont(QFont("Comic Sans MS", int(p.current_size), QFont.Bold))
+                painter.setFont(QFont("Comic Sans MS", int(p.current_size), QFont.Weight.Bold))
                 painter.drawText(QPointF(p.x, p.y), p.base_char)
 
         painter.restore()
@@ -394,7 +396,7 @@ def main():
     app.processEvents()
     splash.start_loader()
 
-    return app.exec_()
+    return app.exec()
 
 
 if __name__ == "__main__":
