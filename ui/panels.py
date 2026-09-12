@@ -83,6 +83,7 @@ class PlotPanel(QWidget):
         b.setToolTip(tooltip)
         b.setFixedSize(28, 26)
         b.setObjectName("plotTool")
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
         return b
 
     def _toggle_pulse_edit_mode(self, checked):
@@ -148,6 +149,7 @@ class TimelineWidget(QWidget):
         self.position = 0.0
         self.markers = []
         self.is_dragging = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(92)
         self.setMaximumHeight(104)
         self.setMouseTracking(True)

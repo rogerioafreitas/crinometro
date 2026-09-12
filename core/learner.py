@@ -63,6 +63,7 @@ class PulseLearner:
         ]
         self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
         self.training_labels = np.empty((0,), dtype=int)
+        self.pruning_rules = []
         self.load_from_config()
         self.load_persisted_training()
 
@@ -479,10 +480,128 @@ class PulseLearner:
             self.save_persisted_training()
             return False
 
+        # Indução de regras de poda contrastivas (Hard Negative Rule Induction)
+        explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
+        valid_pulses = sorted(set(peaks_user_verified))
+        if explicit_negatives and valid_pulses:
+            induced = self.induce_pruning_rules(
+                valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
+            )
+            if induced:
+                print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
+                for r in induced:
+                    print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
+
         self.model = self._build_model(n_samples=len(self.training_labels))
         self.model.fit(self.training_features, self.training_labels)
         self.save_persisted_training()
         return True
+
+    def induce_pruning_rules(self, valid_peaks, false_positive_peaks, rate, env_signal, raw_signal=None):
+        """Induz regras rígidas de poda contrastiva (Hard Negative Rule Induction).
+        
+        Identifica candidatos removidos pelo pesquisador como falsos positivos (N_falso)
+        e compara com a vizinhança de pulsos confirmados (P_valido) no mesmo áudio.
+        Se uma métrica morfológica ou espectral isolar perfeitamente os falsos positivos,
+        induz e armazena uma regra de poda com margem de segurança de 30% do gap.
+        """
+        valid_peaks = [int(p) for p in valid_peaks if 0 <= int(p) < len(env_signal)]
+        fp_peaks = [int(p) for p in false_positive_peaks if 0 <= int(p) < len(env_signal)]
+        if not valid_peaks or not fp_peaks:
+            return []
+
+        # Extrai os descritores dos dois conjuntos
+        X_val = [self.extract_features_for_peak(p, rate, env_signal, raw_signal) for p in valid_peaks]
+        X_fp = [self.extract_features_for_peak(p, rate, env_signal, raw_signal) for p in fp_peaks]
+        X_val = np.asarray(X_val, dtype=float)
+        X_fp = np.asarray(X_fp, dtype=float)
+
+        target_metrics = [
+            ("spectral_centroid", "Centroide Espectral (Hz)"),
+            ("crest_factor", "Fator de Crista"),
+            ("peak_width_s", "Duração FWHM (s)"),
+            ("attack_time_10_90_ms", "Tempo de Ataque 10-90% (ms)"),
+            ("spectral_rolloff_85", "Roll-off 85% (Hz)"),
+            ("local_hnr_db", "HNR Local (dB)"),
+        ]
+
+        new_rules = []
+        for feat_name, feat_label in target_metrics:
+            if feat_name not in self.feature_names:
+                continue
+            idx = self.feature_names.index(feat_name)
+            v_val = X_val[:, idx]
+            v_fp = X_fp[:, idx]
+
+            min_val, max_val = float(np.min(v_val)), float(np.max(v_val))
+            min_fp, max_fp = float(np.min(v_fp)), float(np.max(v_fp))
+
+            # Caso 1: Todos os válidos têm valor estritamente SUPERIOR aos falsos positivos
+            if min_val > max_fp:
+                gap = min_val - max_fp
+                if gap > 0:
+                    # Margem de segurança de 30% acima do maior falso positivo
+                    threshold = max_fp + 0.30 * gap
+                    rule = {
+                        "feature": feat_name,
+                        "label": feat_label,
+                        "op": "<",
+                        "threshold": float(threshold),
+                        "safe_margin": float(0.30 * gap),
+                        "gap": float(gap),
+                        "min_valid": min_val,
+                        "max_fp": max_fp,
+                    }
+                    new_rules.append(rule)
+
+            # Caso 2: Todos os válidos têm valor estritamente INFERIOR aos falsos positivos
+            elif max_val < min_fp:
+                gap = min_fp - max_val
+                if gap > 0:
+                    # Margem de segurança de 30% abaixo do menor falso positivo
+                    threshold = min_fp - 0.30 * gap
+                    rule = {
+                        "feature": feat_name,
+                        "label": feat_label,
+                        "op": ">",
+                        "threshold": float(threshold),
+                        "safe_margin": float(0.30 * gap),
+                        "gap": float(gap),
+                        "max_valid": max_val,
+                        "min_fp": min_fp,
+                    }
+                    new_rules.append(rule)
+
+        # Atualiza o repositório de regras de poda
+        for nr in new_rules:
+            self.pruning_rules = [
+                r for r in self.pruning_rules
+                if not (r["feature"] == nr["feature"] and r["op"] == nr["op"])
+            ]
+            self.pruning_rules.append(nr)
+
+        if new_rules:
+            self.save_to_config()
+            self.save_persisted_training()
+        return new_rules
+
+    def check_pruning_rules(self, feat_vector):
+        """Verifica se um vetor de características viola alguma regra de poda induzida."""
+        if not getattr(self, "pruning_rules", None):
+            return False, None
+        for rule in self.pruning_rules:
+            fname = rule.get("feature")
+            if fname not in self.feature_names:
+                continue
+            fidx = self.feature_names.index(fname)
+            val = float(feat_vector[fidx])
+            op = rule.get("op")
+            thresh = float(rule.get("threshold", 0.0))
+            if op == "<" and val < thresh:
+                return True, rule
+            elif op == ">" and val > thresh:
+                return True, rule
+        return False, None
 
     def predict(self, X):
         if self.model is None:
@@ -529,6 +648,17 @@ class PulseLearner:
         # Etapa 2: Priors não-supervisionados de focalidade (GMM Bimodal)
         priors = PulseLearner.compute_unsupervised_focal_priors(peaks, rate, env_signal, raw_signal)
 
+        # Etapa 2.1: Filtro Rápido Pré-Inferência via Regras Rígidas de Poda (Hard Negative Gate)
+        pruned_indices = set()
+        if getattr(self, "pruning_rules", None):
+            for i, p in enumerate(peaks):
+                f_vec = PulseLearner.extract_features_for_peak(
+                    int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
+                )
+                violated, rule = self.check_pruning_rules(f_vec)
+                if violated:
+                    pruned_indices.add(i)
+
         # Se não há modelo supervisionado treinado, o GMM atua como classificador bimodal calibrado
         if self.model is None:
             gmm_thresh = 0.50 + 0.30 * focal_sensitivity
@@ -548,8 +678,15 @@ class PulseLearner:
                     if has_left or has_right:
                         kept_mask[i] = True
 
+            if pruned_indices:
+                for idx in pruned_indices:
+                    kept_mask[idx] = False
+
             if not np.any(kept_mask) and len(priors) > 0:
-                kept_mask = priors >= np.percentile(priors, 75)
+                kept_mask = (priors >= np.percentile(priors, 75))
+                if pruned_indices:
+                    for idx in pruned_indices:
+                        kept_mask[idx] = False
             return peaks[kept_mask], peaks[~kept_mask]
 
         # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest)
@@ -612,6 +749,11 @@ class PulseLearner:
                 if has_prev_match or has_next_match:
                     kept_mask[i] = True
 
+        # Aplicação mandatória de regras rígidas de poda pré-inferência
+        if pruned_indices:
+            for idx in pruned_indices:
+                kept_mask[idx] = False
+
         return peaks[kept_mask], peaks[~kept_mask]
 
     def serialize(self):
@@ -636,6 +778,7 @@ class PulseLearner:
             if not isinstance(config, dict):
                 config = {}
             config["pulse_learner"] = self.serialize()
+            config["pruning_rules"] = getattr(self, "pruning_rules", [])
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
             return True
@@ -649,6 +792,7 @@ class PulseLearner:
             "training_features": self.training_features,
             "training_labels": self.training_labels,
             "feature_names": self.feature_names,
+            "pruning_rules": getattr(self, "pruning_rules", []),
             "version": APP_VERSION,
         }
         temp_path = self.persistence_path + ".tmp"
@@ -692,6 +836,7 @@ class PulseLearner:
                     self.training_labels = np.empty(0, dtype=int)
                     return False
 
+            self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
             model = payload.get("model")
             if model is not None and hasattr(model, "predict"):
                 self.model = model
@@ -708,6 +853,7 @@ class PulseLearner:
                 config = json.load(f)
             if not isinstance(config, dict):
                 return False
+            self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
             payload = config.get("pulse_learner")
             if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
                 return False
@@ -787,6 +933,7 @@ class PulseLearner:
         self.model = None
         self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
         self.training_labels = np.empty((0,), dtype=int)
+        self.pruning_rules = []
         if os.path.exists(self.persistence_path):
             try:
                 os.remove(self.persistence_path)

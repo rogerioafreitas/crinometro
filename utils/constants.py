@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.0.0"
+APP_VERSION = "4.1.0"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -17,6 +17,14 @@ DEFAULT_ALGO_PARAMS = {
 }
 
 CHANGELOG = {
+    "4.1.0": [
+        "Aprendizado Contrastivo Baseado em Regras (Hard Negative Rule Induction): indução automática de regras rígidas de poda com margem de segurança de 30% a partir de correções manuais.",
+        "Filtro Rítmico Fisiológico Inter-Chilreio (ICI Gate): descarte de detecções espúrias durante o período refratário fisiológico (Δt < 0.70 × ICI_mediano).",
+        "Exportação de Relatórios Completos em PDF para publicação: cabeçalho institucional, diagnóstico de cadência rítmica (regressão linear do ICI) e tabela estruturada e paginada de chilreios.",
+        "Otimização da interação nos gráficos: hit-box snapping em pixels de tela (~15px) para seleção/remoção de marcadores e preservação do timestamp exato em áreas limpas.",
+        "Ajuste e hierarquia de Z-Order visual: marcadores de detecção e hover na camada superior (zorder=7) e marcadores de edição de usuário em camada inferior (zorder=4).",
+        "Harmonização visual global e acessibilidade (UI/UX): cursor de mão em 100% dos botões, ícones, cards e checkboxes, além de padronização de altura mínima (32px), padding e cantos arredondados."
+    ],
     "4.0.0": [
         "Nova arquitetura de bioacústica avançada: segregação de grilos focais (primeiro plano) vs. grilos distantes (coro de fundo e ecos).",
         "Extração de descritores físicos de atenuação acústica (Centroide espectral, Roll-off 85%, Attack Time 10-90%, HNR e Multi-scale energy).",

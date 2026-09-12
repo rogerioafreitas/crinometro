@@ -61,8 +61,9 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background: #2D8CD8;
                 color: white;
                 border: 1px solid #3B9BE8;
-                border-radius: 9px;
-                padding: 8px 18px;
+                border-radius: 8px;
+                min-height: 32px;
+                padding: 7px 16px;
                 font-size: 13px;
                 font-weight: 600;
             }
@@ -152,8 +153,9 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background-color: #2563EB;
                 color: #FFFFFF;
                 border: 1px solid #3B82F6;
-                border-radius: 7px;
-                padding: 8px 14px;
+                border-radius: 8px;
+                min-height: 32px;
+                padding: 7px 16px;
                 font-size: 12px;
                 font-weight: 600;
                 outline: none;
@@ -313,7 +315,7 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
                 background: none; border: none;
             }
-            QPushButton { cursor: pointer; }
+            QPushButton, QToolButton, QCheckBox, QSlider { cursor: pointer; }
             QWidget#containerSelectAll {
                 background: transparent;
                 background-color: transparent;
@@ -348,7 +350,7 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background: #E2E8F0; color: #2563EB;
                 }
                 QPushButton#plotTool:disabled { color: #94A3B8; background: transparent; }
-                QPushButton#btn_sync { background: #2E8ED8; border-color: #3A9CE9; color: #FFFFFF; }
+                QPushButton#btn_sync { background: #2E8ED8; border-color: #3A9CE9; color: #FFFFFF; border-radius: 8px; min-height: 32px; padding: 7px 16px; }
                 QPushButton#btn_sync:hover { background: #3B9BE7; }
                 QPushButton#btn_sync:checked { background: #236FAE; }
                 QFrame#sidebar { background: #F7F9FB; border-right: 1px solid #D9DEE4; }
@@ -424,8 +426,9 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background-color: #2563EB;
                     color: #FFFFFF;
                     border: 1px solid #2563EB;
-                    border-radius: 7px;
-                    padding: 8px 14px;
+                    border-radius: 8px;
+                    min-height: 32px;
+                    padding: 7px 16px;
                     font-size: 12px;
                     font-weight: 600;
                     outline: none;
@@ -484,7 +487,7 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 QCheckBox { spacing: 6px; color: #374151; background: transparent; }
                 QCheckBox::indicator { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #9CA3AF; background-color: #FFFFFF; }
                 QToolTip { background: #FFFFFF; color: #27313A; border-color: #CDD4DB; }
-                QPushButton { cursor: pointer; }
+                QPushButton, QToolButton, QCheckBox, QSlider { cursor: pointer; }
                 QWidget#containerSelectAll {
                     background: transparent;
                     background-color: transparent;

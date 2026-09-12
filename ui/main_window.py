@@ -128,6 +128,10 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(get_modern_stylesheet(self.theme_mode))
         for btn in self.findChildren(QPushButton):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        for chk in self.findChildren(QCheckBox):
+            chk.setCursor(Qt.CursorShape.PointingHandCursor)
+        for sld in self.findChildren(QSlider):
+            sld.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def set_theme_mode(self, mode):
         mode = "light" if mode == "light" else "dark"
@@ -166,6 +170,10 @@ class MainWindow(QMainWindow):
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.action_save_txt)
         self.file_menu.addAction(self.action_export)
+        self.action_export_pdf = QAction("Exportar Relatório em PDF", self)
+        self.action_export_pdf.setIcon(make_ui_icon("export", color="#2563EB", size=16))
+        self.action_export_pdf.triggered.connect(self.action_save_pdf)
+        self.file_menu.addAction(self.action_export_pdf)
         self.settings_menu = self.app_menu.addMenu(I18N[self.lang]["settings"])
         self.action_algo_config = QAction(I18N[self.lang]["algo_settings"], self)
         self.action_algo_config.triggered.connect(self.open_algo_settings)
@@ -195,6 +203,8 @@ class MainWindow(QMainWindow):
         self.file_menu.setTitle(I18N[l]["file"])
         self.action_load.setText(I18N[l]["load"])
         self.action_export.setText(I18N[l]["export"])
+        if hasattr(self, "action_export_pdf"):
+            self.action_export_pdf.setText("Exportar Relatório em PDF" if l == "pt" else "Export PDF Report")
         self.settings_menu.setTitle(I18N[l]["settings"])
         self.action_algo_config.setText(I18N[l]["algo_settings"])
         self.action_report_config.setText(I18N[l]["gen_settings"])
@@ -232,6 +242,7 @@ class MainWindow(QMainWindow):
         self.btn_menu.setIconSize(QSize(18, 18))
         self.btn_menu.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_menu.setFixedSize(34, 34)
+        self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_menu.clicked.connect(self.show_app_menu)
         nav_l.addWidget(self.btn_menu)
 
@@ -242,6 +253,7 @@ class MainWindow(QMainWindow):
         self.btn_collapse.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_collapse.setFixedSize(30, 30)
         self.btn_collapse.setToolTip("Ocultar/mostrar painel de arquivos")
+        self.btn_collapse.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_collapse.clicked.connect(self.toggle_sidebar)
         nav_l.addWidget(self.btn_collapse)
 
@@ -262,6 +274,7 @@ class MainWindow(QMainWindow):
         self.btn_sync.setIcon(make_ui_icon("sync", color="#EAF4FB", size=18))
         self.btn_sync.setCheckable(True)
         self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_sync.toggled.connect(self.on_sync_toggled)
         self.btn_sync.setFixedHeight(36)
         self.btn_sync.setMinimumWidth(158)
@@ -366,6 +379,7 @@ class MainWindow(QMainWindow):
         self.btn_reanalisar_main = QPushButton("Reanalisar")
         self.btn_reanalisar_main.setObjectName("summaryAction")
         self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
+        self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         self.btn_toggle_ml = QPushButton()
         self.btn_toggle_ml.setObjectName("summaryAction")
@@ -375,11 +389,13 @@ class MainWindow(QMainWindow):
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
         self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=17))
+        self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         self.btn_export_main = QPushButton("Exportar Dados")
         self.btn_export_main.setObjectName("summaryAction")
         self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=17))
-        self.btn_export_main.clicked.connect(self.action_save_txt)
+        self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export_main.clicked.connect(self.show_export_menu)
         actions.addWidget(self.btn_reanalisar_main)
         actions.addWidget(self.btn_toggle_ml)
         actions.addWidget(self.btn_learn_corrections)
@@ -508,6 +524,7 @@ class MainWindow(QMainWindow):
         self.volume_slider.setRange(0,100)
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(120)
+        self.volume_slider.setCursor(Qt.CursorShape.PointingHandCursor)
         self.volume_slider.valueChanged.connect(lambda val: self.audio_output.setVolume(val / 100.0))
         vol_l.addWidget(self.volume_slider)
         row.addWidget(self.volume_cluster,0,Qt.AlignmentFlag.AlignVCenter)
@@ -547,6 +564,7 @@ class MainWindow(QMainWindow):
         b.setFixedSize(44 if not play else 46, 44 if not play else 46)
         b.setToolTip(tooltip)
         b.setCheckable(checkable)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
         return b
 
     @staticmethod
@@ -1466,12 +1484,12 @@ class MainWindow(QMainWindow):
         ax1.plot(time_sec[::decimation], env[::decimation], color='#6E747C', alpha=0.55, linewidth=0.8, zorder=2)
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
-            ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=3)
+            ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=7)
         distant_pks = d.get("distant_peaks", [])
         if distant_pks:
             valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
             if valid_d:
-                ax1.plot(np.array(valid_d) / rate, env[valid_d], 'x', color='#64748B', markersize=5.5, markeredgewidth=1.1, alpha=0.55, zorder=2.5)
+                ax1.plot(np.array(valid_d) / rate, env[valid_d], 'x', color='#64748B', markersize=5.5, markeredgewidth=1.1, alpha=0.55, zorder=5)
 
         self._refresh_user_peak_markers()
         ax1.set_xlabel("seconds")
@@ -1522,7 +1540,7 @@ class MainWindow(QMainWindow):
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
             freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
-            ax3.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4)
+            ax3.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4, zorder=7)
 
         # SPEC
         ax4 = self.panel_spec.ax
@@ -1536,18 +1554,18 @@ class MainWindow(QMainWindow):
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
             freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
-            ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=4)
+            ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
         if distant_pks:
             valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
             if valid_d:
                 d_times = np.array(valid_d) / rate
                 d_freqs = np.interp(d_times, t_spec, dom_freqs)
-                ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=3.5)
+                ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
 
         # Atualiza mapa de eixos independente da posição atual.
         self.cursor_lines = []
         for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
-            self.cursor_lines.append(panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=6))
+            self.cursor_lines.append(panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9))
 
         for panel in self.all_panels:
             panel.apply_dark_theme()
@@ -1696,6 +1714,70 @@ class MainWindow(QMainWindow):
                     texto += f"Arquivo: {fname} | Chilreios: {len(d['chirps'])}\n"
             f.write(texto)
         QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s).")
+
+    def show_export_menu(self):
+        menu = QMenu(self)
+        menu.setObjectName("exportMenu")
+        act_pdf = menu.addAction(make_ui_icon("export", color="#2563EB", size=15), "📄 Exportar Relatório Completo (.pdf)")
+        act_pdf.triggered.connect(self.action_save_pdf)
+        act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
+        act_txt.triggered.connect(self.action_save_txt)
+        menu.exec(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
+
+    def action_save_pdf(self):
+        checked_files = self.get_checked_files()
+        if not checked_files:
+            QMessageBox.warning(
+                self,
+                "Nenhum áudio selecionado",
+                "Marque a caixinha de pelo menos um arquivo de áudio na lista para gerar o relatório em PDF."
+            )
+            return
+
+        # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
+        unprocessed = [f for f in checked_files if f not in self.analysis_cache and f in self.loaded_files]
+        for f in unprocessed:
+            try:
+                self.run_analysis(f, self.algo_params, render=False)
+            except Exception as exc:
+                print(f"Aviso ao processar {f} para relatório PDF: {exc}")
+
+        selected_cache = {
+            fname: self.analysis_cache[fname]
+            for fname in checked_files
+            if fname in self.analysis_cache
+        }
+
+        if not selected_cache:
+            QMessageBox.warning(
+                self,
+                "Sem dados",
+                "Nenhum dos áudios selecionados possui dados de análise válidos para o relatório."
+            )
+            return
+
+        now = datetime.datetime.now()
+        default_name = f"Relatorio_Crinometro_{now.strftime('%Y%m%d_%H%M')}.pdf"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar Relatório em PDF", default_name, "PDF Files (*.pdf)"
+        )
+        if not file_path:
+            return
+
+        try:
+            from utils.report_generator import generate_pdf_report
+            generate_pdf_report(file_path, self.report_params, selected_cache, self.algo_params)
+            QMessageBox.information(
+                self,
+                I18N[self.lang]["success"],
+                f"Relatório PDF gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s)!\n\nSalvo em:\n{file_path}"
+            )
+        except Exception as err:
+            QMessageBox.critical(
+                self,
+                I18N[self.lang]["error"],
+                f"Falha ao gerar relatório em PDF:\n{str(err)}"
+            )
 
     # ---------- reprodução ----------
     def toggle_playback(self):
@@ -1856,19 +1938,19 @@ class MainWindow(QMainWindow):
         if peaks_confirmed:
             xdata = np.asarray(peaks_confirmed, dtype=float) / rate
             scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='o', 
-                                 color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=6)
+                                 color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=4)
             self._wave_user_markers.append(scatter)
 
         if peaks_added:
             xdata = np.asarray(peaks_added, dtype=float) / rate
             scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='^', 
-                                 color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=6)
+                                 color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=4)
             self._wave_user_markers.append(scatter)
 
         if peaks_removed:
             xdata = np.asarray(peaks_removed, dtype=float) / rate
             scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=80, marker='x', 
-                                 color='#EF4444', linewidths=2.0, zorder=6)
+                                 color='#EF4444', linewidths=2.0, zorder=4)
             self._wave_user_markers.append(scatter)
 
         # Renderiza no espectrograma (ax4) e gráfico de frequência (ax3) se dados disponíveis
@@ -1887,12 +1969,12 @@ class MainWindow(QMainWindow):
                     
                     # Frequência
                     line_freq = ax3.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
-                                        color=color, markersize=8, markeredgewidth=1.2, zorder=5)
+                                        color=color, markersize=8, markeredgewidth=1.2, zorder=4)
                     self._wave_user_markers.extend(line_freq)
                     
                     # Espectrograma
                     line_spec = ax4.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
-                                        color=color, markersize=8, markeredgewidth=1.2, zorder=5)
+                                        color=color, markersize=8, markeredgewidth=1.2, zorder=4)
                     self._wave_user_markers.extend(line_spec)
 
         self._update_pulse_hover_data()
@@ -1919,19 +2001,43 @@ class MainWindow(QMainWindow):
             return int(peak_samples[nearest_idx])
         return None
 
-    def _toggle_peak_marker(self, time_sec):
-        """Alterna a classificação do pico mais próximo ou adiciona um novo pico de forma instantânea."""
+    def _toggle_peak_marker(self, time_sec, panel=None, event=None):
+        """Alterna a classificação do pico mais próximo com snapping inteligente em pixels ou adiciona um novo pico."""
         if not self.active_heavy_data:
             return
         rate = float(self.active_heavy_data.get('rate', 1.0))
         target = int(round(float(time_sec) * rate))
         candidates = sorted(set(int(p) for p in self.peaks_detected) |
                             set(int(p) for p in self.peaks_user_verified))
+        nearest = None
+
         if candidates:
-            distances = np.abs(np.asarray(candidates, dtype=int) - target)
-            nearest = candidates[int(np.argmin(distances))] if distances.min() <= int(round(0.005 * rate)) else None
-        else:
-            nearest = None
+            # Hit-box snapping adaptativo em pixels de tela (tolerância suave de ~15px)
+            ax = panel.ax if (panel and hasattr(panel, 'ax')) else (event.inaxes if event else None)
+            if ax is not None and event is not None and getattr(event, 'x', None) is not None:
+                xlim = ax.get_xlim()
+                pad = max(0.1, (xlim[1] - xlim[0]) * 0.1)
+                vis_cands = [p for p in candidates if (xlim[0] - pad) <= (p / rate) <= (xlim[1] + pad)]
+                if not vis_cands:
+                    vis_cands = candidates
+                cand_times = np.asarray(vis_cands, dtype=float) / rate
+                pts_disp = ax.transData.transform(np.column_stack([cand_times, np.zeros_like(cand_times)]))
+                pixel_dists = np.abs(pts_disp[:, 0] - event.x)
+                min_idx = int(np.argmin(pixel_dists))
+                if pixel_dists[min_idx] <= 15.0 and abs(cand_times[min_idx] - float(time_sec)) <= 0.020:
+                    nearest = vis_cands[min_idx]
+            else:
+                # Fallback adaptativo à janela temporal visível ou 5 ms
+                if ax is not None:
+                    xlim = ax.get_xlim()
+                    vis_span = max(0.01, xlim[1] - xlim[0])
+                    time_tol_sec = min(0.020, max(0.003, vis_span * 0.015))
+                else:
+                    time_tol_sec = 0.005
+                distances = np.abs(np.asarray(candidates, dtype=int) - target)
+                min_dist_idx = int(np.argmin(distances))
+                if distances[min_dist_idx] <= int(round(time_tol_sec * rate)):
+                    nearest = candidates[min_dist_idx]
 
         self._pulse_edit_history.append(list(self.peaks_user_verified))
         if len(self._pulse_edit_history) > 50:
@@ -2151,7 +2257,7 @@ class MainWindow(QMainWindow):
 
     def on_double_click(self, event):
         if event.inaxes == self.panel_wave.ax and event.xdata is not None:
-            self._toggle_peak_marker(event.xdata)
+            self._toggle_peak_marker(event.xdata, panel=self.panel_wave, event=event)
 
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):
@@ -2208,7 +2314,7 @@ class MainWindow(QMainWindow):
             if self.active_heavy_data:
                 rate = float(self.active_heavy_data.get('rate', 1.0))
                 time_sec = float(event.xdata)
-                self._toggle_peak_marker(time_sec)
+                self._toggle_peak_marker(time_sec, panel=clicked_panel, event=event)
                 return
 
         # Comportamento normal de pan/zoom quando não em modo de edição

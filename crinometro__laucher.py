@@ -62,7 +62,7 @@ class CoreLoaderThread(QThread):
 
 
 class LauncherLoadingScreen(QWidget):
-    APP_VERSION = "v4.0.0"
+    APP_VERSION = "v4.1.0"
 
     MEME_PHRASES = [
         "Intankável o grilo às 3 da manhã mandando áudio sem fone...",

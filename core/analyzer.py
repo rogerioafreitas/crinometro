@@ -249,6 +249,52 @@ class CricketAnalyzer:
                 for sc in sub_chirps:
                     refined_chirps.append(sc)
 
+        # 3. Filtro Rítmico Fisiológico Inter-Chilreio (Inter-Chirp Interval - ICI Gate)
+        # A fisiologia neuromuscular do grilo focal impõe um período refratário mínimo entre chilreios consecutivos:
+        # O intervalo entre o término do último pulso de um chilreio e o início do próximo chilreio (ΔT_ICI)
+        # pode se alongar caso o grilo silencie ou pause, mas nunca pode ser drasticamente menor do que a cadência típica.
+        if len(refined_chirps) >= 3:
+            refined_chirps.sort(key=lambda cp: cp[0])
+            ici_intervals_s = []
+            for i in range(len(refined_chirps) - 1):
+                t_end_cur = refined_chirps[i][-1] / float(rate)
+                t_start_next = refined_chirps[i + 1][0] / float(rate)
+                dt_ici = t_start_next - t_end_cur
+                if dt_ici > gap_max_s:
+                    ici_intervals_s.append(dt_ici)
+
+            if len(ici_intervals_s) >= 2:
+                ici_median_s = float(np.median(ici_intervals_s))
+                # Limiar fisiológico refratário: 70% do intervalo mediano entre chilreios
+                ici_min_refractory_s = 0.70 * ici_median_s
+
+                gated_chirps = [refined_chirps[0]]
+                for i in range(1, len(refined_chirps)):
+                    cand = refined_chirps[i]
+                    last_valid = gated_chirps[-1]
+                    t_last_end = last_valid[-1] / float(rate)
+                    t_cand_start = cand[0] / float(rate)
+                    dt_from_last = t_cand_start - t_last_end
+
+                    if dt_from_last < ici_min_refractory_s:
+                        # Conflito de período refratário fisiológico: o candidato surgiu prematuramente
+                        # durante a janela de silêncio obrigatória do grilo focal.
+                        cand_amps = env[cand] if len(cand) > 0 and 0 <= cand[0] < len(env) else [0.0]
+                        last_amps = env[last_valid] if len(last_valid) > 0 and 0 <= last_valid[0] < len(env) else [0.0]
+                        cand_mean_amp = float(np.mean(cand_amps))
+                        last_mean_amp = float(np.mean(last_amps))
+
+                        # Se o candidato for expressivamente mais forte e consistente, substitui o anterior;
+                        # caso contrário, descarta o candidato como ruído espúrio ou grilo secundário de fundo.
+                        if cand_mean_amp > 1.35 * last_mean_amp and len(cand) >= len(last_valid):
+                            gated_chirps[-1] = cand
+                        else:
+                            # Descarta o candidato prematuro
+                            continue
+                    else:
+                        gated_chirps.append(cand)
+                refined_chirps = gated_chirps
+
         chirps = [len(cp) for cp in refined_chirps]
         media = float(statistics.mean(chirps)) if len(chirps) > 0 else 0.0
         moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0

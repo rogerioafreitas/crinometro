@@ -1,6 +1,7 @@
 """
 Crinômetro - Utilitários de Diagnóstico, Exceções e Controle de Versão.
 """
+import os
 import sys
 import traceback
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -15,6 +16,10 @@ def setup_global_exception_handler():
         tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
         tb_text = "".join(tb_lines)
         print("CRASH / UNHANDLED EXCEPTION:\n", tb_text, file=sys.stderr)
+
+        if os.environ.get("CRINOMETRO_TESTING") == "1":
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
 
         app = QApplication.instance()
         if app:
@@ -42,7 +47,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "4.0.0"
+APP_VERSION = "4.1.0"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
