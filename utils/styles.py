@@ -58,17 +58,26 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 qproperty-alignment: AlignCenter;
             }
             QPushButton#btn_sync {
-                background: #2D8CD8;
-                color: white;
-                border: 1px solid #3B9BE8;
-                border-radius: 8px;
+                background: #1E293B;
+                color: #CBD5E1;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                min-width: 32px;
+                max-width: 32px;
                 min-height: 32px;
-                padding: 7px 16px;
-                font-size: 13px;
-                font-weight: 600;
+                max-height: 32px;
+                padding: 0px;
             }
-            QPushButton#btn_sync:hover { background: #3899E6; }
-            QPushButton#btn_sync:checked { background: #246FAE; }
+            QPushButton#btn_sync:hover {
+                background: #334155;
+                color: #FFFFFF;
+                border-color: #60A5FA;
+            }
+            QPushButton#btn_sync:checked {
+                background: #2563EB;
+                color: #FFFFFF;
+                border-color: #3B82F6;
+            }
             QFrame#sidebar {
                 background: #111316;
                 border-right: 1px solid #272A2F;
@@ -123,12 +132,19 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 color: #FFFFFF;
                 font-weight: 600;
             }
-            QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard, QFrame#plotCard {
+            QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard {
                 background: #17191C;
                 border: 1px solid #292D32;
                 border-radius: 10px;
             }
-            QFrame#plotCard[mainPlot="true"] { border-color: #30353B; }
+            QFrame#plotCard {
+                background: #14171A;
+                border: 1px solid #282C32;
+                border-radius: 12px;
+            }
+            QFrame#plotCard[mainPlot="true"] {
+                border-color: #3B82F6;
+            }
             QLabel#eyebrow {
                 color: #9CA2AA;
                 font-size: 12px;
@@ -153,10 +169,11 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background-color: #2563EB;
                 color: #FFFFFF;
                 border: 1px solid #3B82F6;
-                border-radius: 8px;
+                border-radius: 6px;
                 min-height: 32px;
-                padding: 7px 16px;
-                font-size: 12px;
+                max-height: 32px;
+                padding: 4px 10px;
+                font-size: 11.5px;
                 font-weight: 600;
                 outline: none;
             }
@@ -174,14 +191,17 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 border-color: #333842;
             }
             QWidget#plotTitleBar {
-                background: transparent;
+                background: #191C20;
                 border: 0;
+                border-bottom: 1px solid #262A30;
+                border-top-left-radius: 11px;
+                border-top-right-radius: 11px;
             }
             QLabel#plotTitle {
                 background: transparent;
                 padding: 0;
                 color: #D8DBDF;
-                font-size: 12px;
+                font-size: 11.5px;
                 font-weight: 600;
             }
             QPushButton#plotTool {
@@ -350,9 +370,27 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background: #E2E8F0; color: #2563EB;
                 }
                 QPushButton#plotTool:disabled { color: #94A3B8; background: transparent; }
-                QPushButton#btn_sync { background: #2E8ED8; border-color: #3A9CE9; color: #FFFFFF; border-radius: 8px; min-height: 32px; padding: 7px 16px; }
-                QPushButton#btn_sync:hover { background: #3B9BE7; }
-                QPushButton#btn_sync:checked { background: #236FAE; }
+                QPushButton#btn_sync {
+                    background: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    color: #475569;
+                    border-radius: 6px;
+                    min-width: 32px;
+                    max-width: 32px;
+                    min-height: 32px;
+                    max-height: 32px;
+                    padding: 0px;
+                }
+                QPushButton#btn_sync:hover {
+                    background: #E2E8F0;
+                    color: #1E293B;
+                    border-color: #94A3B8;
+                }
+                QPushButton#btn_sync:checked {
+                    background: #2563EB;
+                    color: #FFFFFF;
+                    border-color: #1D4ED8;
+                }
                 QFrame#sidebar { background: #F7F9FB; border-right: 1px solid #D9DEE4; }
                 QLabel#sidebarTitle, QLabel#eyebrow { color: #606A74; }
                 QListWidget { color: #4D5761; background: transparent; border: 0; outline: 0; }
@@ -411,25 +449,46 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     color: #164D78;
                     font-weight: 600;
                 }
-                QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard, QFrame#plotCard {
+                QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard {
                     background: #FFFFFF; border: 1px solid #D9DEE4;
                     border-radius: 10px;
                 }
-                QFrame#playbackCard, QWidget#playCenter, QWidget#volumeCluster, QLabel#elapsedLabel, QLabel#volumeLabel, QWidget#plotTitleBar, QLabel#plotTitle {
+                QFrame#plotCard {
+                    background: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 12px;
+                }
+                QFrame#plotCard[mainPlot="true"] {
+                    border-color: #2563EB;
+                }
+                QWidget#plotTitleBar {
+                    background: #F8FAFC;
+                    border: 0;
+                    border-bottom: 1px solid #E2E8F0;
+                    border-top-left-radius: 11px;
+                    border-top-right-radius: 11px;
+                }
+                QLabel#plotTitle {
+                    color: #1E293B;
+                    font-size: 11.5px;
+                    font-weight: 600;
+                }
+                QFrame#playbackCard, QWidget#playCenter, QWidget#volumeCluster, QLabel#elapsedLabel, QLabel#volumeLabel {
                     background-color: transparent;
                     background: transparent;
                     border: 0;
                 }
                 QLabel#summaryFile, QLabel#metricValue { color: #1D2329; }
-                QLabel#summaryMeta, QLabel#metricTitle, QLabel#metricSub, QLabel#plotTitle, QLabel#volumeLabel, QLabel#elapsedLabel { color: #69737D; }
+                QLabel#summaryMeta, QLabel#metricTitle, QLabel#metricSub, QLabel#volumeLabel, QLabel#elapsedLabel { color: #69737D; }
                 QPushButton#summaryAction {
                     background-color: #2563EB;
                     color: #FFFFFF;
                     border: 1px solid #2563EB;
-                    border-radius: 8px;
+                    border-radius: 6px;
                     min-height: 32px;
-                    padding: 7px 16px;
-                    font-size: 12px;
+                    max-height: 32px;
+                    padding: 4px 10px;
+                    font-size: 11.5px;
                     font-weight: 600;
                     outline: none;
                 }

@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self._pulse_edit_history = []
         self._wave_user_markers = []
         self._click_alignment_lines = []
-        self.use_machine_learning = True
+        self.use_machine_learning = False
         self.load_settings()
         self.lang = self.report_params.get("lang", "pt") or "pt"
 
@@ -269,17 +269,6 @@ class MainWindow(QMainWindow):
         nav_l.addWidget(version)
         nav_l.addStretch()
 
-        self.btn_sync = QPushButton("Sincronizar (X)")
-        self.btn_sync.setObjectName("btn_sync")
-        self.btn_sync.setIcon(make_ui_icon("sync", color="#EAF4FB", size=18))
-        self.btn_sync.setCheckable(True)
-        self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_sync.toggled.connect(self.on_sync_toggled)
-        self.btn_sync.setFixedHeight(36)
-        self.btn_sync.setMinimumWidth(158)
-        nav_l.addWidget(self.btn_sync)
-
         self.theme_label = QLabel("Tema")
         self.theme_label.setObjectName("themeLabel")
         nav_l.addWidget(self.theme_label)
@@ -294,6 +283,8 @@ class MainWindow(QMainWindow):
         # CONTEÚDO: sidebar + dashboard
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(True)
+        self.splitter.setOpaqueResize(True)
+        self.splitter.splitterMoved.connect(self._on_splitter_moved)
         root.addWidget(self.splitter, 1)
 
         self.left_panel = QFrame()
@@ -375,31 +366,50 @@ class MainWindow(QMainWindow):
         summary.addLayout(summary_info, 1)
 
         actions = QHBoxLayout()
-        actions.setSpacing(7)
+        actions.setSpacing(6)
+
+        self.btn_sync = QPushButton()
+        self.btn_sync.setObjectName("btn_sync")
+        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=16))
+        self.btn_sync.setCheckable(True)
+        self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_sync.setFixedSize(32, 32)
+        self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
+        self.btn_sync.toggled.connect(self.on_sync_toggled)
+        actions.addWidget(self.btn_sync)
+
         self.btn_reanalisar_main = QPushButton("Reanalisar")
         self.btn_reanalisar_main.setObjectName("summaryAction")
-        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
+        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=15))
         self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reanalisar_main.setToolTip("Reanalisar áudio atual com os parâmetros vigentes")
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
+        actions.addWidget(self.btn_reanalisar_main)
+
         self.btn_toggle_ml = QPushButton()
         self.btn_toggle_ml.setObjectName("summaryAction")
         self.btn_toggle_ml.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_ml.clicked.connect(self.toggle_machine_learning)
         self._update_ml_toggle_ui()
+        actions.addWidget(self.btn_toggle_ml)
+
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
-        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=17))
+        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=15))
         self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_learn_corrections.setToolTip("Treinar classificador com base nas correções manuais de pulsos")
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
+        actions.addWidget(self.btn_learn_corrections)
+
         self.btn_export_main = QPushButton("Exportar Dados")
         self.btn_export_main.setObjectName("summaryAction")
-        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=17))
+        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=15))
         self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export_main.setToolTip("Exportar dados e relatórios em PDF ou TXT")
         self.btn_export_main.clicked.connect(self.show_export_menu)
-        actions.addWidget(self.btn_reanalisar_main)
-        actions.addWidget(self.btn_toggle_ml)
-        actions.addWidget(self.btn_learn_corrections)
         actions.addWidget(self.btn_export_main)
+
         summary.addLayout(actions)
 
         divider = QLabel("│")
@@ -457,6 +467,7 @@ class MainWindow(QMainWindow):
         self.main_panel = self.panel_spec
         self.stack_panels = [self.panel_hist, self.panel_wave, self.panel_freq]
         self._rebuild_panel_layout()
+        self._draw_empty_plots()
 
         for panel in self.all_panels:
             # O histograma é deliberadamente fixo: sem drag e sem zoom.
@@ -632,6 +643,23 @@ class MainWindow(QMainWindow):
         finally:
             self._swapping_panels = False
 
+    def move_stack_panel(self, panel, delta):
+        """Move a mini janela na pilha lateral para cima (delta=-1) ou para baixo (delta=1)."""
+        if panel not in self.stack_panels or getattr(self, "_swapping_panels", False):
+            return
+        idx = self.stack_panels.index(panel)
+        new_idx = idx + delta
+        if 0 <= new_idx < len(self.stack_panels):
+            self._swapping_panels = True
+            try:
+                self.stack_panels[idx], self.stack_panels[new_idx] = self.stack_panels[new_idx], self.stack_panels[idx]
+                self._rebuild_panel_layout()
+                self._apply_plot_geometry()
+                for p in self.all_panels:
+                    p.canvas.draw_idle()
+            finally:
+                self._swapping_panels = False
+
     def _fit_all_plots_to_layout(self):
         if not self.active_heavy_data:
             return
@@ -648,8 +676,7 @@ class MainWindow(QMainWindow):
     def _apply_plot_geometry(self):
         """Enquadra os gráficos de forma adaptativa ao tamanho real de cada canvas.
 
-        O ponto crítico é não usar a mesma margem para um card grande e um card
-        estreito: nos painéis laterais isso reduz a área útil e corta ticks/labels.
+        Garante proporções harmônicas para mini janelinhas sem cortar rótulos nem ticks.
         """
         if not hasattr(self, "all_panels"):
             return
@@ -663,24 +690,65 @@ class MainWindow(QMainWindow):
             h = max(1, panel.canvas.height())
             is_main = panel is self.main_panel
 
-            # Margens relativas ao formato real do canvas.
             if panel is self.panel_hist:
-                left, right = 0.19, 0.96
-                top = 0.84
-                bottom = 0.42
-            elif is_main:
-                left, right = 0.095, 0.975
-                top = 0.935
-                bottom = 0.145
-            else:
-                # Em cards laterais estreitos, prioriza espaço para eixo Y e X.
-                left = 0.22 if w < 520 else 0.19
+                left = 0.16 if w < 480 else 0.14
                 right = 0.965
                 top = 0.88
-                bottom = 0.32 if h < 230 else 0.27
+                bottom = 0.24 if h < 220 else 0.20
+            elif is_main:
+                left = 0.085 if w > 700 else 0.10
+                right = 0.98
+                top = 0.94
+                bottom = 0.13 if h > 350 else 0.15
+            else:
+                left = 0.16 if w < 480 else 0.14
+                right = 0.965
+                top = 0.89
+                bottom = 0.22 if h < 220 else 0.18
 
             fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
+
+            font_size = 8.5 if is_main else 7.5
+            panel.ax.tick_params(labelsize=font_size, pad=2, length=3.0 if is_main else 2.5)
+            if hasattr(panel.ax, "xaxis") and panel.ax.xaxis.label is not None:
+                panel.ax.xaxis.label.set_size(font_size + 0.5)
+            if hasattr(panel.ax, "yaxis") and panel.ax.yaxis.label is not None:
+                panel.ax.yaxis.label.set_size(font_size + 0.5)
+
             panel.canvas.updateGeometry()
+
+    def _draw_empty_plots(self):
+        """Inicializa os 4 painéis gráficos com enquadramento perfeito mesmo sem áudio carregado."""
+        if not hasattr(self, "all_panels"):
+            return
+        for p in self.all_panels:
+            p.ax.clear()
+            p.apply_dark_theme()
+
+        self.panel_wave.ax.set_xlim(0.0, 10.0)
+        self.panel_wave.ax.set_ylim(-1.05, 1.05)
+        self.panel_wave.ax.set_xlabel("seconds")
+        self.panel_wave.ax.set_ylabel("Amplitude")
+
+        self.panel_hist.ax.set_xlim(1.5, 6.5)
+        self.panel_hist.ax.set_ylim(0, 10)
+        self.panel_hist.ax.set_xticks([2, 3, 4, 5, 6])
+        self.panel_hist.ax.set_xlabel("")
+        self.panel_hist.ax.set_ylabel("")
+
+        self.panel_freq.ax.set_xlim(0.0, 10.0)
+        self.panel_freq.ax.set_ylim(3200, 6000)
+        self.panel_freq.ax.set_xlabel("seconds")
+        self.panel_freq.ax.set_ylabel("Hz")
+
+        self.panel_spec.ax.set_xlim(0.0, 10.0)
+        self.panel_spec.ax.set_ylim(3200, 6000)
+        self.panel_spec.ax.set_xlabel("seconds")
+        self.panel_spec.ax.set_ylabel("Hz")
+
+        self._apply_plot_geometry()
+        for p in self.all_panels:
+            p.canvas.draw_idle()
 
     def _refresh_all_canvases(self):
         if getattr(self, '_refreshing_canvases', False):
@@ -1275,11 +1343,11 @@ class MainWindow(QMainWindow):
     def _update_ml_toggle_ui(self):
         if not hasattr(self, "btn_toggle_ml"):
             return
-        is_active = getattr(self, "use_machine_learning", True)
+        is_active = getattr(self, "use_machine_learning", False)
         if is_active:
             self.btn_toggle_ml.setText("🧠 IA: Ativada")
             self.btn_toggle_ml.setToolTip("IA Ativada: filtra ruído e discrimina grilos distantes. Clique para desativar.")
-            self.btn_toggle_ml.setStyleSheet("background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 5px; padding: 6px 12px;")
+            self.btn_toggle_ml.setStyleSheet("background-color: #2563EB; color: #FFFFFF; font-weight: 600; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; min-height: 32px; max-height: 32px;")
             if hasattr(self, "lbl_model_status"):
                 status_txt = "🧠 IA: Ativada (Modelo Supervisionado)" if self.pulse_learner.is_trained() else "🧠 IA: Ativada (GMM não-supervisionado)"
                 self.lbl_model_status.setText(status_txt)
@@ -1287,7 +1355,7 @@ class MainWindow(QMainWindow):
         else:
             self.btn_toggle_ml.setText("🧠 IA: Desativada")
             self.btn_toggle_ml.setToolTip("IA Desativada: análise executada estritamente por processamento de sinal (DSP). Clique para ativar.")
-            self.btn_toggle_ml.setStyleSheet("background-color: #475569; color: #E2E8F0; font-weight: bold; border-radius: 5px; padding: 6px 12px;")
+            self.btn_toggle_ml.setStyleSheet("background-color: #475569; color: #E2E8F0; font-weight: 600; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; min-height: 32px; max-height: 32px;")
             if hasattr(self, "lbl_model_status"):
                 self.lbl_model_status.setText("🧠 IA: Desativada (Modo DSP)")
                 self.lbl_model_status.setStyleSheet("color: #94A3B8;")
@@ -1360,7 +1428,7 @@ class MainWindow(QMainWindow):
         file_path = self.loaded_files[filename]
         try:
             effective_params = {**params, **self._adaptive_overrides}
-            learner = self.pulse_learner if getattr(self, "use_machine_learning", True) else None
+            learner = self.pulse_learner if getattr(self, "use_machine_learning", False) else None
             res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner)
             self._apply_analysis_results(filename, res, render=render, validate_all=validate_all, params=params)
         except Exception as e:
@@ -1409,7 +1477,7 @@ class MainWindow(QMainWindow):
 
         heavy_data = {
             "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
-            "chirp_peaks_list": chirp_peaks_list, "media": media, "moda": moda,
+            "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda,
             "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
             "duration": audio_duration, "params": params.copy(),
             "peaks_detected": list(self.peaks_detected),
@@ -2259,17 +2327,31 @@ class MainWindow(QMainWindow):
         if event.inaxes == self.panel_wave.ax and event.xdata is not None:
             self._toggle_peak_marker(event.xdata, panel=self.panel_wave, event=event)
 
+    def _on_splitter_moved(self, pos, index):
+        if not hasattr(self, "_splitter_debounce_timer"):
+            self._splitter_debounce_timer = QTimer(self)
+            self._splitter_debounce_timer.setSingleShot(True)
+            self._splitter_debounce_timer.timeout.connect(self._finish_resize_refresh)
+        self._splitter_debounce_timer.start(80)
+
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.bg_cache_valid = False
-        if hasattr(self, "all_panels") and self.active_heavy_data and not getattr(self, "_resize_refresh_pending", False) and not getattr(self, "_swapping_panels", False) and not getattr(self, "_refreshing_canvases", False):
-            self._resize_refresh_pending = True
-            QTimer.singleShot(0, self._finish_resize_refresh)
+        if hasattr(self, "all_panels") and not getattr(self, "_swapping_panels", False) and not getattr(self, "_refreshing_canvases", False):
+            if not hasattr(self, "_resize_debounce_timer"):
+                self._resize_debounce_timer = QTimer(self)
+                self._resize_debounce_timer.setSingleShot(True)
+                self._resize_debounce_timer.timeout.connect(self._finish_resize_refresh)
+            self._resize_debounce_timer.start(100)
 
     def _finish_resize_refresh(self):
-        self._resize_refresh_pending=False
-        if self.active_heavy_data: self._refresh_all_canvases()
+        self._apply_plot_geometry()
+        if self.active_heavy_data:
+            self._refresh_all_canvases()
+        else:
+            for p in self.all_panels:
+                p.canvas.draw_idle()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape and self.expanded_panel is not None:
@@ -2437,6 +2519,10 @@ class MainWindow(QMainWindow):
 
     def on_motion(self, event):
         if self.panning and self.active_ax is not None and event.inaxes == self.active_ax:
+            now_t = time.time()
+            if now_t - getattr(self, "_last_pan_time", 0) < 0.018:
+                return
+            self._last_pan_time = now_t
             dx, dy = event.x - self.start_x, event.y - self.start_y
             x0, x1 = self.start_xlim
             y0, y1 = self.start_ylim

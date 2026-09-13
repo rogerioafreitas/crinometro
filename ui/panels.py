@@ -35,6 +35,17 @@ class PlotPanel(QWidget):
         bar.addWidget(self.lbl_title)
         bar.addStretch()
 
+        # Botões para reordenar / trocar a posição da mini janela na pilha lateral
+        self.btn_move_up = self._tool_button("▲", "Mover esta mini janela para cima")
+        self.btn_move_up.setObjectName("plotTool")
+        self.btn_move_up.clicked.connect(lambda: self._on_move_clicked(-1))
+        bar.addWidget(self.btn_move_up)
+
+        self.btn_move_down = self._tool_button("▼", "Mover esta mini janela para baixo")
+        self.btn_move_down.setObjectName("plotTool")
+        self.btn_move_down.clicked.connect(lambda: self._on_move_clicked(1))
+        bar.addWidget(self.btn_move_down)
+
         # Botão de edição de pulsos (ativa/desativa modo de seleção)
         self.btn_pulse_edit = self._tool_button("", "Ativar modo de edição de pulsos (clique para adicionar/remover)")
         self.btn_pulse_edit.setObjectName("plotTool")
@@ -100,6 +111,11 @@ class PlotPanel(QWidget):
             self.btn_pulse_edit.setStyleSheet("")
 
 
+    def _on_move_clicked(self, delta):
+        win = self.window()
+        if hasattr(win, "move_stack_panel"):
+            win.move_stack_panel(self, delta)
+
     def _set_main_visual(self, main):
         self.setProperty("mainPlot", bool(main))
         self.style().unpolish(self)
@@ -110,6 +126,10 @@ class PlotPanel(QWidget):
         self.btn_expand.setToolTip(
             "Restaurar posição" if main else "Colocar este gráfico na posição principal"
         )
+        if hasattr(self, "btn_move_up"):
+            self.btn_move_up.setVisible(not main)
+        if hasattr(self, "btn_move_down"):
+            self.btn_move_down.setVisible(not main)
 
     def update_lang(self, lang):
         self.lbl_title.setText(I18N[lang][self.title_key])
@@ -137,6 +157,10 @@ class PlotPanel(QWidget):
         icon_color = "#D7DCE2" if dark else "#334155"
         self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=15))
         self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=15))
+        if hasattr(self, "btn_move_up"):
+            self.btn_move_up.setStyleSheet(f"color: {icon_color}; font-size: 10px; font-weight: bold;")
+        if hasattr(self, "btn_move_down"):
+            self.btn_move_down.setStyleSheet(f"color: {icon_color}; font-size: 10px; font-weight: bold;")
 
 
 

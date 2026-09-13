@@ -61,8 +61,10 @@ class CoreLoaderThread(QThread):
             self.error.emit(traceback.format_exc())
 
 
+from utils.constants import APP_VERSION as CONST_APP_VERSION
+
 class LauncherLoadingScreen(QWidget):
-    APP_VERSION = "v4.1.0"
+    APP_VERSION = f"v{CONST_APP_VERSION}"
 
     MEME_PHRASES = [
         "Intankável o grilo às 3 da manhã mandando áudio sem fone...",

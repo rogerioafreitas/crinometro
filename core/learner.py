@@ -13,7 +13,7 @@ import re
 import copy
 import numpy as np
 import scipy.integrate
-from scipy.signal import hilbert, peak_widths
+from scipy.signal import hilbert, peak_widths, find_peaks
 
 try:
     from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
@@ -77,18 +77,18 @@ class PulseLearner:
             if n_samples > 0 and n_samples < 30:
                 # Regularização robusta para poucas amostras de correção ativa
                 return HistGradientBoostingClassifier(
-                    max_iter=80,
+                    max_iter=50,
                     max_depth=3,
-                    min_samples_leaf=3,
-                    learning_rate=0.06,
-                    l2_regularization=2.5,
+                    min_samples_leaf=2,
+                    learning_rate=0.08,
+                    l2_regularization=2.0,
                     random_state=42,
                     class_weight="balanced",
                 )
             return HistGradientBoostingClassifier(
-                max_iter=150,
-                max_depth=6,
-                min_samples_leaf=10,
+                max_iter=80,
+                max_depth=4,
+                min_samples_leaf=5,
                 learning_rate=0.08,
                 l2_regularization=1.0,
                 random_state=42,
@@ -96,10 +96,10 @@ class PulseLearner:
             )
         elif RandomForestClassifier is not None:
             return RandomForestClassifier(
-                n_estimators=300,
-                max_depth=8,
-                min_samples_split=8,
-                min_samples_leaf=4,
+                n_estimators=80,
+                max_depth=5,
+                min_samples_split=6,
+                min_samples_leaf=3,
                 max_features="sqrt",
                 class_weight="balanced",
                 random_state=42,
@@ -943,8 +943,9 @@ class PulseLearner:
             if os.path.exists(self.config_path):
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
-                if isinstance(config, dict) and "pulse_learner" in config:
+                if isinstance(config, dict):
                     config["pulse_learner"] = None
+                    config["pruning_rules"] = []
                     with open(self.config_path, "w", encoding="utf-8") as f:
                         json.dump(config, f, indent=4, ensure_ascii=False)
         except Exception:

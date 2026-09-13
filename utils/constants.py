@@ -2,14 +2,14 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.1.0"
+APP_VERSION = "4.1.1"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
     "amp_min": 0.08, "amp_max": 1.00, "amp_var": 0.40,
     "dur_min": 14.0, "dur_max": 80.0,
     "gap_min": 25.0, "gap_max": 35.0,
-    "min_p": 2, "max_p": 10, "b1_min": 3200, "b1_max": 6000,
+    "min_p": 3, "max_p": 10, "b1_min": 3200, "b1_max": 6000,
     "prominence": 0.02, "width_min_ms": 0.0, "width_max_ms": 0.0,
     "smooth_window_ms": 15.0, "noise_floor": 1.00,
     "adaptation_rate": 0.10,
@@ -17,6 +17,16 @@ DEFAULT_ALGO_PARAMS = {
 }
 
 CHANGELOG = {
+    "4.1.1": [
+        "Correção do bug no aprendizado ativo ('find_peaks' indefinido na mineração de negativos).",
+        "Redesign dos botões de ação e reposicionamento ergonômico do botão de sincronização X (compacto, com legendas em hover).",
+        "Modernização dos gráficos laterais em formato de 'mini janelinhas' com cantos arredondados, enquadramento aprimorado e reordenação instantânea.",
+        "Redimensionamento suave e sem engasgos da lista de arquivos de áudio (elisão dinâmica do nome do arquivo com debounce).",
+        "Reset completo de modelos prévios e inicialização estrita no modo DSP padrão, com treino ultra-rápido (<150ms) focado em correções manuais.",
+        "Otimização da taxa de quadros (FPS) no pan e zoom dos gráficos de amplitude e espectrograma.",
+        "Correção no gerador de relatórios PDF, restaurando o diagnóstico de cadência rítmica e a tabela sequencial completa de chilreios.",
+        "Restauração do valor padrão mínimo de 3 pulsos por chilreio (min_p = 3)."
+    ],
     "4.1.0": [
         "Aprendizado Contrastivo Baseado em Regras (Hard Negative Rule Induction): indução automática de regras rígidas de poda com margem de segurança de 30% a partir de correções manuais.",
         "Filtro Rítmico Fisiológico Inter-Chilreio (ICI Gate): descarte de detecções espúrias durante o período refratário fisiológico (Δt < 0.70 × ICI_mediano).",

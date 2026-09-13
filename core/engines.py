@@ -50,11 +50,11 @@ class HighPerfLineEngine:
         self.debounce_timer.stop()
         t0, t1 = self.get_viewport_slice(xmin, xmax)
         
-        pts = 400 if is_sync else 1000 
+        pts = 300 if is_sync else 500 
         t_env, y_env = self._get_envelope(self.time_sec[t0:t1], self.data[t0:t1], max_points=pts)
         self._update_plot(t_env, y_env)
         
-        self.debounce_timer.start(200 if is_sync else 150)
+        self.debounce_timer.start(150 if is_sync else 120)
 
     def render_high_detail(self):
         xmin, xmax = self.ax.get_xlim()

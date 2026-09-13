@@ -7,6 +7,8 @@ import datetime
 import numpy as np
 import scipy.stats
 
+from utils.constants import APP_VERSION
+
 try:
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib import colors
@@ -20,39 +22,42 @@ except ImportError:
     REPORTLAB_AVAILABLE = False
 
 
-class NumberedCanvas(canvas.Canvas):
-    """Canvas com rodapé automático contendo numeração dinâmica de páginas (Página X de Y)."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._saved_page_states = []
+if REPORTLAB_AVAILABLE:
+    class NumberedCanvas(canvas.Canvas):
+        """Canvas com rodapé automático contendo numeração dinâmica de páginas (Página X de Y)."""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
 
-    def showPage(self):
-        self._saved_page_states.append(dict(self.__dict__))
-        self._startPage()
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
 
-    def save(self):
-        num_pages = len(self._saved_page_states)
-        for state in self._saved_page_states:
-            self.__dict__.update(state)
-            self.draw_page_decorations(num_pages)
-            super().showPage()
-        super().save()
+        def save(self):
+            num_pages = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self.draw_page_decorations(num_pages)
+                super().showPage()
+            super().save()
 
-    def draw_page_decorations(self, total_pages):
-        self.saveState()
-        self.setFont("Helvetica", 8)
-        self.setFillColor(colors.HexColor("#64748B"))
-        
-        # Linha fina de rodapé
-        self.setStrokeColor(colors.HexColor("#E2E8F0"))
-        self.setLineWidth(0.6)
-        self.line(36, 38, 559, 38)
+        def draw_page_decorations(self, total_pages):
+            self.saveState()
+            self.setFont("Helvetica", 8)
+            self.setFillColor(colors.HexColor("#64748B"))
+            
+            # Linha fina de rodapé
+            self.setStrokeColor(colors.HexColor("#E2E8F0"))
+            self.setLineWidth(0.6)
+            self.line(36, 38, 559, 38)
 
-        # Texto do rodapé
-        now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-        self.drawString(36, 26, f"Crinômetro v4.1.0 • Bioacústica Computacional • Emitido em {now_str}")
-        self.drawRightString(559, 26, f"Página {self._pageNumber} de {total_pages}")
-        self.restoreState()
+            # Texto do rodapé
+            now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+            self.drawString(36, 26, f"Crinômetro v{APP_VERSION} • Bioacústica Computacional • Emitido em {now_str}")
+            self.drawRightString(559, 26, f"Página {self._pageNumber} de {total_pages}")
+            self.restoreState()
+else:
+    NumberedCanvas = None
 
 
 def format_timestamp_ms(time_sec):
@@ -224,7 +229,7 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
 
     # 1. TÍTULO E CABEÇALHO DO DOCUMENTO
     story.append(Paragraph("🦗 CRINÔMETRO — RELATÓRIO BIOACÚSTICO", title_style))
-    story.append(Paragraph("Bioacústica Computacional e Análise Estridulatória Automatizada (v4.1.0)", subtitle_style))
+    story.append(Paragraph(f"Bioacústica Computacional e Análise Estridulatória Automatizada (v{APP_VERSION})", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284C7"), spaceAfter=10))
 
     # 2. METADADOS INSTITUCIONAIS E DA PESQUISA
@@ -262,10 +267,11 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
 
         duration = float(d.get("duration", 0.0))
         chirps = list(d.get("chirps", []))
-        chirp_peaks_list = list(d.get("chirp_peaks", []))
+        chirp_peaks_list = list(d.get("chirp_peaks_list", d.get("chirp_peaks", [])))
         total_chirps = len(chirps)
         rate = float(d.get("rate", 48000.0))
-        carrier = d.get("carrier_freq")
+        dom_f = d.get("dom_freqs")
+        carrier = d.get("carrier_freq") or (float(np.median(dom_f)) if dom_f is not None and len(dom_f) > 0 else None)
 
         moda = d.get("moda", 0)
         media = float(d.get("media", 0.0))

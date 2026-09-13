@@ -5,7 +5,7 @@ import os
 import sys
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QFrame, QApplication
+    QCheckBox, QFrame, QApplication, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QUrl, QTimer, QPointF, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen
@@ -188,6 +188,30 @@ class LoadingScreen(QWidget):
 
 
 
+class ElidedLabel(QLabel):
+    """Rótulo com elisão suave (...) dinâmica sem travar a largura mínima do layout."""
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.full_text = text
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setToolTip(text)
+
+    def setText(self, text):
+        self.full_text = text
+        self.setToolTip(text)
+        self._update_elision()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_elision()
+
+    def _update_elision(self):
+        fm = self.fontMetrics()
+        avail_w = max(10, self.width() - 2)
+        elided = fm.elidedText(self.full_text, Qt.TextElideMode.ElideRight, avail_w)
+        super().setText(elided)
+
+
 class AudioListItemWidget(QWidget):
     """Widget para item da lista de áudios contendo:
     - Um card clicável com o nome do áudio (com efeito hover e seleção ativa).
@@ -219,7 +243,7 @@ class AudioListItemWidget(QWidget):
         self.lbl_icon.setStyleSheet("background: transparent; border: 0;")
         card_layout.addWidget(self.lbl_icon)
 
-        self.lbl_name = QLabel(filename)
+        self.lbl_name = ElidedLabel(filename)
         self.lbl_name.setObjectName("audioFileName")
         self.lbl_name.setToolTip(filename)
         self.lbl_name.setStyleSheet("background: transparent; border: 0;")
