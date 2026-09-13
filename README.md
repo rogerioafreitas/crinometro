@@ -1,4 +1,4 @@
-# 🦗 Crinômetro v4.0.x
+# 🦗 Crinômetro v4.1.1
 
 > **Software Avançado para Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -7,7 +7,7 @@
 ## 🤖 Declaração de Assistência por Inteligência Artificial
 > [!NOTE]
 > **Aviso de Desenvolvimento com IA:**
-> Este projeto foi desenvolvido, refatorado e otimizado com o auxílio de **Inteligência Artificial (Google DeepMind / Antigravity / Gemini)** em colaboração com o autor, incluindo o design do fluxo do launcher, algoritmos de bioacústica, plasticidade ativa com HistGradientBoosting / Random Forest e empacotamento.
+> Este projeto foi desenvolvido, refatorado e otimizado com o auxílio de **Inteligência Artificial (Google DeepMind / Antigravity / Gemini)** em colaboração com o autor, incluindo o design modular, algoritmos bioacústicos avançados, plasticidade ativa com HistGradientBoosting, regras rígidas de poda contrastiva, interface moderna em PyQt6 e automação de empacotamento.
 
 ---
 
@@ -21,17 +21,17 @@ Você pode baixar os executáveis prontos para uso diretamente no Google Drive o
 
 | Formato | Como funciona? | Para quem é recomendado? |
 | :--- | :--- | :--- |
+| **Versão Onedir (Pasta `Crinometro_v4.1.1` / `.zip`)** | O executável vem acompanhado de suas pastas e bibliotecas já pré-extraídas. Basta descompactar o `.zip` e abrir o `Crinometro_v4.1.1.exe` ou `Crinometro.exe`. | **Recomendado:** abertura instantânea, altíssimo desempenho e eliminação de falsos positivos de antivírus. |
 | **Versão Onefile (Arquivo Único)** | Um arquivo `.exe` individual e portátil. Pronto para rodar diretamente com dois cliques, sem precisar instalar ou extrair nada no seu computador. | Ideal para quem busca **praticidade e portabilidade**, podendo levar o programa direto em um pendrive. |
-| **Versão Onedir (Pasta com Arquivos / .zip)** | O executável vem acompanhado de suas pastas e bibliotecas já pré-extraídas. Basta descompactar o `.zip` e abrir o executável dentro da pasta. | Recomendado para **abertura ultra rápida** e para **evitar falsos positivos** em alguns antivírus. |
 
 ---
 
 ## 📌 Regra de Versionamento (`vX.Y.Z`)
 
-O projeto adota o padrão semântico de versionamento estructurado em três níveis:
+O projeto adota o padrão semântico de versionamento estruturado em três níveis:
 
 - **Major ($X$):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: `v4.0.x` introduzindo a segregação acústica focal vs. coro distante).
-- **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica**. Obrigatoriamente incrementa $Y$ (ex: `v3.4.5` $\rightarrow$ `v3.5.0`).
+- **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: `v4.0.x` $\rightarrow$ `v4.1.0` $\rightarrow$ `v4.1.1`).
 - **Patch / Correções ($Z$):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**.
 
 ---
@@ -53,33 +53,41 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
 - 🌊 **Análise de Onda Acústica (DSP):**
   - Envoltória analítica contínua via Transformada de Hilbert.
   - Filtro digital Butterworth passa-faixa IIR de fase zero (`sosfiltfilt`).
-  - Detecção adaptativa de picos, pulsos e agrupamento em chilreios.
-- 🧠 **Bioacústica Avançada & Segregação Focal vs. Coro Distante (PulseLearner):**
-  - **Segregação não-supervisionada via GMM Bimodal:** Estima o prior físico $P(\text{focal})$ combinando atenuação atmosférica espectral e amplitude relativa.
-  - **Classificador Supervisionado HistGradientBoosting (com fallback para Random Forest):** Treinado sobre 20 descritores físicos de morfologia, atenuação e propagação temporal.
-  - **Agrupamento com Coerência de Trilha (*Track Linking*) em tempo linear $O(N)$:** Expulga intrusos rítmicos sem fragmentar chilreios.
-  - **Botão de Alternância Rápida na Interface:** Permite ligar ou desligar instantaneamente a análise com IA (`🧠 IA: Ativada / Desativada`).
-  - **Feedback Visual Mudo:** Marcadores sutis em cinza na forma de onda e espectrograma identificando pulsos de fundo e ecos descartados.
-  - **Aprendizado ativo contínuo:** Edições manuais na onda realimentam o modelo com o botão *"Aprender com as Correções"*.
-  - Persistência e interoperabilidade de modelos via arquivos `.pkl` e JSON.
-- 📊 **Histograma de Distribuição:** Contagem, média, moda e legenda individual por classe de pulso.
-- 📈 **Frequência Dominante vs. Tempo:** Rastreamento espectral instante a instante com interpolação precisa.
-- 🌈 **Espectrograma STFT Multirresolução:** Mapa tempo-frequência (dB) com engine adaptativa LOD.
-- 🔗 **Sincronização Temporal (`🔗 Sincronizar (X)`):** Trava e sincroniza zoom e deslocamento entre os painéis com precisão de milissegundos.
-- 📑 **Exportação de Relatórios:** Geração de arquivos estruturados em `.txt` para integração com R, Python, PAST e JASP.
-- 🎭 **Launcher Interativo Vetorial:** Mascote animado com estados de repouso e despertar, partículas e frases dinâmicas sobre bioacústica.
+  - Detecção adaptativa de picos e pulsos, com limiar mínimo padrão de 3 pulsos por chilreio (`min_p = 3`).
+- 🪟 **Mini Janelinhas Arredondadas & Reordenáveis:**
+  - Gráficos laterais desenhados com cantos arredondados (`12px`) e cabeçalho elegante.
+  - Botões integrados **`▲`** e **`▼`** para alternar e personalizar a ordem dos gráficos na coluna lateral.
+  - Alinhamento e enquadramento visual limpo mesmo antes do carregamento de áudios.
+- 🧠 **Bioacústica Avançada & Plasticidade Ativa (PulseLearner):**
+  - **Modo Padrão DSP Puro:** O software inicializa em modo estritamente acústico, permitindo ativar o módulo de IA sob demanda.
+  - **Hard Negative Rule Induction:** Indução automática de regras rígidas de poda com margem de segurança de 30% a partir dos falsos positivos removidos manualmente pelo usuário.
+  - **Filtro Fisiológico Inter-Chilreio (ICI Gate):** Expulga ecos e candidatos espúrios que violem o período refratário natural ($0.7 \times \text{ICI}_{mediano}$).
+  - **Segregação Focal vs. Coro Distante via GMM Bimodal:** Modelação física de atenuação atmosférica e amplitude relativa.
+  - **Classificador Supervisionado Leve e Ultrarrápido:** Treinamento em menos de 100 ms com `HistGradientBoostingClassifier`.
+  - **Edição Manual com Hit-box Snapping Adaptativo:** Tolerância de 15px e teto de 20ms para confirmar ou remover pulsos com máxima precisão ergonômica.
+- 🔗 **Sincronização Temporal Compacta (`btn_sync`):**
+  - Botão quadrado compacto (32x32px) posicionado estrategicamente ao lado de *"Reanalisar"*.
+  - Trava e sincroniza zoom e pan no eixo X com precisão de milissegundos.
+  - Tooltips detalhados ao passar o mouse em todos os botões de ação.
+- 🚀 **Desempenho Otimizado a 60 FPS & Redimensionamento Fluido:**
+  - Motor gráfico com decimação adaptativa de pontos e limitador de taxa de renderização (18 ms) para pan sem engasgos.
+  - Elisão dinâmica de nomes de arquivos longos no painel lateral, eliminando qualquer travamento no `QSplitter`.
+- 📑 **Exportação de Relatórios de Publicação (PDF e TXT):**
+  - **Relatório Formal em PDF (ReportLab):** Cabeçalho institucional, diagnóstico rítmico fisiológico automatizado (regressão linear do ICI e coeficiente de variação), tabela paginada com timestamps em centésimos (`mm:ss.cc`) e numeração "Página X de Y".
+  - **Tabela Estruturada em TXT:** Formatação amigável para importação direta no R, Python, PAST e JASP.
+- 🎭 **Launcher Interativo Vetorial:** Mascote animado com estados dinâmicos, partículas e frases temáticas de bioacústica.
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
 - **Linguagem:** Python 3.10+
-- **Interface Gráfica:** PyQt5 / QtMultimedia
-- **Processamento Numérico e Sinal:** NumPy, SciPy (Signal, Integrate, Special, IO)
+- **Interface Gráfica:** PyQt6 / QtMultimedia
+- **Processamento Numérico e Sinais:** NumPy, SciPy (Signal, Integrate, Special, IO)
 - **Machine Learning:** Scikit-Learn (HistGradientBoostingClassifier, RandomForestClassifier, GaussianMixture)
-- **Visualização de Dados:** Matplotlib
+- **Visualização Científica:** Matplotlib
 - **Geração de Documentos:** ReportLab, Pillow
-- **Empacotamento:** PyInstaller
+- **Empacotamento e Distribuição:** PyInstaller
 
 ---
 
@@ -102,7 +110,7 @@ source .venv/bin/activate
 
 ### 3. Instalar dependências
 ```bash
-pip install PyQt5 numpy scipy scikit-learn matplotlib reportlab pillow pyinstaller
+pip install PyQt6 numpy scipy scikit-learn matplotlib reportlab pillow pyinstaller
 ```
 
 ### 4. Executar a aplicação
