@@ -14,34 +14,111 @@ from utils.icons import make_ui_icon
 
 
 class PlotTitleBar(QWidget):
-    """Barra de título da mini janela com suporte a arrastar e soltar (drag to reorder)."""
+    """Barra de título da mini janela com suporte a arrastar e soltar (drag & drop fluido com preview)."""
     def __init__(self, panel, parent=None):
         super().__init__(parent)
         self.panel = panel
         self._drag_start_pos = None
+        self._is_dragging = False
+        self._preview_frame = None
+        self._hover_target = None
+
+    def _get_preview_frame(self, win):
+        if self._preview_frame is None or self._preview_frame.window() != win:
+            self._preview_frame = QFrame(win)
+            self._preview_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            self._preview_frame.setStyleSheet(
+                "QFrame { "
+                "background-color: rgba(37, 99, 235, 0.22); "
+                "border: 2px dashed #3B82F6; "
+                "border-radius: 8px; "
+                "}"
+            )
+        return self._preview_frame
+
+    def _find_drop_target(self, global_pos, win):
+        """Identifica qual painel ou host está sob o cursor."""
+        if not hasattr(win, "all_panels"):
+            return None
+
+        # Verifica primeiro se está sobre o main_host / main_panel
+        if hasattr(win, "main_host") and win.main_host is not None:
+            m_top_left = win.main_host.mapToGlobal(win.main_host.rect().topLeft())
+            m_rect = win.main_host.rect()
+            m_rect.moveTo(m_top_left)
+            if m_rect.contains(global_pos):
+                if self.panel is not win.main_panel:
+                    return win.main_panel
+
+        # Verifica se está sobre algum card na pilha lateral
+        if hasattr(win, "stack_panels"):
+            for p in win.stack_panels:
+                p_top_left = p.mapToGlobal(p.rect().topLeft())
+                p_rect = p.rect()
+                p_rect.moveTo(p_top_left)
+                if p_rect.contains(global_pos):
+                    return p
+
+        return None
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start_pos = event.pos()
+            self._drag_start_pos = event.globalPosition().toPoint()
+            self._is_dragging = False
+            self._hover_target = None
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._drag_start_pos is not None and (event.buttons() & Qt.MouseButton.LeftButton):
-            dy = event.pos().y() - self._drag_start_pos.y()
-            if dy > 35:  # Arrastou para baixo
-                self._drag_start_pos = event.pos()
+            cur_pos = event.globalPosition().toPoint()
+            dist = (cur_pos - self._drag_start_pos).manhattanLength()
+            if dist > 8:
+                self._is_dragging = True
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 win = self.window()
-                if hasattr(win, "move_stack_panel"):
-                    win.move_stack_panel(self.panel, 1)
-            elif dy < -35:  # Arrastou para cima
-                self._drag_start_pos = event.pos()
-                win = self.window()
-                if hasattr(win, "move_stack_panel"):
-                    win.move_stack_panel(self.panel, -1)
+                target = self._find_drop_target(cur_pos, win)
+                self._hover_target = target
+
+                preview = self._get_preview_frame(win)
+                if target is not None and target is not self.panel:
+                    # Mapeia a geometria do widget alvo para as coordenadas da janela principal
+                    target_rect = target.rect()
+                    top_left_win = win.mapFromGlobal(target.mapToGlobal(target_rect.topLeft()))
+                    preview.setGeometry(top_left_win.x(), top_left_win.y(), target.width(), target.height())
+                    preview.show()
+                    preview.raise_()
+                else:
+                    preview.hide()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        win = self.window()
+        if self._preview_frame is not None:
+            self._preview_frame.hide()
+
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+        if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
+            cur_pos = event.globalPosition().toPoint()
+            target = self._find_drop_target(cur_pos, win)
+
+            if target is not None and target is not self.panel:
+                # Se soltou sobre o painel principal: efetua swap com o painel maximizado
+                if hasattr(win, "main_panel") and (target is win.main_panel or target is getattr(win, "main_host", None)):
+                    if hasattr(win, "swap_main_panel"):
+                        win.swap_main_panel(self.panel)
+                # Se soltou sobre outro painel da pilha lateral
+                elif hasattr(win, "stack_panels") and target in win.stack_panels and self.panel in win.stack_panels:
+                    if hasattr(win, "reorder_stack_panels"):
+                        win.reorder_stack_panels(self.panel, target)
+                # Se o painel arrastado era o main_panel e foi solto sobre um painel da pilha lateral
+                elif hasattr(win, "main_panel") and self.panel is win.main_panel and target in win.stack_panels:
+                    if hasattr(win, "swap_main_panel"):
+                        win.swap_main_panel(target)
+
         self._drag_start_pos = None
+        self._is_dragging = False
+        self._hover_target = None
         super().mouseReleaseEvent(event)
 
 

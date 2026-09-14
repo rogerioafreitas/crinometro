@@ -370,6 +370,7 @@ class MainWindow(QMainWindow):
             _label.setAutoFillBackground(False)
         summary_info.addWidget(self.lbl_eyebrow)
         summary_info.addWidget(self.lbl_summary_file)
+        self.lbl_summary_meta.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         summary_info.addWidget(self.lbl_summary_meta)
         summary.addLayout(summary_info, 1)
 
@@ -564,7 +565,8 @@ class MainWindow(QMainWindow):
         transport_timeline_layout.addWidget(self.timeline)
         right_layout.addWidget(self.transport_timeline_card)
 
-        self.left_panel.setMinimumWidth(0)
+        self.left_panel.setMinimumWidth(220)
+        self.left_panel.setMaximumWidth(450)
         self.splitter.addWidget(self.left_panel)
         self.splitter.addWidget(self.right_panel)
         self.splitter.setStretchFactor(0, 0)
@@ -670,6 +672,24 @@ class MainWindow(QMainWindow):
                     p.canvas.draw_idle()
             finally:
                 self._swapping_panels = False
+
+    def reorder_stack_panels(self, source_panel, target_panel):
+        """Reordena os painéis da pilha lateral ao soltar (drag & drop fluido)."""
+        if source_panel not in self.stack_panels or target_panel not in self.stack_panels:
+            return
+        if source_panel is target_panel or getattr(self, "_swapping_panels", False):
+            return
+        self._swapping_panels = True
+        try:
+            self.stack_panels.remove(source_panel)
+            target_idx = self.stack_panels.index(target_panel)
+            self.stack_panels.insert(target_idx, source_panel)
+            self._rebuild_panel_layout()
+            self._apply_plot_geometry()
+            for p in self.all_panels:
+                p.canvas.draw_idle()
+        finally:
+            self._swapping_panels = False
 
     def _fit_all_plots_to_layout(self):
         if not self.active_heavy_data:
@@ -807,10 +827,13 @@ class MainWindow(QMainWindow):
     def toggle_sidebar(self):
         sizes = self.splitter.sizes()
         if sizes and sizes[0] <= 10:
+            self.left_panel.setMinimumWidth(220)
+            self.left_panel.setMaximumWidth(450)
             self.splitter.setSizes([260, max(700, self.width() - 260)])
             self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
             self.btn_collapse.setToolTip("Ocultar painel de arquivos")
         else:
+            self.left_panel.setMinimumWidth(0)
             self.splitter.setSizes([0, self.width()])
             self.btn_collapse.setIcon(make_ui_icon("chevron_right", size=18))
             self.btn_collapse.setToolTip("Mostrar painel de arquivos")
@@ -1513,6 +1536,7 @@ class MainWindow(QMainWindow):
 
 
     def render_dashboard(self, filename):
+        cur_splitter_sizes = self.splitter.sizes() if hasattr(self, "splitter") else None
         # Limpa referências a linhas de alinhamento do clique em eixos que serão
         # destruídos/recriados nesta renderização. Mantê-las causaria RuntimeError
         # ao chamar line.remove() na próxima chamada de _align_click_marker().
@@ -1677,6 +1701,8 @@ class MainWindow(QMainWindow):
         self.timeline.set_position(self.player.position() / 1000.0)
         self._update_pulse_hover_data()
         self.capture_backgrounds()
+        if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
+            self.splitter.setSizes(cur_splitter_sizes)
 
     def _update_pulse_hover_data(self):
         """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""

@@ -261,10 +261,83 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     story.append(meta_table)
     story.append(Spacer(1, 14))
 
-    # 3. RELATÓRIO DETALHADO POR ÁUDIO
+    # 3. TABELA COMPARATIVA GERAL (Quando houver mais de 1 áudio, especialmente no modo Simplificado)
+    if len(selected_cache) > 1:
+        story.append(Paragraph("<b>Síntese Bioacústica Comparativa entre Áudios</b>", section_h1))
+        comp_headers = [
+            Paragraph("<b>Arquivo / Espécime</b>", table_header),
+            Paragraph("<b>Duração</b>", table_header),
+            Paragraph("<b>Chilreios</b>", table_header),
+            Paragraph("<b>Moda</b>", table_header),
+            Paragraph("<b>Média ± Desv</b>", table_header),
+            Paragraph("<b>Dens. (chilr/s)</b>", table_header),
+            Paragraph("<b>ICI Mediano</b>", table_header),
+            Paragraph("<b>Diagnóstico Rítmico</b>", table_header),
+        ]
+        comp_rows = [comp_headers]
+
+        for fname, d in selected_cache.items():
+            dur = float(d.get("duration", 0.0))
+            ch = list(d.get("chirps", []))
+            ch_list = list(d.get("chirp_peaks_list", d.get("chirp_peaks", [])))
+            r = float(d.get("rate", 48000.0))
+            tot_ch = len(ch)
+            m_val = d.get("moda", 0)
+            med_val = float(d.get("media", 0.0))
+            std_val = float(np.std(ch)) if ch else 0.0
+            dens_c = (tot_ch / dur) if dur > 0 else 0.0
+            cad = analyze_rhythmic_cadence(ch_list, r)
+            diag_t = cad["diagnosis"]
+            ici_m = cad["ici_median_ms"]
+
+            # Cor de diagnóstico
+            if diag_t == "Cadência Estável":
+                d_color = "#059669"
+            elif diag_t == "Aceleração Rítmica":
+                d_color = "#2563EB"
+            elif diag_t == "Desaceleração Rítmica":
+                d_color = "#D97706"
+            else:
+                d_color = "#64748B"
+
+            comp_rows.append([
+                Paragraph(f"<b>{fname}</b>", table_cell_bold),
+                Paragraph(f"{dur:.1f}s", table_cell),
+                Paragraph(f"<b>{tot_ch}</b>", table_cell_bold),
+                Paragraph(f"{m_val}", table_cell),
+                Paragraph(f"{med_val:.1f} ± {std_val:.1f}", table_cell),
+                Paragraph(f"{dens_c:.2f}", table_cell),
+                Paragraph(f"{ici_m:.1f} ms", table_cell),
+                Paragraph(f"<font color='{d_color}'><b>{diag_t}</b></font>", table_cell_bold),
+            ])
+
+        comp_table = Table(comp_rows, colWidths=[120, 48, 52, 40, 72, 60, 58, 73], repeatRows=1)
+        c_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
+            ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]
+        for r_i in range(1, len(comp_rows)):
+            if r_i % 2 == 0:
+                c_style.append(('BACKGROUND', (0, r_i), (-1, r_i), colors.HexColor("#F8FAFC")))
+            else:
+                c_style.append(('BACKGROUND', (0, r_i), (-1, r_i), colors.white))
+        comp_table.setStyle(TableStyle(c_style))
+        story.append(comp_table)
+        story.append(Spacer(1, 14))
+
+    # 4. RELATÓRIO DETALHADO POR ÁUDIO
     for audio_idx, (fname, d) in enumerate(selected_cache.items()):
-        if audio_idx > 0:
+        # No relatório completo, cada áudio inicia em uma nova página.
+        # No relatório simplificado, agrupamos para economizar espaço e colocar múltiplos por página.
+        if audio_idx > 0 and include_chirp_list:
             story.append(PageBreak())
+
+        audio_elements = []
 
         duration = float(d.get("duration", 0.0))
         chirps = list(d.get("chirps", []))
@@ -283,8 +356,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
         dens_chirps = (total_chirps / duration) if duration > 0 else 0.0
         dens_pulses = (total_pulses / duration) if duration > 0 else 0.0
 
-        story.append(Paragraph(f"<b>Arquivo:</b> {fname}", section_h1))
-        story.append(HRFlowable(width="100%", thickness=0.8, color=colors.HexColor("#E2E8F0"), spaceAfter=8))
+        audio_elements.append(Paragraph(f"<b>Arquivo:</b> {fname}", section_h1))
+        audio_elements.append(HRFlowable(width="100%", thickness=0.8, color=colors.HexColor("#CBD5E1"), spaceAfter=6))
 
         # Tabela de Métricas Globais
         carrier_text = f"{carrier:.1f} Hz" if carrier else "N/A"
@@ -323,13 +396,13 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
             ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
-        story.append(metrics_table)
-        story.append(Spacer(1, 10))
+        audio_elements.append(metrics_table)
+        audio_elements.append(Spacer(1, 6))
 
-        # 4. DIAGNÓSTICO DE CADÊNCIA RÍTMICA
+        # Diagnóstico de Cadência Rítmica
         cadence = analyze_rhythmic_cadence(chirp_peaks_list, rate)
         diag_title = cadence["diagnosis"]
         
@@ -360,13 +433,19 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
             ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(badge_color)),
             ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ]))
-        story.append(cadence_table)
-        story.append(Spacer(1, 12))
+        audio_elements.append(cadence_table)
+        audio_elements.append(Spacer(1, 10))
+
+        # No relatório simplificado, mantemos o bloco do áudio coeso via KeepTogether
+        if not include_chirp_list:
+            story.append(KeepTogether(audio_elements))
+        else:
+            story.extend(audio_elements)
 
         # 5. TABELA ESTRUTURADA DE CHILREIOS (inclusa no Relatório Completo; omitida no Simplificado)
         if include_chirp_list:

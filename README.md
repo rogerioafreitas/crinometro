@@ -1,4 +1,4 @@
-# 🦗 Crinômetro v4.1.1
+# 🦗 Crinômetro v4.1.2
 
 > **Software Avançado para Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -21,7 +21,7 @@ Você pode baixar os executáveis prontos para uso diretamente no Google Drive o
 
 | Formato | Como funciona? | Para quem é recomendado? |
 | :--- | :--- | :--- |
-| **Versão Onedir (Pasta `Crinometro_v4.1.1` / `.zip`)** | O executável vem acompanhado de suas pastas e bibliotecas já pré-extraídas. Basta descompactar o `.zip` e abrir o `Crinometro_v4.1.1.exe` ou `Crinometro.exe`. | **Recomendado:** abertura instantânea, altíssimo desempenho e eliminação de falsos positivos de antivírus. |
+| **Versão Onedir (Pasta `Crinometro_v4.1.2` / `.zip`)** | O executável vem acompanhado de suas pastas e bibliotecas já pré-extraídas. Basta descompactar o `.zip` e abrir o `Crinometro_v4.1.2.exe` ou `Crinometro.exe`. | **Recomendado:** abertura instantânea, altíssimo desempenho e eliminação de falsos positivos de antivírus. |
 | **Versão Onefile (Arquivo Único)** | Um arquivo `.exe` individual e portátil. Pronto para rodar diretamente com dois cliques, sem precisar instalar ou extrair nada no seu computador. | Ideal para quem busca **praticidade e portabilidade**, podendo levar o programa direto em um pendrive. |
 
 ---
@@ -31,7 +31,7 @@ Você pode baixar os executáveis prontos para uso diretamente no Google Drive o
 O projeto adota o padrão semântico de versionamento estruturado em três níveis:
 
 - **Major ($X$):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: `v4.0.x` introduzindo a segregação acústica focal vs. coro distante).
-- **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: `v4.0.x` $\rightarrow$ `v4.1.0` $\rightarrow$ `v4.1.1`).
+- **Minor ($Y$):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: `v4.0.x` $\rightarrow$ `v4.1.0` $\rightarrow$ `v4.1.2`).
 - **Patch / Correções ($Z$):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**.
 
 ---
@@ -54,10 +54,11 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - Envoltória analítica contínua via Transformada de Hilbert.
   - Filtro digital Butterworth passa-faixa IIR de fase zero (`sosfiltfilt`).
   - Detecção adaptativa de picos e pulsos, com limiar mínimo padrão de 3 pulsos por chilreio (`min_p = 3`).
-- 🪟 **Mini Janelinhas Arredondadas & Reordenáveis:**
+- 🪟 **Mini Janelinhas Arredondadas & Arraste Fluido com Previsão Visual (Drag & Drop):**
   - Gráficos laterais desenhados com cartões de cantos arredondados (`14px`) nativos em Qt (`QFrame`) e transparência de canvas (`patch.set_alpha(0.0)`).
   - Enquadramento pixel-exact adaptativo que impede cortes de rótulos dos eixos ("seconds", "Hz", "Amplitude") com e sem áudio carregado.
-  - Reordenação interativa: arraste as barras de título para cima/baixo para trocar a posição dos gráficos ou use os botões **`▲`** e **`▼`**.
+  - **Arraste e Solte com Previsão Visual:** Sistema fluido de reordenação com moldura indicadora translúcida (*drop indicator*). A reorganização visual só é aplicada no momento em que o mouse é solto, eliminando piscamentos e redraws intermediários.
+  - **Troca Rápida com Gráfico Principal:** Soltar qualquer mini janela em cima da área principal realiza o swap imediato com o painel maximizado.
 - 🧠 **Bioacústica Avançada & Plasticidade Ativa (PulseLearner):**
   - **Modo Padrão DSP Puro:** O software inicializa em modo estritamente acústico, permitindo ativar o módulo de IA sob demanda.
   - **Hard Negative Rule Induction:** Indução automática de regras rígidas de poda com margem de segurança de 30% a partir dos falsos positivos removidos manualmente pelo usuário.
@@ -69,13 +70,13 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - Botão quadrado compacto (32x32px) posicionado estrategicamente ao lado de *"Reanalisar"*.
   - Trava e sincroniza zoom e pan no eixo X com precisão de milissegundos.
   - Tooltips detalhados ao passar o mouse em todos os botões de ação.
-- 🚀 **Desempenho Otimizado a 60 FPS & Redimensionamento Fluido:**
+- 🚀 **Desempenho Otimizado a 60 FPS & Barra Lateral Estável:**
   - Motor gráfico com decimação adaptativa de pontos e limitador de taxa de renderização (18 ms) para pan sem engasgos.
-  - Painel de arquivos com abertura perfeitamente dimensionada (260px), barra de rolagem vertical moderna e eliminação total da barra de rolagem horizontal redundante.
-  - Elisão dinâmica de nomes de arquivos longos no painel lateral, eliminando qualquer travamento no `QSplitter`.
+  - Barra lateral de arquivos com largura estável e trava mecânica mínima de 220px, impedindo que análises subsequentes encolham a barra.
+  - Eliminação total de barras de rolagem redundantes e elisão dinâmica de nomes longos.
 - 📑 **Exportação de Relatórios de Publicação (PDF e TXT):**
   - **Relatório Completo em PDF (ReportLab):** Cabeçalho institucional, parâmetros de detecção, métricas globais consolidadas, diagnóstico rítmico fisiológico automatizado (regressão linear do ICI e coeficiente de variação), tabela sequencial detalhada de chilreios com timestamps em centésimos (`mm:ss.cc`) e numeração "Página X de Y".
-  - **Relatório Simplificado em PDF:** Todas as informações, métricas de síntese e diagnóstico rítmico do relatório completo em um formato executivo condensado, omitindo apenas a listagem sequencial de chilreios.
+  - **Relatório Simplificado Multiaudio Compacto em PDF:** Síntese bioacústica comparativa consolidada, agrupando múltiplos áudios de forma contínua por página sem desperdício de espaço, omitindo apenas a listagem sequencial de chilreios.
   - **Tabela Estruturada em TXT:** Formatação amigável para importação direta no R, Python, PAST e JASP.
 - 🎭 **Launcher Interativo Vetorial:** Mascote animado com estados dinâmicos, partículas e frases temáticas de bioacústica.
 

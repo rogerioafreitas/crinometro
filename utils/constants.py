@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.1.1"
+APP_VERSION = "4.1.2"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -17,6 +17,13 @@ DEFAULT_ALGO_PARAMS = {
 }
 
 CHANGELOG = {
+    "4.1.2": [
+        "Relatório Simplificado em PDF compacto: consolidação de múltiplos áudios por página sem desperdício de espaço e síntese bioacústica comparativa integrada.",
+        "Estabilidade da Barra Lateral: correção do encolhimento automático do divisor (splitter) após análise de áudio, com preservação de largura mínima de 220px.",
+        "Arraste e Solte (Drag & Drop) Fluido de Painéis: previsão visual de drop (moldura com preview translúcido) sem piscadas ou reconstrução prematura, executando a reorganização somente ao soltar o mouse.",
+        "Troca Rápida de Painel Principal: suporte completo a arrastar qualquer mini janela lateral para a posição do gráfico maximizado para substituí-lo instantaneamente.",
+        "Ajuste visual refinado dos gráficos e eliminação de barras de rolagem redundantes."
+    ],
     "4.1.1": [
         "Correção do bug no aprendizado ativo ('find_peaks' indefinido na mineração de negativos).",
         "Redesign dos botões de ação e reposicionamento ergonômico do botão de sincronização X (compacto, com legendas em hover).",
