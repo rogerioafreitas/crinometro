@@ -42,6 +42,8 @@ from ui.dialogs import (
     AlgoSettingsDialog, AdvancedAlgoSettingsDialog, GeneralSettingsDialog,
     ChangelogDialog, AboutDialog
 )
+from core.updater import UpdateCheckerThread
+from ui.update_dialog import UpdateDialog
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -198,9 +200,14 @@ class MainWindow(QMainWindow):
         self.action_reset_settings.triggered.connect(self.reset_to_defaults)
         self.settings_menu.addAction(self.action_reset_settings)
         self.help_menu = self.app_menu.addMenu(I18N[self.lang]["help"])
+        self.action_check_updates = QAction(I18N[self.lang].get("check_updates", "Verificar Atualizações..."), self)
+        self.action_check_updates.setIcon(make_ui_icon("export", color="#10B981", size=16))
+        self.action_check_updates.triggered.connect(self.check_for_updates)
+        self.help_menu.addAction(self.action_check_updates)
         self.action_about = QAction(I18N[self.lang]["about"], self)
         self.action_about.triggered.connect(self.open_about)
         self.help_menu.addAction(self.action_about)
+
 
     def update_menu_text(self):
         l = self.lang
@@ -219,6 +226,8 @@ class MainWindow(QMainWindow):
         self.action_save_settings.setText(I18N[l]["save_settings"])
         self.action_reset_settings.setText(I18N[l]["reset_settings"])
         self.help_menu.setTitle(I18N[l]["help"])
+        if hasattr(self, "action_check_updates"):
+            self.action_check_updates.setText(I18N[l].get("check_updates", "Verificar Atualizações..."))
         self.action_about.setText(I18N[l]["about"])
         self.setWindowTitle(I18N[l]["app_title"])
 
@@ -1318,6 +1327,36 @@ class MainWindow(QMainWindow):
 
     def open_about(self):
         AboutDialog(self).exec()
+
+    def check_for_updates(self, silent=False):
+        """Verifica se há novas atualizações disponíveis no GitHub."""
+        self._checker_thread = UpdateCheckerThread(self)
+
+        def _on_available(info):
+            dlg = UpdateDialog(info, self)
+            dlg.exec()
+
+        def _on_no_update(info):
+            if not silent:
+                QMessageBox.information(
+                    self,
+                    "Crinômetro Atualizado",
+                    f"Você já está executando a versão mais recente do Crinômetro (v{APP_VERSION})!"
+                )
+
+        def _on_error(err_msg):
+            if not silent:
+                QMessageBox.warning(
+                    self,
+                    "Aviso de Atualização",
+                    f"Não foi possível verificar atualizações no momento:\n{err_msg}"
+                )
+
+        self._checker_thread.update_available.connect(_on_available)
+        self._checker_thread.no_update.connect(_on_no_update)
+        self._checker_thread.error.connect(_on_error)
+        self._checker_thread.start()
+
 
     def load_settings(self):
         """Carrega as configurações persistidas, mantendo os valores padrão quando ausentes."""

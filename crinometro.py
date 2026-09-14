@@ -22,6 +22,7 @@ from core.analyzer import CricketAnalyzer
 from core.learner import PulseLearner
 from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine
 from core.worker import GenericWorker
+from core.updater import UpdateCheckerThread, UpdateDownloaderThread, is_remote_version_newer
 
 from ui.panels import PlotPanel, TimelineWidget
 from ui.widgets import ButtonSpinner, ThemeToggle, LoadingScreen, AudioListItemWidget
@@ -32,8 +33,10 @@ from ui.dialogs import (
     ChangelogDialog,
     AboutDialog
 )
+from ui.update_dialog import UpdateDialog
 from ui.main_window import MainWindow
 from main import main
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

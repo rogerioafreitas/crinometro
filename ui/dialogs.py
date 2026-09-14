@@ -13,6 +13,9 @@ from PyQt6.QtGui import QFont, QDesktopServices
 from utils.constants import APP_VERSION, DEFAULT_ALGO_PARAMS, CHANGELOG
 from utils.i18n import I18N
 from utils.icons import get_app_icon
+from core.updater import UpdateCheckerThread
+from ui.update_dialog import UpdateDialog
+
 
 class AlgoSettingsDialog(QDialog):
     def __init__(self, current_params, lang, parent=None):
@@ -454,17 +457,64 @@ class AboutDialog(QDialog):
         for _lbl in (lbl_title, lbl_version, lbl_dev, lbl_desc):
             _lbl.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             _lbl.setAutoFillBackground(False)
-        
+
+        btns_layout = QHBoxLayout()
+        btns_layout.setSpacing(10)
+
+        self.btn_check_update = QPushButton("🔍 Verificar Atualizações")
+        self.btn_check_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_check_update.clicked.connect(self._check_for_updates)
+        btns_layout.addWidget(self.btn_check_update)
+
+        btns_layout.addStretch()
+
         btn_close = QPushButton("Fechar")
         btn_close.setObjectName("btn_secondary")
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.clicked.connect(self.accept)
-        
+        btns_layout.addWidget(btn_close)
+
         layout.addWidget(lbl_title)
         layout.addWidget(lbl_version)
         layout.addWidget(lbl_dev)
         layout.addWidget(lbl_desc)
         layout.addStretch()
-        layout.addWidget(btn_close)
+        layout.addLayout(btns_layout)
+
+    def _check_for_updates(self):
+        self.btn_check_update.setEnabled(False)
+        self.btn_check_update.setText("Checando...")
+        self.checker = UpdateCheckerThread(self)
+        self.checker.update_available.connect(self._on_update_available)
+        self.checker.no_update.connect(self._on_no_update)
+        self.checker.error.connect(self._on_update_error)
+        self.checker.start()
+
+    def _on_update_available(self, info):
+        self.btn_check_update.setEnabled(True)
+        self.btn_check_update.setText("🔍 Verificar Atualizações")
+        dlg = UpdateDialog(info, self)
+        dlg.exec()
+
+    def _on_no_update(self, info):
+        self.btn_check_update.setEnabled(True)
+        self.btn_check_update.setText("🔍 Verificar Atualizações")
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self,
+            "Crinômetro Atualizado",
+            f"Você já está executando a versão mais recente do Crinômetro (v{APP_VERSION})!"
+        )
+
+    def _on_update_error(self, err_msg):
+        self.btn_check_update.setEnabled(True)
+        self.btn_check_update.setText("🔍 Verificar Atualizações")
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            self,
+            "Aviso de Atualização",
+            f"Não foi possível verificar atualizações no momento:\n{err_msg}"
+        )
 
     def _open_changelog(self, _link=None):
         dlg = ChangelogDialog(self)
