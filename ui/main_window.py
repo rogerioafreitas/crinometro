@@ -170,10 +170,14 @@ class MainWindow(QMainWindow):
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.action_save_txt)
         self.file_menu.addAction(self.action_export)
-        self.action_export_pdf = QAction("Exportar Relatório em PDF", self)
-        self.action_export_pdf.setIcon(make_ui_icon("export", color="#2563EB", size=16))
-        self.action_export_pdf.triggered.connect(self.action_save_pdf)
-        self.file_menu.addAction(self.action_export_pdf)
+        self.action_export_pdf_full = QAction("Exportar Relatório Completo (.pdf)", self)
+        self.action_export_pdf_full.setIcon(make_ui_icon("export", color="#2563EB", size=16))
+        self.action_export_pdf_full.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=True))
+        self.file_menu.addAction(self.action_export_pdf_full)
+        self.action_export_pdf_simple = QAction("Exportar Relatório Simplificado (.pdf)", self)
+        self.action_export_pdf_simple.setIcon(make_ui_icon("export", color="#0284C7", size=16))
+        self.action_export_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
+        self.file_menu.addAction(self.action_export_pdf_simple)
         self.settings_menu = self.app_menu.addMenu(I18N[self.lang]["settings"])
         self.action_algo_config = QAction(I18N[self.lang]["algo_settings"], self)
         self.action_algo_config.triggered.connect(self.open_algo_settings)
@@ -203,8 +207,10 @@ class MainWindow(QMainWindow):
         self.file_menu.setTitle(I18N[l]["file"])
         self.action_load.setText(I18N[l]["load"])
         self.action_export.setText(I18N[l]["export"])
-        if hasattr(self, "action_export_pdf"):
-            self.action_export_pdf.setText("Exportar Relatório em PDF" if l == "pt" else "Export PDF Report")
+        if hasattr(self, "action_export_pdf_full"):
+            self.action_export_pdf_full.setText("Exportar Relatório Completo (.pdf)" if l == "pt" else "Export Full Report (.pdf)")
+        if hasattr(self, "action_export_pdf_simple"):
+            self.action_export_pdf_simple.setText("Exportar Relatório Simplificado (.pdf)" if l == "pt" else "Export Simplified Report (.pdf)")
         self.settings_menu.setTitle(I18N[l]["settings"])
         self.action_algo_config.setText(I18N[l]["algo_settings"])
         self.action_report_config.setText(I18N[l]["gen_settings"])
@@ -327,6 +333,8 @@ class MainWindow(QMainWindow):
 
         self.list_widget = QListWidget()
         self.list_widget.setIconSize(QSize(15, 15))
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.list_widget.itemSelectionChanged.connect(self.on_file_selected)
         left_layout.addWidget(self.list_widget, 1)
 
@@ -556,9 +564,12 @@ class MainWindow(QMainWindow):
         transport_timeline_layout.addWidget(self.timeline)
         right_layout.addWidget(self.transport_timeline_card)
 
+        self.left_panel.setMinimumWidth(0)
         self.splitter.addWidget(self.left_panel)
         self.splitter.addWidget(self.right_panel)
-        self.splitter.setSizes([238, 1240])
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([260, 1220])
         self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -676,7 +687,7 @@ class MainWindow(QMainWindow):
     def _apply_plot_geometry(self):
         """Enquadra os gráficos de forma adaptativa ao tamanho real de cada canvas.
 
-        Garante proporções harmônicas para mini janelinhas sem cortar rótulos nem ticks.
+        Garante proporções perfeitas para mini janelinhas sem cortar rótulos, títulos nem ticks.
         """
         if not hasattr(self, "all_panels"):
             return
@@ -688,28 +699,37 @@ class MainWindow(QMainWindow):
 
             w = max(1, panel.canvas.width())
             h = max(1, panel.canvas.height())
-            is_main = panel is self.main_panel
+            is_main = (panel is self.main_panel)
 
-            if panel is self.panel_hist:
-                left = 0.16 if w < 480 else 0.14
-                right = 0.965
-                top = 0.88
-                bottom = 0.24 if h < 220 else 0.20
-            elif is_main:
-                left = 0.085 if w > 700 else 0.10
-                right = 0.98
-                top = 0.94
-                bottom = 0.13 if h > 350 else 0.15
+            if is_main:
+                # Painel principal central (amplo)
+                left = max(0.065, min(0.12, 56.0 / w))
+                right = 1.0 - max(0.015, min(0.04, 16.0 / w))
+                top = 1.0 - max(0.03, min(0.08, 18.0 / h))
+                bottom = max(0.11, min(0.18, 46.0 / h))
+                font_size = 8.5
             else:
-                left = 0.16 if w < 480 else 0.14
-                right = 0.965
-                top = 0.89
-                bottom = 0.22 if h < 220 else 0.18
+                # Mini janelinhas na coluna lateral direita
+                top = 1.0 - max(0.05, min(0.12, 14.0 / h))
+                right = 1.0 - max(0.02, min(0.06, 12.0 / w))
+
+                if panel is self.panel_hist:
+                    left = max(0.13, min(0.22, 40.0 / w))
+                    bottom = max(0.28, min(0.38, 44.0 / h))
+                elif panel is self.panel_freq:
+                    # Frequência tem números de 4 dígitos na vertical (ex: 6000) + 'Hz'
+                    left = max(0.17, min(0.28, 54.0 / w))
+                    bottom = max(0.28, min(0.38, 42.0 / h))
+                else:  # panel_wave
+                    # Onda tem '-1', '0', '1' + 'Amplitude'
+                    left = max(0.15, min(0.25, 48.0 / w))
+                    bottom = max(0.28, min(0.38, 42.0 / h))
+
+                font_size = 7.5
 
             fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
 
-            font_size = 8.5 if is_main else 7.5
-            panel.ax.tick_params(labelsize=font_size, pad=2, length=3.0 if is_main else 2.5)
+            panel.ax.tick_params(labelsize=font_size, pad=2.5, length=3.0 if is_main else 2.5)
             if hasattr(panel.ax, "xaxis") and panel.ax.xaxis.label is not None:
                 panel.ax.xaxis.label.set_size(font_size + 0.5)
             if hasattr(panel.ax, "yaxis") and panel.ax.yaxis.label is not None:
@@ -786,8 +806,8 @@ class MainWindow(QMainWindow):
 
     def toggle_sidebar(self):
         sizes = self.splitter.sizes()
-        if sizes and sizes[0] <= 4:
-            self.splitter.setSizes([238, max(700, self.width()-238)])
+        if sizes and sizes[0] <= 10:
+            self.splitter.setSizes([260, max(700, self.width() - 260)])
             self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
             self.btn_collapse.setToolTip("Ocultar painel de arquivos")
         else:
@@ -823,7 +843,7 @@ class MainWindow(QMainWindow):
         item = QListWidgetItem(self.list_widget)
         item.setText("")  # Deixa vazio no QListWidgetItem para evitar sobreposição visual
         item.setData(Qt.ItemDataRole.UserRole, filename)
-        item.setSizeHint(QSize(200, 36))
+        item.setSizeHint(QSize(0, 36))
 
         widget = AudioListItemWidget(
             filename,
@@ -1585,13 +1605,12 @@ class MainWindow(QMainWindow):
         ax2.tick_params(axis='x', labelsize=8.5, colors='#A9ADB5' if self.theme_mode == 'dark' else '#59616B', length=0)
         ax2.tick_params(axis='y', labelsize=8, colors='#A9ADB5' if self.theme_mode == 'dark' else '#59616B')
         ax2.set_ylim(0, max_count * 1.20)
-        ax2.figure.subplots_adjust(left=0.08, right=0.98, top=0.92, bottom=0.30)
         legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
                           for x in unique_pulses]
         if legend_handles:
-            leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.16),
-                             ncol=min(4, len(legend_handles)), frameon=False, fontsize=9.5, handlelength=1.2,
-                             columnspacing=0.9, borderaxespad=0.0)
+            leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.15),
+                             ncol=min(4, len(legend_handles)), frameon=False, fontsize=8.0, handlelength=1.0,
+                             columnspacing=0.6, borderaxespad=0.0)
             leg.get_frame().set_facecolor((0, 0, 0, 0))
             leg.get_frame().set_alpha(0.0)
             leg.get_frame().set_edgecolor((0, 0, 0, 0))
@@ -1786,13 +1805,15 @@ class MainWindow(QMainWindow):
     def show_export_menu(self):
         menu = QMenu(self)
         menu.setObjectName("exportMenu")
-        act_pdf = menu.addAction(make_ui_icon("export", color="#2563EB", size=15), "📄 Exportar Relatório Completo (.pdf)")
-        act_pdf.triggered.connect(self.action_save_pdf)
+        act_pdf_full = menu.addAction(make_ui_icon("export", color="#2563EB", size=15), "📄 Exportar Relatório Completo (.pdf)")
+        act_pdf_full.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=True))
+        act_pdf_simple = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📑 Exportar Relatório Simplificado (.pdf)")
+        act_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
         act_txt.triggered.connect(self.action_save_txt)
         menu.exec(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
 
-    def action_save_pdf(self):
+    def action_save_pdf(self, include_chirp_list=True):
         checked_files = self.get_checked_files()
         if not checked_files:
             QMessageBox.warning(
@@ -1825,20 +1846,27 @@ class MainWindow(QMainWindow):
             return
 
         now = datetime.datetime.now()
-        default_name = f"Relatorio_Crinometro_{now.strftime('%Y%m%d_%H%M')}.pdf"
+        tipo_str = "Completo" if include_chirp_list else "Simplificado"
+        default_name = f"Relatorio_{tipo_str}_Crinometro_{now.strftime('%Y%m%d_%H%M')}.pdf"
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Exportar Relatório em PDF", default_name, "PDF Files (*.pdf)"
+            self, f"Exportar Relatório {tipo_str} em PDF", default_name, "PDF Files (*.pdf)"
         )
         if not file_path:
             return
 
         try:
             from utils.report_generator import generate_pdf_report
-            generate_pdf_report(file_path, self.report_params, selected_cache, self.algo_params)
+            generate_pdf_report(
+                file_path,
+                self.report_params,
+                selected_cache,
+                self.algo_params,
+                include_chirp_list=include_chirp_list
+            )
             QMessageBox.information(
                 self,
                 I18N[self.lang]["success"],
-                f"Relatório PDF gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s)!\n\nSalvo em:\n{file_path}"
+                f"Relatório PDF ({tipo_str}) gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s)!\n\nSalvo em:\n{file_path}"
             )
         except Exception as err:
             QMessageBox.critical(
@@ -2328,11 +2356,30 @@ class MainWindow(QMainWindow):
             self._toggle_peak_marker(event.xdata, panel=self.panel_wave, event=event)
 
     def _on_splitter_moved(self, pos, index):
+        sizes = self.splitter.sizes()
+        if sizes and sizes[0] <= 10:
+            self.btn_collapse.setIcon(make_ui_icon("chevron_right", size=18))
+            self.btn_collapse.setToolTip("Mostrar painel de arquivos")
+        else:
+            self.btn_collapse.setIcon(make_ui_icon("chevron_left", size=18))
+            self.btn_collapse.setToolTip("Ocultar painel de arquivos")
+
         if not hasattr(self, "_splitter_debounce_timer"):
             self._splitter_debounce_timer = QTimer(self)
             self._splitter_debounce_timer.setSingleShot(True)
             self._splitter_debounce_timer.timeout.connect(self._finish_resize_refresh)
         self._splitter_debounce_timer.start(80)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_has_shown_initial_layout", False):
+            self._has_shown_initial_layout = True
+            self.splitter.setStretchFactor(0, 0)
+            self.splitter.setStretchFactor(1, 1)
+            self.splitter.setSizes([260, max(700, self.width() - 260)])
+            QTimer.singleShot(30, self._apply_plot_geometry)
+            if not self.active_heavy_data:
+                QTimer.singleShot(45, self._draw_empty_plots)
 
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):

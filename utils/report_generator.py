@@ -139,8 +139,8 @@ def analyze_rhythmic_cadence(chirp_peaks_list, rate):
     }
 
 
-def generate_pdf_report(output_filepath, report_params, selected_cache, algo_params=None):
-    """Gera o relatório estruturado em PDF de publicação para os áudios selecionados."""
+def generate_pdf_report(output_filepath, report_params, selected_cache, algo_params=None, include_chirp_list=True):
+    """Gera o relatório estruturado em PDF (Completo ou Simplificado) para os áudios selecionados."""
     if not REPORTLAB_AVAILABLE:
         raise RuntimeError("A biblioteca 'reportlab' não está instalada no ambiente Python.")
 
@@ -228,7 +228,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     story = []
 
     # 1. TÍTULO E CABEÇALHO DO DOCUMENTO
-    story.append(Paragraph("🦗 CRINÔMETRO — RELATÓRIO BIOACÚSTICO", title_style))
+    report_tag = "COMPLETO" if include_chirp_list else "SIMPLIFICADO"
+    story.append(Paragraph(f"🦗 CRINÔMETRO — RELATÓRIO BIOACÚSTICO ({report_tag})", title_style))
     story.append(Paragraph(f"Bioacústica Computacional e Análise Estridulatória Automatizada (v{APP_VERSION})", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284C7"), spaceAfter=10))
 
@@ -367,63 +368,64 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
         story.append(cadence_table)
         story.append(Spacer(1, 12))
 
-        # 5. TABELA ESTRUTURADA DE CHILREIOS
-        story.append(Paragraph("<b>Listagem Sequencial de Chilreios Detectados</b>", section_h1))
-        
-        table_rows = [
-            [
-                Paragraph("<b>Chilreio</b>", table_header),
-                Paragraph("<b>Pulsos</b>", table_header),
-                Paragraph("<b>Início</b>", table_header),
-                Paragraph("<b>Fim</b>", table_header),
-                Paragraph("<b>Duração (ms)</b>", table_header),
-                Paragraph("<b>Gap Médio (ms)</b>", table_header),
-            ]
-        ]
-
-        for c_idx, cp in enumerate(chirp_peaks_list):
-            num_p = len(cp)
-            t_start_s = cp[0] / rate
-            t_end_s = cp[-1] / rate
-            dur_ms = (t_end_s - t_start_s) * 1000.0
+        # 5. TABELA ESTRUTURADA DE CHILREIOS (inclusa no Relatório Completo; omitida no Simplificado)
+        if include_chirp_list:
+            story.append(Paragraph("<b>Listagem Sequencial de Chilreios Detectados</b>", section_h1))
             
-            if num_p > 1:
-                gaps = [(cp[k] - cp[k-1]) / rate * 1000.0 for k in range(1, num_p)]
-                gap_mean_ms = float(np.mean(gaps))
-            else:
-                gap_mean_ms = 0.0
-
-            # Formatação textual: 01º Chilreio — 4 Pulsos | Início: 00:01.24 | Fim: 00:01.35 | Gap Médio: 27.5 ms
-            row = [
-                Paragraph(f"<b>{c_idx + 1:02d}º Chilreio</b>", table_cell_bold),
-                Paragraph(f"<b>{num_p}</b>", table_cell_bold),
-                Paragraph(format_timestamp_ms(t_start_s), table_cell),
-                Paragraph(format_timestamp_ms(t_end_s), table_cell),
-                Paragraph(f"{dur_ms:.1f}", table_cell),
-                Paragraph(f"{gap_mean_ms:.1f}", table_cell),
+            table_rows = [
+                [
+                    Paragraph("<b>Chilreio</b>", table_header),
+                    Paragraph("<b>Pulsos</b>", table_header),
+                    Paragraph("<b>Início</b>", table_header),
+                    Paragraph("<b>Fim</b>", table_header),
+                    Paragraph("<b>Duração (ms)</b>", table_header),
+                    Paragraph("<b>Gap Médio (ms)</b>", table_header),
+                ]
             ]
-            table_rows.append(row)
 
-        chirp_table = Table(table_rows, colWidths=[90, 60, 95, 95, 90, 93], repeatRows=1)
-        
-        t_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-            ('TOPPADDING', (0, 0), (-1, -1), 3.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
-        ]
-        # Alternância de cores nas linhas
-        for r_idx in range(1, len(table_rows)):
-            if r_idx % 2 == 0:
-                t_style.append(('BACKGROUND', (0, r_idx), (-1, r_idx), colors.HexColor("#F8FAFC")))
-            else:
-                t_style.append(('BACKGROUND', (0, r_idx), (-1, r_idx), colors.white))
+            for c_idx, cp in enumerate(chirp_peaks_list):
+                num_p = len(cp)
+                t_start_s = cp[0] / rate
+                t_end_s = cp[-1] / rate
+                dur_ms = (t_end_s - t_start_s) * 1000.0
+                
+                if num_p > 1:
+                    gaps = [(cp[k] - cp[k-1]) / rate * 1000.0 for k in range(1, num_p)]
+                    gap_mean_ms = float(np.mean(gaps))
+                else:
+                    gap_mean_ms = 0.0
 
-        chirp_table.setStyle(TableStyle(t_style))
-        story.append(chirp_table)
+                # Formatação textual: 01º Chilreio — 4 Pulsos | Início: 00:01.24 | Fim: 00:01.35 | Gap Médio: 27.5 ms
+                row = [
+                    Paragraph(f"<b>{c_idx + 1:02d}º Chilreio</b>", table_cell_bold),
+                    Paragraph(f"<b>{num_p}</b>", table_cell_bold),
+                    Paragraph(format_timestamp_ms(t_start_s), table_cell),
+                    Paragraph(format_timestamp_ms(t_end_s), table_cell),
+                    Paragraph(f"{dur_ms:.1f}", table_cell),
+                    Paragraph(f"{gap_mean_ms:.1f}", table_cell),
+                ]
+                table_rows.append(row)
+
+            chirp_table = Table(table_rows, colWidths=[90, 60, 95, 95, 90, 93], repeatRows=1)
+            
+            t_style = [
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
+                ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+            ]
+            # Alternância de cores nas linhas
+            for r_idx in range(1, len(table_rows)):
+                if r_idx % 2 == 0:
+                    t_style.append(('BACKGROUND', (0, r_idx), (-1, r_idx), colors.HexColor("#F8FAFC")))
+                else:
+                    t_style.append(('BACKGROUND', (0, r_idx), (-1, r_idx), colors.white))
+
+            chirp_table.setStyle(TableStyle(t_style))
+            story.append(chirp_table)
 
     # Constrói o documento com numeração de páginas
     doc.build(story, canvasmaker=NumberedCanvas)

@@ -132,18 +132,53 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 color: #FFFFFF;
                 font-weight: 600;
             }
+            QScrollBar:horizontal {
+                height: 0px;
+                width: 0px;
+                background: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background: transparent;
+                width: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #2D333B;
+                min-height: 20px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #47505D;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: transparent;
+                border: none;
+                height: 0px;
+            }
             QFrame#summaryCard, QFrame#transportTimelineCard, QFrame#timelineCard {
                 background: #17191C;
                 border: 1px solid #292D32;
                 border-radius: 10px;
             }
-            QFrame#plotCard {
+            QFrame#plotCard, QWidget#plotCard {
                 background: #14171A;
-                border: 1px solid #282C32;
-                border-radius: 12px;
+                border: 1px solid #2B3037;
+                border-radius: 14px;
             }
-            QFrame#plotCard[mainPlot="true"] {
-                border-color: #3B82F6;
+            QFrame#plotCard:hover, QWidget#plotCard:hover {
+                border-color: #383F4A;
+            }
+            QFrame#plotCard[mainPlot="true"], QWidget#plotCard[mainPlot="true"] {
+                border: 1.5px solid #2563EB;
+                border-radius: 14px;
+            }
+            QWidget#plotTitleBar {
+                background: #191D22;
+                border-top-left-radius: 13px;
+                border-top-right-radius: 13px;
+                border-bottom: 1px solid #23272D;
             }
             QLabel#eyebrow {
                 color: #9CA2AA;
@@ -453,20 +488,49 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background: #FFFFFF; border: 1px solid #D9DEE4;
                     border-radius: 10px;
                 }
-                QFrame#plotCard {
+                QScrollBar:horizontal {
+                    height: 0px;
+                    width: 0px;
+                    background: transparent;
+                    border: none;
+                }
+                QScrollBar:vertical {
+                    background: transparent;
+                    width: 6px;
+                    margin: 0px;
+                }
+                QScrollBar::handle:vertical {
+                    background: #CBD5E1;
+                    min-height: 20px;
+                    border-radius: 3px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background: #94A3B8;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                    background: transparent;
+                    border: none;
+                    height: 0px;
+                }
+                QFrame#plotCard, QWidget#plotCard {
                     background: #FFFFFF;
                     border: 1px solid #CBD5E1;
-                    border-radius: 12px;
+                    border-radius: 14px;
                 }
-                QFrame#plotCard[mainPlot="true"] {
-                    border-color: #2563EB;
+                QFrame#plotCard:hover, QWidget#plotCard:hover {
+                    border-color: #94A3B8;
+                }
+                QFrame#plotCard[mainPlot="true"], QWidget#plotCard[mainPlot="true"] {
+                    border: 1.5px solid #2563EB;
+                    border-radius: 14px;
                 }
                 QWidget#plotTitleBar {
-                    background: #F8FAFC;
+                    background: #F1F5F9;
                     border: 0;
                     border-bottom: 1px solid #E2E8F0;
-                    border-top-left-radius: 11px;
-                    border-top-right-radius: 11px;
+                    border-top-left-radius: 13px;
+                    border-top-right-radius: 13px;
                 }
                 QLabel#plotTitle {
                     color: #1E293B;

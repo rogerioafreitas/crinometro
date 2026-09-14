@@ -2,7 +2,7 @@
 Crinômetro - Painéis Gráficos e Timeline Interativa.
 """
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
@@ -12,22 +12,61 @@ from matplotlib.figure import Figure
 from utils.i18n import I18N
 from utils.icons import make_ui_icon
 
-class PlotPanel(QWidget):
-    """Card de gráfico reutilizável. A posição no dashboard é controlada por MainWindow."""
+
+class PlotTitleBar(QWidget):
+    """Barra de título da mini janela com suporte a arrastar e soltar (drag to reorder)."""
+    def __init__(self, panel, parent=None):
+        super().__init__(parent)
+        self.panel = panel
+        self._drag_start_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_start_pos is not None and (event.buttons() & Qt.MouseButton.LeftButton):
+            dy = event.pos().y() - self._drag_start_pos.y()
+            if dy > 35:  # Arrastou para baixo
+                self._drag_start_pos = event.pos()
+                win = self.window()
+                if hasattr(win, "move_stack_panel"):
+                    win.move_stack_panel(self.panel, 1)
+            elif dy < -35:  # Arrastou para cima
+                self._drag_start_pos = event.pos()
+                win = self.window()
+                if hasattr(win, "move_stack_panel"):
+                    win.move_stack_panel(self.panel, -1)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+
+
+class PlotPanel(QFrame):
+    """Mini janela / Card de gráfico com cantos arredondados e suporte a reordenação."""
     def __init__(self, title_key, lang, expand_callback, main=False):
         super().__init__()
         self.title_key = title_key
         self.expand_callback = expand_callback
         self.pulse_edit_mode = False
+
+        self.setObjectName("plotCard")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setContentsMargins(1, 1, 1, 4)
         self.layout.setSpacing(0)
 
-        self.title_bar = QWidget()
+        self.title_bar = PlotTitleBar(self)
         self.title_bar.setObjectName("plotTitleBar")
-        self.title_bar.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.title_bar.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.title_bar.setToolTip("Arraste esta barra para reordenar as mini janelas ou use os botões ▲ e ▼")
         bar = QHBoxLayout(self.title_bar)
-        bar.setContentsMargins(12, 7, 8, 7)
+        bar.setContentsMargins(12, 6, 8, 6)
         bar.setSpacing(4)
 
         self.lbl_title = QLabel(I18N[lang][title_key])
@@ -71,20 +110,17 @@ class PlotPanel(QWidget):
         self.btn_expand.clicked.connect(lambda: self.expand_callback(self))
         bar.addWidget(self.btn_expand)
 
-        self.figure = Figure(facecolor="#141517")
-        self.figure.subplots_adjust(left=0.07, right=0.985, top=0.94, bottom=0.12)
+        self.figure = Figure(facecolor="none")
+        self.figure.patch.set_alpha(0.0)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.canvas.setStyleSheet("background:transparent; border:0; padding:0; margin:0;")
+        self.canvas.setStyleSheet("background: transparent; border: 0; padding: 0; margin: 0;")
         self.ax = self.figure.add_subplot(111, facecolor="#101214")
         self.apply_dark_theme()
 
         self.layout.addWidget(self.title_bar)
         self.layout.addWidget(self.canvas, 1)
 
-        self.setObjectName("plotCard")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self._set_main_visual(main)
 
     def _tool_button(self, glyph, tooltip):
@@ -140,12 +176,12 @@ class PlotPanel(QWidget):
         spine = "#2A2D32" if dark else "#D7DDE3"
         grid = "#25282D" if dark else "#DDE2E7"
         face = "#101214" if dark else "#FFFFFF"
-        fig_face = "#141517" if dark else "#F7F9FB"
-        self.figure.set_facecolor(fig_face)
-        self.figure.patch.set_alpha(1.0)
+        # Fundo da figura transparente para que as bordas arredondadas da mini janela nunca sejam cortadas
+        self.figure.set_facecolor("none")
+        self.figure.patch.set_alpha(0.0)
         self.ax.set_facecolor(face)
         self.ax.patch.set_alpha(1.0)
-        self.ax.tick_params(colors=fg, labelsize=8, length=3, width=0.8)
+        self.ax.tick_params(colors=fg, labelsize=7.5, length=2.5, width=0.8, pad=2)
         for sp in self.ax.spines.values():
             sp.set_color(spine)
             sp.set_linewidth(0.8)
@@ -158,9 +194,9 @@ class PlotPanel(QWidget):
         self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=15))
         self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=15))
         if hasattr(self, "btn_move_up"):
-            self.btn_move_up.setStyleSheet(f"color: {icon_color}; font-size: 10px; font-weight: bold;")
+            self.btn_move_up.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
         if hasattr(self, "btn_move_down"):
-            self.btn_move_down.setStyleSheet(f"color: {icon_color}; font-size: 10px; font-weight: bold;")
+            self.btn_move_down.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
 
 
 

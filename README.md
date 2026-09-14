@@ -55,9 +55,9 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - Filtro digital Butterworth passa-faixa IIR de fase zero (`sosfiltfilt`).
   - Detecção adaptativa de picos e pulsos, com limiar mínimo padrão de 3 pulsos por chilreio (`min_p = 3`).
 - 🪟 **Mini Janelinhas Arredondadas & Reordenáveis:**
-  - Gráficos laterais desenhados com cantos arredondados (`12px`) e cabeçalho elegante.
-  - Botões integrados **`▲`** e **`▼`** para alternar e personalizar a ordem dos gráficos na coluna lateral.
-  - Alinhamento e enquadramento visual limpo mesmo antes do carregamento de áudios.
+  - Gráficos laterais desenhados com cartões de cantos arredondados (`14px`) nativos em Qt (`QFrame`) e transparência de canvas (`patch.set_alpha(0.0)`).
+  - Enquadramento pixel-exact adaptativo que impede cortes de rótulos dos eixos ("seconds", "Hz", "Amplitude") com e sem áudio carregado.
+  - Reordenação interativa: arraste as barras de título para cima/baixo para trocar a posição dos gráficos ou use os botões **`▲`** e **`▼`**.
 - 🧠 **Bioacústica Avançada & Plasticidade Ativa (PulseLearner):**
   - **Modo Padrão DSP Puro:** O software inicializa em modo estritamente acústico, permitindo ativar o módulo de IA sob demanda.
   - **Hard Negative Rule Induction:** Indução automática de regras rígidas de poda com margem de segurança de 30% a partir dos falsos positivos removidos manualmente pelo usuário.
@@ -71,9 +71,11 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - Tooltips detalhados ao passar o mouse em todos os botões de ação.
 - 🚀 **Desempenho Otimizado a 60 FPS & Redimensionamento Fluido:**
   - Motor gráfico com decimação adaptativa de pontos e limitador de taxa de renderização (18 ms) para pan sem engasgos.
+  - Painel de arquivos com abertura perfeitamente dimensionada (260px), barra de rolagem vertical moderna e eliminação total da barra de rolagem horizontal redundante.
   - Elisão dinâmica de nomes de arquivos longos no painel lateral, eliminando qualquer travamento no `QSplitter`.
 - 📑 **Exportação de Relatórios de Publicação (PDF e TXT):**
-  - **Relatório Formal em PDF (ReportLab):** Cabeçalho institucional, diagnóstico rítmico fisiológico automatizado (regressão linear do ICI e coeficiente de variação), tabela paginada com timestamps em centésimos (`mm:ss.cc`) e numeração "Página X de Y".
+  - **Relatório Completo em PDF (ReportLab):** Cabeçalho institucional, parâmetros de detecção, métricas globais consolidadas, diagnóstico rítmico fisiológico automatizado (regressão linear do ICI e coeficiente de variação), tabela sequencial detalhada de chilreios com timestamps em centésimos (`mm:ss.cc`) e numeração "Página X de Y".
+  - **Relatório Simplificado em PDF:** Todas as informações, métricas de síntese e diagnóstico rítmico do relatório completo em um formato executivo condensado, omitindo apenas a listagem sequencial de chilreios.
   - **Tabela Estruturada em TXT:** Formatação amigável para importação direta no R, Python, PAST e JASP.
 - 🎭 **Launcher Interativo Vetorial:** Mascote animado com estados dinâmicos, partículas e frases temáticas de bioacústica.
 
