@@ -5,8 +5,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import math
 import random
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, QThread, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath
+from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath, QIcon
 from PyQt6.QtWidgets import QWidget, QApplication, QMessageBox
+from utils.icons import get_app_icon
+
 
 class ZParticle:
     """Partícula do Zzz: surge perto da cabeça, sobe, cresce e desvanece."""
@@ -106,12 +108,17 @@ class LauncherLoadingScreen(QWidget):
             Qt.WindowType.WindowStaysOnTopHint |
             Qt.WindowType.Tool
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         
         self.main_window = None
         self.core_ready = False
 
-        self.resize(760, 460)
+        # Margem para renderização da sombra suave projetada (drop shadow)
+        self.shadow_margin = 20
+        self.card_w = 760
+        self.card_h = 460
+        self.resize(self.card_w + 2 * self.shadow_margin, self.card_h + 2 * self.shadow_margin)
         self._center_on_screen()
 
         # Estados: "sleeping" -> "waking" -> "awake" -> "expanding"
@@ -225,37 +232,59 @@ class LauncherLoadingScreen(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        w, h = self.width(), self.height()
-        center_x = w / 2.0
+        m = self.shadow_margin
+        card_w, card_h = self.card_w, self.card_h
+        card_rect = QRectF(m, m, card_w, card_h)
+
+        # 1. Efeito de Sombra Suave por trás da janela (Drop Shadow)
+        corner_r = 14.0
+        for i in range(m, 0, -2):
+            alpha = int(55 * (1.0 - (i / m)) ** 1.8)
+            if alpha <= 0:
+                continue
+            shadow_rect = card_rect.adjusted(-i, -i + 3, i, i + 3)
+            shadow_path = QPainterPath()
+            shadow_path.addRoundedRect(shadow_rect, corner_r + i * 0.4, corner_r + i * 0.4)
+            painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
+
+        # 2. Fundo Dark da Janela (Card Arredondado com borda sutil)
+        card_path = QPainterPath()
+        card_path.addRoundedRect(card_rect, corner_r, corner_r)
+        painter.fillPath(card_path, QColor(14, 11, 20))
+
+        # Borda sutil para dar acabamento premium e destacar do fundo
+        pen_border = QPen(QColor(60, 48, 75, 160), 1.2)
+        painter.setPen(pen_border)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(card_rect, corner_r, corner_r)
+
+        center_x = m + card_w / 2.0
 
         # Transição de pivô para o centro exato no momento da explosão
         if self.anim_state == "expanding":
             t = min(1.0, (self.scale_factor - 1.0) / 0.9)
             t_smooth = math.sin(t * math.pi / 2.0)
-            center_y = (h * 0.35) + ((h * 0.50) - (h * 0.35)) * t_smooth
+            center_y = m + (card_h * 0.35) + ((card_h * 0.50) - (card_h * 0.35)) * t_smooth
         else:
-            center_y = h * 0.35
-
-        # Fundo Dark 100% sólido (garante que nunca pisque branco)
-        painter.fillRect(self.rect(), QColor(14, 11, 20))
+            center_y = m + (card_h * 0.35)
 
         # Versão no canto inferior esquerdo
         painter.setPen(QColor(115, 105, 130, 160))
         painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
-        painter.drawText(QRectF(22, h - 28, 120, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.APP_VERSION)
+        painter.drawText(QRectF(m + 22, m + card_h - 28, 120, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.APP_VERSION)
 
         # Textos e spinner somem imediatamente na expansão
         if self.anim_state != "expanding":
             painter.setPen(QColor(253, 242, 248))
             painter.setFont(QFont("Segoe UI", 21, QFont.Weight.Bold))
-            painter.drawText(QRectF(0, h * 0.58, w, 32), Qt.AlignmentFlag.AlignCenter, "Crinômetro")
+            painter.drawText(QRectF(m, m + card_h * 0.58, card_w, 32), Qt.AlignmentFlag.AlignCenter, "Crinômetro")
 
             painter.setPen(QColor(244, 114, 182))
             painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
-            painter.drawText(QRectF(0, h * 0.65, w, 18), Qt.AlignmentFlag.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
+            painter.drawText(QRectF(m, m + card_h * 0.65, card_w, 18), Qt.AlignmentFlag.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
 
             spinner_size = 30
-            spinner_rect = QRectF(w / 2.0 - (spinner_size / 2.0), h * 0.72, spinner_size, spinner_size)
+            spinner_rect = QRectF(center_x - (spinner_size / 2.0), m + card_h * 0.72, spinner_size, spinner_size)
             painter.setPen(QPen(QColor(46, 32, 60), 2.5))
             painter.drawEllipse(spinner_rect)
 
@@ -266,7 +295,7 @@ class LauncherLoadingScreen(QWidget):
 
             painter.setPen(QColor(233, 213, 255, 210))
             painter.setFont(QFont("Segoe UI", 9))
-            painter.drawText(QRectF(40, h * 0.83, w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.current_phrase)
+            painter.drawText(QRectF(m + 40, m + card_h * 0.83, card_w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.current_phrase)
 
         # Renderização do Mascote
         painter.save()
@@ -393,12 +422,21 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     app.setStyle("Fusion")
 
+    # Ícone do aplicativo
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    icon_candidate = os.path.join(base_dir, "grilinho.ico")
+    if os.path.isfile(icon_candidate):
+        app.setWindowIcon(QIcon(icon_candidate))
+    else:
+        app.setWindowIcon(get_app_icon())
+
     splash = LauncherLoadingScreen()
     splash.show()
     app.processEvents()
     splash.start_loader()
 
     return app.exec()
+
 
 
 if __name__ == "__main__":
