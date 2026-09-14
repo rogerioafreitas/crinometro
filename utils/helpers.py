@@ -47,7 +47,7 @@ setup_global_exception_handler()
 #   - Y (+1): Nova complexidade algorítmica ou alterações visuais (ex: 3.0.1 -> 3.1.0)
 #   - X (+1): Apenas sob comando explícito ou manualmente pelo usuário
 # ==============================================================================
-APP_VERSION = "4.1.0"
+APP_VERSION = "4.1.2"
 # ==============================================================================
 
 def parse_version_tuple(ver_str):
