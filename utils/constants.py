@@ -18,6 +18,8 @@ DEFAULT_ALGO_PARAMS = {
 
 CHANGELOG = {
     "4.1.2": [
+        "Launcher Integrado no Executável: inicialização direta exibindo o mascote animado e frases temáticas antes da tela principal, tanto no código-fonte quanto no executável (.exe).",
+        "Efeito de Sombra Suave (Drop Shadow) no Launcher: janela frameless translúcida com renderização multicamadas de sombra suave e borda sutil para destaque no desktop.",
         "Relatório Simplificado em PDF compacto: consolidação de múltiplos áudios por página sem desperdício de espaço e síntese bioacústica comparativa integrada.",
         "Estabilidade da Barra Lateral: correção do encolhimento automático do divisor (splitter) após análise de áudio, com preservação de largura mínima de 220px.",
         "Arraste e Solte (Drag & Drop) Fluido de Painéis: previsão visual de drop (moldura com preview translúcido) sem piscadas ou reconstrução prematura, executando a reorganização somente ao soltar o mouse.",

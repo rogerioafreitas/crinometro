@@ -78,7 +78,11 @@ Documentações completas e diagramadas estão disponíveis na pasta [`docs/`](d
   - **Relatório Completo em PDF (ReportLab):** Cabeçalho institucional, parâmetros de detecção, métricas globais consolidadas, diagnóstico rítmico fisiológico automatizado (regressão linear do ICI e coeficiente de variação), tabela sequencial detalhada de chilreios com timestamps em centésimos (`mm:ss.cc`) e numeração "Página X de Y".
   - **Relatório Simplificado Multiaudio Compacto em PDF:** Síntese bioacústica comparativa consolidada, agrupando múltiplos áudios de forma contínua por página sem desperdício de espaço, omitindo apenas a listagem sequencial de chilreios.
   - **Tabela Estruturada em TXT:** Formatação amigável para importação direta no R, Python, PAST e JASP.
-- 🎭 **Launcher Interativo Vetorial:** Mascote animado com estados dinâmicos, partículas e frases temáticas de bioacústica.
+- 🎭 **Launcher Interativo Vetorial & Tela de Inicialização Elegante:**
+  - Mascote animado com estados dinâmicos (dormindo, acordando, expandindo), partículas Zzz e frases de bioacústica com humor inteligente.
+  - Janela translúcida com cantos arredondados, borda acetinada e efeito de sombra suave multicamadas (*drop shadow*) projetada sobre o desktop.
+  - Totalmente integrado como ponto de entrada oficial do aplicativo e das compilações executáveis (`.exe`).
+
 
 ---
 
