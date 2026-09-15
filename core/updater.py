@@ -65,19 +65,39 @@ class UpdateCheckerThread(QThread):
             html_url = release_info.get("html_url", GITHUB_RELEASES_PAGE)
             assets = release_info.get("assets", [])
 
-            # Procura por asset executável ou zip compatível
+            # Procura preferencialmente por instalador Inno Setup (.exe com 'setup' ou 'installer')
             download_url = ""
             asset_name = ""
+            
+            # 1. Prioridade máxima: instalador .exe do Inno Setup
             for a in assets:
                 name = a.get("name", "").lower()
                 url = a.get("browser_download_url", "")
-                if name.endswith(".zip") and ("crinometro" in name or "onedir" in name):
+                if name.endswith(".exe") and any(kw in name for kw in ("setup", "installer", "install")):
                     download_url = url
                     asset_name = a.get("name")
                     break
-                elif name.endswith(".exe") and "crinometro" in name:
-                    download_url = url
-                    asset_name = a.get("name")
+
+            # 2. Segunda prioridade: qualquer executável do crinômetro
+            if not download_url:
+                for a in assets:
+                    name = a.get("name", "").lower()
+                    url = a.get("browser_download_url", "")
+                    if name.endswith(".exe") and "crinometro" in name:
+                        download_url = url
+                        asset_name = a.get("name")
+                        break
+
+            # 3. Terceira prioridade: pacote .zip do Crinômetro
+            if not download_url:
+                for a in assets:
+                    name = a.get("name", "").lower()
+                    url = a.get("browser_download_url", "")
+                    if name.endswith(".zip") and ("crinometro" in name or "onedir" in name):
+                        download_url = url
+                        asset_name = a.get("name")
+                        break
+
 
             info_payload = {
                 "tag": tag,
@@ -180,9 +200,9 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
     """
     Gera um script batch desacoplado (.bat) que:
     1. Aguarda o término do processo Crinômetro atual;
-    2. Extrai ou substitui os arquivos da nova versão na pasta de destino;
-    3. Reinicia o executável do Crinômetro atualizado;
-    4. Remove a si próprio.
+    2. Se for instalador Inno Setup (.exe), executa-o com parâmetros silenciosos para atualizar a instalação;
+    3. Se for .zip ou binário, extrai e substitui diretamente;
+    4. Reinicia o executável do Crinômetro atualizado e limpa temporários.
     """
     if not target_dir:
         target_dir = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
@@ -196,16 +216,24 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
     bat_file = os.path.join(bat_dir, "apply_update.bat")
 
     is_zip = downloaded_file.lower().endswith(".zip")
+    is_installer = downloaded_file.lower().endswith(".exe") and any(
+        kw in os.path.basename(downloaded_file).lower() for kw in ("setup", "install")
+    )
     exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "Crinometro.exe"
     exe_target = os.path.join(target_dir, exe_name)
     if not os.path.exists(exe_target):
-        # Fallback de busca
         cands = [f for f in os.listdir(target_dir) if f.lower().startswith("crinometro") and f.lower().endswith(".exe")]
         if cands:
             exe_target = os.path.join(target_dir, cands[0])
 
-    if is_zip:
-        # Extração via tar/powershell e cópia recursiva
+    if is_installer:
+        # Execução do instalador Inno Setup silencioso /SP- /SILENT /SUPPRESSMSGBOXES
+        update_commands = f"""
+echo Executando instalador Inno Setup da nova versão...
+"{downloaded_file}" /SP- /SILENT /SUPPRESSMSGBOXES /FORCECLOSEAPPLICATIONS /DIR="{target_dir}"
+"""
+    elif is_zip:
+        # Extração via PowerShell e cópia recursiva
         update_commands = f"""
 powershell -Command "Expand-Archive -Path '{downloaded_file}' -DestinationPath '{bat_dir}\\extracted' -Force"
 xcopy /E /Y /Q "{bat_dir}\\extracted\\*" "{target_dir}\\"
@@ -217,7 +245,7 @@ copy /Y "{downloaded_file}" "{exe_target}"
 
     bat_content = f"""@echo off
 chcp 65001 > nul
-echo Aguardando fechamento do Crinômetro...
+echo Aguardando encerramento do Crinômetro (PID {pid})...
 :WAIT_PID
 tasklist /FI "PID eq {pid}" 2>NUL | find /I /N "{pid}">NUL
 if "%ERRORLEVEL%"=="0" (
@@ -240,6 +268,7 @@ del /f /q "{downloaded_file}" 2>nul
     with open(bat_file, "w", encoding="latin-1") as f:
         f.write(bat_content)
 
-    # Executa o batch em processo totalmente separado e encerra o app atual
+    # Executa o batch em processo totalmente desacoplado e encerra o app atual
     subprocess.Popen(["cmd.exe", "/c", bat_file], shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     sys.exit(0)
+

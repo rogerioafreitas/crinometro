@@ -5,9 +5,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import math
 import random
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, QThread, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath, QIcon
-from PyQt6.QtWidgets import QWidget, QApplication, QMessageBox
+from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath, QIcon, QCursor
+from PyQt6.QtWidgets import QWidget, QApplication, QMessageBox, QPushButton
 from utils.icons import get_app_icon
+from core.updater import UpdateCheckerThread, UpdateDownloaderThread, launch_windows_updater
 
 
 class ZParticle:
@@ -142,6 +143,68 @@ class LauncherLoadingScreen(QWidget):
         self.phrase_timer.timeout.connect(self._pick_random_phrase)
         self.phrase_timer.start(3400)
 
+        # Atualizador Automático (Auto-updater)
+        self.update_checker = None
+        self.downloader = None
+        self.update_info = None
+        self.update_progress = 0
+        self.update_status_text = ""
+
+        # Botões de Atualização (inicialmente ocultos)
+        btn_w, btn_h = 165, 38
+        y_btns = int(self.shadow_margin + self.card_h * 0.77)
+        c_x = int(self.shadow_margin + self.card_w / 2.0)
+        gap = 14
+
+        self.btn_update_now = QPushButton("⚡ Atualizar Agora", self)
+        self.btn_update_now.setGeometry(c_x - btn_w - (gap // 2), y_btns, btn_w, btn_h)
+        self.btn_update_now.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.btn_update_now.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #db2777, stop:1 #ec4899);
+                color: #ffffff;
+                font-family: 'Segoe UI';
+                font-size: 13px;
+                font-weight: bold;
+                border-radius: 8px;
+                border: 1px solid #f472b6;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ec4899, stop:1 #f472b6);
+                border: 1px solid #fbcfe8;
+            }
+            QPushButton:pressed {
+                background: #be185d;
+            }
+        """)
+        self.btn_update_now.clicked.connect(self._on_update_now_clicked)
+        self.btn_update_now.hide()
+
+        self.btn_remind_later = QPushButton("Lembrar Mais Tarde", self)
+        self.btn_remind_later.setGeometry(c_x + (gap // 2), y_btns, btn_w, btn_h)
+        self.btn_remind_later.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.btn_remind_later.setStyleSheet("""
+            QPushButton {
+                background-color: #261b33;
+                color: #cbd5e1;
+                font-family: 'Segoe UI';
+                font-size: 13px;
+                font-weight: 600;
+                border-radius: 8px;
+                border: 1px solid #47385d;
+            }
+            QPushButton:hover {
+                background-color: #38284c;
+                color: #f8fafc;
+                border: 1px solid #7c5295;
+            }
+            QPushButton:pressed {
+                background-color: #1e1529;
+            }
+        """)
+        self.btn_remind_later.clicked.connect(self._on_remind_later_clicked)
+        self.btn_remind_later.hide()
+
         # Loop principal (60 FPS)
         self.fps_timer = QTimer(self)
         self.fps_timer.timeout.connect(self._update_animation)
@@ -159,21 +222,117 @@ class LauncherLoadingScreen(QWidget):
         self.current_phrase = random.choice(candidates)
 
     def start_loader(self):
+        # 1. Carregamento das bibliotecas e inicialização da janela principal
         self.loader_thread = CoreLoaderThread()
         self.loader_thread.loaded.connect(self._on_core_loaded)
         self.loader_thread.error.connect(self._on_core_error)
         self.loader_thread.start()
+
+        # 2. Verificação assíncrona de atualização no GitHub
+        self.update_checker = UpdateCheckerThread(self)
+        self.update_checker.update_available.connect(self._on_update_detected)
+        self.update_checker.no_update.connect(self._on_update_not_found)
+        self.update_checker.error.connect(self._on_update_check_error)
+        self.update_checker.start()
 
     def _on_core_loaded(self):
         try:
             import crinometro
             self.main_window = crinometro.MainWindow()
             self.core_ready = True
+            # Se não estiver aguardando decisão ou baixando atualização, acorda o mascote e prossegue
             if self.anim_state == "sleeping":
                 self.anim_state = "waking"
         except Exception as e:
             import traceback
             self._on_core_error(traceback.format_exc())
+
+    def _on_update_detected(self, info: dict):
+        """Quando uma nova versão é detectada no GitHub."""
+        self.update_info = info
+        # Para a troca periódica de memes e mantém o launcher parado
+        self.phrase_timer.stop()
+        self.anim_state = "update_prompt"
+        self.btn_update_now.show()
+        self.btn_remind_later.show()
+        self.update()
+
+    def _on_update_not_found(self, info: dict):
+        """Nenhuma versão nova encontrada; segue o fluxo normal."""
+        if self.core_ready and self.anim_state == "sleeping":
+            self.anim_state = "waking"
+
+    def _on_update_check_error(self, err_msg: str):
+        """Em caso de falha de conexão com o GitHub, não impede o app de abrir."""
+        print(f"[Auto-Updater] Verificação ignorada: {err_msg}")
+        if self.core_ready and self.anim_state == "sleeping":
+            self.anim_state = "waking"
+
+    def _on_remind_later_clicked(self):
+        """Usuário optou por ignorar no momento e usar a versão atual."""
+        self.btn_update_now.hide()
+        self.btn_remind_later.hide()
+        if self.core_ready:
+            self.anim_state = "waking"
+        else:
+            self.anim_state = "sleeping"
+            self.phrase_timer.start(3400)
+        self.update()
+
+    def _on_update_now_clicked(self):
+        """Usuário aceitou atualizar agora: esconde botões e inicia download."""
+        self.btn_update_now.hide()
+        self.btn_remind_later.hide()
+        self.anim_state = "updating"
+        self.update_progress = 0
+        self.update_status_text = "Baixando atualização (0%)"
+        self.update()
+
+        download_url = self.update_info.get("download_url") if self.update_info else ""
+        asset_name = self.update_info.get("asset_name", "") if self.update_info else ""
+
+        if not download_url:
+            # Fallback caso não haja executável direto: abre a página de releases e prossegue
+            import webbrowser
+            target_url = self.update_info.get("html_url", "https://github.com/rogerioafreitas/crinometro/releases")
+            webbrowser.open(target_url)
+            self._on_remind_later_clicked()
+            return
+
+        self.downloader = UpdateDownloaderThread(download_url, dest_filename=asset_name, parent=self)
+        self.downloader.progress.connect(self._on_download_progress)
+        self.downloader.finished.connect(self._on_download_finished)
+        self.downloader.error.connect(self._on_download_error)
+        self.downloader.start()
+
+    def _on_download_progress(self, percent: int):
+        self.update_progress = percent
+        self.update_status_text = f"Baixando atualização ({percent}%)"
+        self.update()
+
+    def _on_download_finished(self, file_path: str):
+        self.update_progress = 100
+        self.update_status_text = "Verificando arquivos..."
+        self.update()
+
+        # Sequência suave de mensagens de transição antes de aplicar
+        QTimer.singleShot(600, lambda: self._step_install_files(file_path))
+
+    def _step_install_files(self, file_path: str):
+        self.update_status_text = "Instalando arquivos..."
+        self.update()
+        QTimer.singleShot(700, lambda: self._step_restart_app(file_path))
+
+    def _step_restart_app(self, file_path: str):
+        self.update_status_text = "Reiniciando o programa..."
+        self.update()
+        QTimer.singleShot(800, lambda: launch_windows_updater(file_path))
+
+    def _on_download_error(self, err_msg: str):
+        print(f"[Auto-Updater] Erro no download: {err_msg}")
+        self.update_status_text = "Erro no download. Iniciando versão atual..."
+        self.update()
+        QTimer.singleShot(1500, self._on_remind_later_clicked)
 
     def _on_core_error(self, err_trace: str):
         print(f"Erro ao carregar Crinômetro:\n{err_trace}")
@@ -193,7 +352,7 @@ class LauncherLoadingScreen(QWidget):
         self.time_elapsed += dt
         self.spinner_angle = (self.spinner_angle + 270 * dt) % 360
 
-        if self.anim_state == "sleeping":
+        if self.anim_state in ("sleeping", "update_prompt", "updating"):
             if self.time_elapsed - self.last_particle_time > 0.42:
                 self.z_particles.append(ZParticle(start_x=26, start_y=-16))
                 self.last_particle_time = self.time_elapsed
@@ -273,29 +432,77 @@ class LauncherLoadingScreen(QWidget):
         painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
         painter.drawText(QRectF(m + 22, m + card_h - 28, 120, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.APP_VERSION)
 
-        # Textos e spinner somem imediatamente na expansão
+        # Textos e status centrais (somem imediatamente na expansão)
         if self.anim_state != "expanding":
             painter.setPen(QColor(253, 242, 248))
             painter.setFont(QFont("Segoe UI", 21, QFont.Weight.Bold))
             painter.drawText(QRectF(m, m + card_h * 0.58, card_w, 32), Qt.AlignmentFlag.AlignCenter, "Crinômetro")
 
-            painter.setPen(QColor(244, 114, 182))
-            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
-            painter.drawText(QRectF(m, m + card_h * 0.65, card_w, 18), Qt.AlignmentFlag.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
+            if self.anim_state == "update_prompt":
+                # Estado 1: Nova versão detectada, aguardando resposta do usuário
+                remote_ver = self.update_info.get("tag", "") if self.update_info else ""
+                tag_label = f"v{remote_ver}" if remote_ver and not remote_ver.startswith("v") else remote_ver
+                painter.setPen(QColor(244, 114, 182))
+                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+                painter.drawText(QRectF(m, m + card_h * 0.65, card_w, 18), Qt.AlignmentFlag.AlignCenter, f"NOVA ATUALIZAÇÃO DISPONÍVEL ({tag_label})")
 
-            spinner_size = 30
-            spinner_rect = QRectF(center_x - (spinner_size / 2.0), m + card_h * 0.72, spinner_size, spinner_size)
-            painter.setPen(QPen(QColor(46, 32, 60), 2.5))
-            painter.drawEllipse(spinner_rect)
+                painter.setPen(QColor(233, 213, 255, 220))
+                painter.setFont(QFont("Segoe UI", 9))
+                painter.drawText(QRectF(m + 40, m + card_h * 0.70, card_w - 80, 24), Qt.AlignmentFlag.AlignCenter, "Deseja atualizar agora para obter as novidades e melhorias?")
 
-            pen_spinner = QPen(QColor(244, 114, 182), 2.5)
-            pen_spinner.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen_spinner)
-            painter.drawArc(spinner_rect, int(-self.spinner_angle * 16), int(105 * 16))
+            elif self.anim_state == "updating":
+                # Estado 2: Atualização em andamento com barra de progresso
+                painter.setPen(QColor(244, 114, 182))
+                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+                painter.drawText(QRectF(m, m + card_h * 0.65, card_w, 18), Qt.AlignmentFlag.AlignCenter, "ATUALIZAÇÃO AUTOMÁTICA EM ANDAMENTO")
 
-            painter.setPen(QColor(233, 213, 255, 210))
-            painter.setFont(QFont("Segoe UI", 9))
-            painter.drawText(QRectF(m + 40, m + card_h * 0.83, card_w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.current_phrase)
+                # Barra de progresso moderna
+                bar_w, bar_h = 360, 10
+                bar_x = center_x - (bar_w / 2.0)
+                bar_y = m + card_h * 0.72
+                bar_rect = QRectF(bar_x, bar_y, bar_w, bar_h)
+
+                # Trilho de fundo
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor(36, 27, 47)))
+                painter.drawRoundedRect(bar_rect, 5.0, 5.0)
+
+                # Barra preenchida
+                fill_w = max(0.0, (bar_w * (self.update_progress / 100.0)))
+                if fill_w > 0:
+                    fill_rect = QRectF(bar_x, bar_y, fill_w, bar_h)
+                    painter.setBrush(QBrush(QColor(236, 72, 153)))
+                    painter.drawRoundedRect(fill_rect, 5.0, 5.0)
+
+                # Borda sutil na barra
+                painter.setPen(QPen(QColor(60, 48, 75), 1.0))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(bar_rect, 5.0, 5.0)
+
+                # Texto de status funcional ("Baixando...", "Instalando...", etc.)
+                painter.setPen(QColor(233, 213, 255, 230))
+                painter.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                painter.drawText(QRectF(m + 40, m + card_h * 0.78, card_w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.update_status_text)
+
+            else:
+                # Estado Normal: Spinner e memes rotativos
+                painter.setPen(QColor(244, 114, 182))
+                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+                painter.drawText(QRectF(m, m + card_h * 0.65, card_w, 18), Qt.AlignmentFlag.AlignCenter, "MODO DETETIVE DE VÁCUO ATIVADO")
+
+                spinner_size = 30
+                spinner_rect = QRectF(center_x - (spinner_size / 2.0), m + card_h * 0.72, spinner_size, spinner_size)
+                painter.setPen(QPen(QColor(46, 32, 60), 2.5))
+                painter.drawEllipse(spinner_rect)
+
+                pen_spinner = QPen(QColor(244, 114, 182), 2.5)
+                pen_spinner.setCapStyle(Qt.PenCapStyle.RoundCap)
+                painter.setPen(pen_spinner)
+                painter.drawArc(spinner_rect, int(-self.spinner_angle * 16), int(105 * 16))
+
+                painter.setPen(QColor(233, 213, 255, 210))
+                painter.setFont(QFont("Segoe UI", 9))
+                painter.drawText(QRectF(m + 40, m + card_h * 0.83, card_w - 80, 26), Qt.AlignmentFlag.AlignCenter, self.current_phrase)
 
         # Renderização do Mascote
         painter.save()
@@ -371,7 +578,7 @@ class LauncherLoadingScreen(QWidget):
         painter.drawRoundedRect(QRectF(23, -18, 9, 18), 4, 4)
 
         # Olhos
-        if self.anim_state == "sleeping":
+        if self.anim_state in ("sleeping", "update_prompt", "updating"):
             pen_eye = QPen(QColor(20, 83, 45), 2.2)
             pen_eye.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen_eye)
@@ -402,7 +609,7 @@ class LauncherLoadingScreen(QWidget):
             painter.drawEllipse(QPointF(5, -12), eye_size * 0.22, eye_size * 0.22)
 
         # Partículas Zzz
-        if self.anim_state == "sleeping":
+        if self.anim_state in ("sleeping", "update_prompt", "updating"):
             for p in self.z_particles:
                 painter.setPen(QColor(253, 224, 71, int(255 * p.opacity)))
                 painter.setFont(QFont("Comic Sans MS", int(p.current_size), QFont.Weight.Bold))
