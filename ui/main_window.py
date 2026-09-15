@@ -363,11 +363,11 @@ class MainWindow(QMainWindow):
         self.summary_card = QFrame()
         self.summary_card.setObjectName("summaryCard")
         summary = QHBoxLayout(self.summary_card)
-        summary.setContentsMargins(14, 12, 14, 12)
-        summary.setSpacing(14)
+        summary.setContentsMargins(12, 10, 12, 10)
+        summary.setSpacing(10)
 
         summary_info = QVBoxLayout()
-        summary_info.setSpacing(3)
+        summary_info.setSpacing(2)
         self.lbl_eyebrow = QLabel("Arquivo em Análise")
         self.lbl_eyebrow.setObjectName("eyebrow")
         self.lbl_summary_file = QLabel("Nenhum arquivo selecionado")
@@ -379,12 +379,12 @@ class MainWindow(QMainWindow):
             _label.setAutoFillBackground(False)
         summary_info.addWidget(self.lbl_eyebrow)
         summary_info.addWidget(self.lbl_summary_file)
-        self.lbl_summary_meta.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.lbl_summary_meta.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         summary_info.addWidget(self.lbl_summary_meta)
         summary.addLayout(summary_info, 1)
 
         actions = QHBoxLayout()
-        actions.setSpacing(6)
+        actions.setSpacing(5)
 
         self.btn_sync = QPushButton()
         self.btn_sync.setObjectName("btn_sync")
@@ -1415,12 +1415,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, I18N[self.lang]["error"], f"Failed to save:\n{e}")
 
     def toggle_machine_learning(self):
-        """Ativa ou desativa a filtragem e classificação por Inteligência Artificial."""
+        """Ativa ou desativa a filtragem e classificação por Inteligência Artificial sem forçar reanálise imediata."""
         self.use_machine_learning = not getattr(self, "use_machine_learning", True)
         self.save_settings(silent=True)
         self._update_ml_toggle_ui()
-        if self.active_filename and self.active_filename in self.loaded_files:
-            self.force_reanalyze()
 
     def _update_ml_toggle_ui(self):
         if not hasattr(self, "btn_toggle_ml"):
@@ -1593,8 +1591,10 @@ class MainWindow(QMainWindow):
         dom_freqs = d["dom_freqs"]
 
         self.lbl_summary_file.setText(filename)
-        p_txt = f"[Pulsos: {p['min_p']}-{p['max_p']} | Amp: {p['amp_min']}-{p['amp_max']} | Freq: {p['b1_min']}-{p['b1_max']}Hz]"
-        self.lbl_summary_meta.setText(f"Duração: {d['duration']:.2f} seconds   |   Parâmetros: {p_txt}")
+        p_txt = f"[Pulsos: {p['min_p']}-{p['max_p']} | Amp: {p['amp_min']:.2f}-{p['amp_max']:.2f} | Freq: {int(p['b1_min'])}-{int(p['b1_max'])} Hz]"
+        meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
+        self.lbl_summary_meta.setText(meta_str)
+        self.lbl_summary_meta.setToolTip(f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}")
         self.lbl_total.setText(str(len(chirps)))
         self.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
         model_status_text = "🧠 Modelo: ✓ treinado" if self.pulse_learner.is_trained() else "🧠 Modelo: não treinado"

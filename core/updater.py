@@ -227,10 +227,10 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
             exe_target = os.path.join(target_dir, cands[0])
 
     if is_installer:
-        # Execução do instalador Inno Setup silencioso /SP- /SILENT /SUPPRESSMSGBOXES
+        # Execução do instalador Inno Setup silencioso /SP- /VERYSILENT /SUPPRESSMSGBOXES
         update_commands = f"""
 echo Executando instalador Inno Setup da nova versão...
-"{downloaded_file}" /SP- /SILENT /SUPPRESSMSGBOXES /FORCECLOSEAPPLICATIONS /DIR="{target_dir}"
+"{downloaded_file}" /SP- /VERYSILENT /SUPPRESSMSGBOXES /DIR="{target_dir}"
 """
     elif is_zip:
         # Extração via PowerShell e cópia recursiva
@@ -256,8 +256,29 @@ if "%ERRORLEVEL%"=="0" (
 echo Aplicando atualização...
 {update_commands}
 
-echo Reiniciando Crinômetro...
-start "" "{exe_target}"
+rem Localiza o executável mais recente gerado pelo instalador
+set "LAUNCH_EXE="
+for /f "delims=" %%F in ('dir /b /a-d /o-d "{target_dir}\\Crinometro*.exe" 2^>nul') do (
+    set "LAUNCH_EXE={target_dir}\\%%F"
+    goto :FOUND_EXE
+)
+:FOUND_EXE
+
+rem Remove executáveis legados para manter estritamente apenas 1 executável na pasta
+if defined LAUNCH_EXE (
+    for /f "delims=" %%F in ('dir /b /a-d "{target_dir}\\Crinometro*.exe" 2^>nul') do (
+        if /I not "{target_dir}\\%%F"=="%LAUNCH_EXE%" (
+            del /f /q "{target_dir}\\%%F" 2>nul
+        )
+    )
+)
+
+echo Reiniciando Crinômetro atualizado...
+if defined LAUNCH_EXE (
+    start "" "%LAUNCH_EXE%"
+) else (
+    start "" "{exe_target}"
+)
 
 rem Limpeza de arquivos temporários
 timeout /t 2 /nobreak > nul

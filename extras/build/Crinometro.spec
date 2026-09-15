@@ -24,7 +24,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Crinometro_v4.2.0',
+    name='Crinometro_v4.2.2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -44,5 +44,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Crinometro_v4.2.0',
+    name='Crinometro_v4.2.2',
 )

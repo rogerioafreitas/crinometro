@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.2.0"
+APP_VERSION = "4.2.2"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -17,6 +17,12 @@ DEFAULT_ALGO_PARAMS = {
 }
 
 CHANGELOG = {
+    "4.2.2": [
+        "Correção do Instalador e Auto-Updater: isolamento rigoroso de dependências na subpasta '_internal', evitando descompactação indevida de DLLs na raiz, e garantia de reinicialização atômica do executável mais recente instalado.",
+        "Ajuste de Tipografia e Layout no Cabeçalho de Metadados: redução para 10px e otimização dos espaçamentos para eliminar truncamentos de texto de parâmetros.",
+        "Cursor de Reprodução de Alto Contraste na Timeline: linha reforçada de 2px com contorno escuro protetor (halo) e ponteiros estilizados no topo e na base, garantindo visibilidade total mesmo sob densas marcações de eventos.",
+        "Controle Manual de Reanálise por IA: remoção da reanálise automática ao alternar o botão de IA, permitindo ao usuário reanalisar apenas quando desejar pelo botão específico 'Reanalisar'."
+    ],
     "4.2.0": [
         "Sistema de Atualização Automática Integrado: verificação inteligente de releases no GitHub diretamente no Launcher, permitindo ao usuário escolher entre atualizar imediatamente ou lembrar mais tarde.",
         "Instalação Fluida em Segundo Plano: download com barra de progresso em tempo real e atualização dos arquivos com o Launcher aberto, sem encerramentos abruptos da interface.",

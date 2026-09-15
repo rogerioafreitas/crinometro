@@ -192,7 +192,7 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             }
             QLabel#summaryMeta {
                 color: #8E949C;
-                font-size: 11px;
+                font-size: 10px;
             }
             QLabel#metricTitle { color: #9EA4AC; font-size: 12px; }
             QLabel#metricValue { color: #F5F6F7; font-size: 27px; font-weight: 600; }

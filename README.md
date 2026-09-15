@@ -1,4 +1,4 @@
-﻿# 🦗 Crinômetro v4.2.2
+# 🦗 Crinômetro v4.2.2
 
 > **Software Especializado em Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -20,7 +20,7 @@ O instalador oficial com assistente de instalação e atualizador automático in
 
 O projeto adota o padrão semântico de versionamento estruturado em três níveis:
 
-- **Major (X):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: 4.0.x introduzindo a segregação acústica focal vs. coro distante).
+- **Major (X):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex:  4.0.x introduzindo a segregação acústica focal vs. coro distante).
 - **Minor (Y):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: v4.0.x → v4.1.0 → v4.2.0). Desenvolvido em branches separadas.
 - **Patch / Correções (Z):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**. Alterações diretas na branch main.
 
@@ -48,7 +48,7 @@ Documentações completas e diagramadas estão disponíveis na pasta [docs/](doc
 
 ## 🚀 Executando pelo Código-Fonte
 
-``` bash
+```bash
 # 1. Clonar o repositório
 git clone https://github.com/rogerioafreitas/crinometro.git
 cd crinometro
@@ -68,6 +68,5 @@ python crinometro__laucher.py
 
 ## 📬 Contato e Suporte
 
-- **Autor:** Rogério Freitas (
-rogerioafreitas)
+- **Autor:** Rogério Freitas (@rogerioafreitas)
 - **E-mail:** [rda.freitas.2002@gmail.com](mailto:rda.freitas.2002@gmail.com) *(Assunto: "Crinômetro")*

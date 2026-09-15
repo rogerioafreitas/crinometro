@@ -408,12 +408,67 @@ class TimelineWidget(QWidget):
             pts = QPolygonF([QPointF(x, 14), QPointF(x+9, 18), QPointF(x+9, 27), QPointF(x, 31)])
             p.drawPolygon(pts)
 
-        # cursor branco
-        cursor_x = int(progress_x)
-        p.setPen(QColor("#F2F3F5"))
-        p.drawLine(cursor_x, 7, cursor_x, 78)
-        p.setBrush(QColor("#F2F3F5"))
-        p.drawRoundedRect(cursor_x-4, 5, 8, 7, 2, 2)
+        # Cursor de reprodução com contorno de alto contraste (visível mesmo sob alta densidade de marcadores)
+        cursor_x = float(progress_x)
+
+        # 1. Halo de contraste escuro para separar o cursor de qualquer fundo ou marcação alaranjada
+        pen_halo = QPen(QColor(15, 23, 42, 230), 4.0)
+        pen_halo.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen_halo)
+        p.drawLine(QPointF(cursor_x, 4), QPointF(cursor_x, 80))
+
+        # Contorno escuro para o cabeçote superior
+        head_halo = QPolygonF([
+            QPointF(cursor_x - 6.5, 2.0),
+            QPointF(cursor_x + 6.5, 2.0),
+            QPointF(cursor_x + 6.5, 10.0),
+            QPointF(cursor_x, 16.5),
+            QPointF(cursor_x - 6.5, 10.0)
+        ])
+        p.setBrush(QColor(15, 23, 42, 230))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPolygon(head_halo)
+
+        # Contorno escuro para o pé/base inferior
+        base_halo = QPolygonF([
+            QPointF(cursor_x, 70.5),
+            QPointF(cursor_x + 5.5, 79.5),
+            QPointF(cursor_x - 5.5, 79.5)
+        ])
+        p.drawPolygon(base_halo)
+
+        # 2. Agulha central em branco puro com 2.0px de espessura
+        pen_core = QPen(QColor("#FFFFFF"), 2.0)
+        pen_core.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen_core)
+        p.drawLine(QPointF(cursor_x, 5), QPointF(cursor_x, 79))
+
+        # 3. Cabeçote superior preenchido em azul ciano vibrante (#38BDF8) com borda branca
+        head_core = QPolygonF([
+            QPointF(cursor_x - 5.0, 3.5),
+            QPointF(cursor_x + 5.0, 3.5),
+            QPointF(cursor_x + 5.0, 9.5),
+            QPointF(cursor_x, 15.0),
+            QPointF(cursor_x - 5.0, 9.5)
+        ])
+        p.setBrush(QColor("#38BDF8"))
+        p.setPen(QPen(QColor("#FFFFFF"), 1.2))
+        p.drawPolygon(head_core)
+
+        # Ponto focal interno branco no cabeçote
+        p.setBrush(QColor("#FFFFFF"))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(cursor_x, 7.0), 1.8, 1.8)
+
+        # 4. Marcador inferior (base) com borda branca
+        base_core = QPolygonF([
+            QPointF(cursor_x, 72.5),
+            QPointF(cursor_x + 4.0, 78.0),
+            QPointF(cursor_x - 4.0, 78.0)
+        ])
+        p.setBrush(QColor("#38BDF8"))
+        p.setPen(QPen(QColor("#FFFFFF"), 1.0))
+        p.drawPolygon(base_core)
 
         p.setPen(text)
         # Tempo corrente e duração ficam na faixa inferior, separados das flags.
