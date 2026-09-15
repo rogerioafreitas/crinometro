@@ -268,7 +268,6 @@ del /f /q "{downloaded_file}" 2>nul
     with open(bat_file, "w", encoding="latin-1") as f:
         f.write(bat_content)
 
-    # Executa o batch em processo totalmente desacoplado e encerra o app atual
+    # Executa o batch em processo totalmente desacoplado
     subprocess.Popen(["cmd.exe", "/c", bat_file], shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-    sys.exit(0)
 

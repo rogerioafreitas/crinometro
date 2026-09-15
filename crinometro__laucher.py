@@ -321,12 +321,15 @@ class LauncherLoadingScreen(QWidget):
     def _step_install_files(self, file_path: str):
         self.update_status_text = "Instalando arquivos..."
         self.update()
-        QTimer.singleShot(700, lambda: self._step_restart_app(file_path))
+        # Dispara o instalador silencioso em segundo plano enquanto o launcher permanece aberto
+        launch_windows_updater(file_path)
+        # Ap?s o instalador substituir os arquivos e quando s? restar o main executable, transiciona para reinicializa??o
+        QTimer.singleShot(1600, lambda: self._step_restart_app())
 
-    def _step_restart_app(self, file_path: str):
+    def _step_restart_app(self):
         self.update_status_text = "Reiniciando o programa..."
         self.update()
-        QTimer.singleShot(800, lambda: launch_windows_updater(file_path))
+        QTimer.singleShot(1000, lambda: QApplication.quit())
 
     def _on_download_error(self, err_msg: str):
         print(f"[Auto-Updater] Erro no download: {err_msg}")
