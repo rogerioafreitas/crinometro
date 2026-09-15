@@ -48,7 +48,7 @@ Documentações completas e diagramadas estão disponíveis na pasta [docs/](doc
 
 ## 🚀 Executando pelo Código-Fonte
 
-`Bash
+``` bash
 # 1. Clonar o repositório
 git clone https://github.com/rogerioafreitas/crinometro.git
 cd crinometro
@@ -62,7 +62,7 @@ pip install PyQt6 numpy scipy scikit-learn matplotlib reportlab pillow pyinstall
 
 # 4. Iniciar o programa
 python crinometro__laucher.py
-`
+```
 
 ---
 
