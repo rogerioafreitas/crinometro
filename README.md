@@ -1,4 +1,4 @@
-﻿# 🦗 Crinômetro v4.2.0
+﻿# 🦗 Crinômetro v4.2.2
 
 > **Software Especializado em Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -10,19 +10,19 @@ O instalador oficial com assistente de instalação e atualizador automático in
 
 🔗 **[Baixar Instalador Oficial no Google Drive](https://drive.google.com/drive/folders/1CSjbYE-mql_Sg9qmV-argU05RjpwnmpT?usp=sharing)**
 
-- **Nome do Instalador:** Crinometro_setup__v4.2.0.exe
+- **Nome do Instalador:** Crinometro_setup__v4.2.2.exe
 - **Tipo:** Instalador moderno (Inno Setup) com suporte a atalhos na Área de Trabalho e inicialização do aplicativo.
 - **Atualização Automática:** Notifica diretamente no Launcher sobre novas versões e realiza o download e a instalação de forma integrada e silenciosa.
 
 ---
 
-## 📌 Regra de Versionamento (X.Y.Z)
+## 📌 Regra de Versionamento (vX.Y.Z)
 
 O projeto adota o padrão semântico de versionamento estruturado em três níveis:
 
-- **Major ($):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: 4.0.x introduzindo a segregação acústica focal vs. coro distante).
-- **Minor ($):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: 4.0.x → 4.1.0 → 4.2.0). Desenvolvido em branches separadas.
-- **Patch / Correções ($):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**. Alterações diretas na branch main.
+- **Major (X):** Grandes saltos arquiteturais e reestruturações completas de escopo sob comando explícito (ex: 4.0.x introduzindo a segregação acústica focal vs. coro distante).
+- **Minor (Y):** Qualquer mudança funcional, nova complexidade algorítmica, inclusão de recursos ou modificação visual significativa na interface que **demande registro ou alteração na documentação técnica** (ex: v4.0.x → v4.1.0 → v4.2.0). Desenvolvido em branches separadas.
+- **Patch / Correções (Z):** Correções pontuais de bugs internos, pequenos ajustes cosméticos ou melhorias de estabilidade que **não alteram as diretrizes nem exigem atualização no relatório técnico**. Alterações diretas na branch main.
 
 ---
 
@@ -48,7 +48,7 @@ Documentações completas e diagramadas estão disponíveis na pasta [docs/](doc
 
 ## 🚀 Executando pelo Código-Fonte
 
-`ash
+`Bash
 # 1. Clonar o repositório
 git clone https://github.com/rogerioafreitas/crinometro.git
 cd crinometro
@@ -68,5 +68,6 @@ python crinometro__laucher.py
 
 ## 📬 Contato e Suporte
 
-- **Autor:** Rogério Freitas (ogerioafreitas)
+- **Autor:** Rogério Freitas (
+rogerioafreitas)
 - **E-mail:** [rda.freitas.2002@gmail.com](mailto:rda.freitas.2002@gmail.com) *(Assunto: "Crinômetro")*
