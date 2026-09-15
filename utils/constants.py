@@ -17,6 +17,13 @@ DEFAULT_ALGO_PARAMS = {
 }
 
 CHANGELOG = {
+    "4.2.0": [
+        "Sistema de Atualização Automática Integrado: verificação inteligente de releases no GitHub diretamente no Launcher, permitindo ao usuário escolher entre atualizar imediatamente ou lembrar mais tarde.",
+        "Instalação Fluida em Segundo Plano: download com barra de progresso em tempo real e atualização dos arquivos com o Launcher aberto, sem encerramentos abruptos da interface.",
+        "Integração Robusta com Inno Setup: substituição segura e atômica de executáveis via diretivas 'restartreplace uninsrestartdelete' e reinicialização automática do programa atualizado.",
+        "Documentação Técnica e Didática em PDF Atualizada: manuais científicos revisados para v4.2.0 com diagramação aperfeiçoada e suporte tipográfico Unicode completo.",
+        "README Reestruturado e Sintético: visão geral objetiva, regras estritas de versionamento semântico (SemVer) e instruções concisas de compilação e execução."
+    ],
     "4.1.2": [
         "Launcher Integrado no Executável: inicialização direta exibindo o mascote animado e frases temáticas antes da tela principal, tanto no código-fonte quanto no executável (.exe).",
         "Efeito de Sombra Suave (Drop Shadow) no Launcher: janela frameless translúcida com renderização multicamadas de sombra suave e borda sutil para destaque no desktop.",
