@@ -84,28 +84,28 @@ class CricketAnalyzer:
         freq_mask = (f_spec >= b1_min) & (f_spec <= b1_max)
         if np.any(freq_mask):
             Sxx_band = Sxx[freq_mask, :]
-            band_ratio = np.sum(Sxx_band, axis=0) / (np.sum(Sxx, axis=0) + 1e-10)
             band_indices = np.where(freq_mask)[0]
             dom_in_band = np.argmax(Sxx_band, axis=0)
             dom_freq_idx = band_indices[dom_in_band]
         else:
-            band_ratio = np.ones(Sxx.shape[1], dtype=np.float32)
             dom_freq_idx = np.argmax(Sxx, axis=0)
 
         dom_freqs = f_spec[dom_freq_idx].astype(np.float64)
-        # Refinamento parabólico sub-bin contínuo da frequência dominante na banda focal
+        # Refinamento parabólico sub-bin contínuo da frequência dominante (vetorizado)
         df = float(f_spec[1] - f_spec[0]) if len(f_spec) > 1 else 1.0
-        for col in range(Sxx.shape[1]):
-            k = dom_freq_idx[col]
-            if 0 < k < Sxx.shape[0] - 1:
-                alpha = float(Sxx_db[k - 1, col])
-                beta = float(Sxx_db[k, col])
-                gamma = float(Sxx_db[k + 1, col])
-                denom = alpha - 2.0 * beta + gamma
-                if abs(denom) > 1e-6:
-                    p = 0.5 * (alpha - gamma) / denom
-                    if -1.0 <= p <= 1.0:
-                        dom_freqs[col] = float(f_spec[k] + p * df)
+        valid_k = (dom_freq_idx > 0) & (dom_freq_idx < Sxx.shape[0] - 1)
+        valid_cols = np.where(valid_k)[0]
+        if len(valid_cols) > 0:
+            k = dom_freq_idx[valid_cols]
+            alpha = Sxx_db[k - 1, valid_cols]
+            beta = Sxx_db[k, valid_cols]
+            gamma = Sxx_db[k + 1, valid_cols]
+            denom = alpha - 2.0 * beta + gamma
+            non_zero = np.abs(denom) > 1e-6
+            p = np.zeros_like(denom, dtype=np.float32)
+            p[non_zero] = 0.5 * (alpha[non_zero] - gamma[non_zero]) / denom[non_zero]
+            p_valid = non_zero & (p >= -1.0) & (p <= 1.0)
+            dom_freqs[valid_cols[p_valid]] = f_spec[k[p_valid]] + p[p_valid] * df
         dom_freqs = dom_freqs.astype(np.float32)
         dist_samples = max(1, int(rate * (params.get("gap_min", 25.0) / 1000.0 * 0.75)))
 
@@ -126,17 +126,11 @@ class CricketAnalyzer:
                                   distance=dist_samples, prominence=prominence_val,
                                   width=(width_min, width_max))
 
-        # Estágio 1: Coerência espectral na banda (rejeição de ruídos de banda larga e estalos)
-        valid_peaks_stage1 = []
-        if len(raw_peaks) > 0:
-            for p in raw_peaks:
-                p_time = p / rate
-                spec_col_idx = np.argmin(np.abs(t_spec - p_time))
-                br = band_ratio[spec_col_idx]
-                if br >= 0.35:
-                    valid_peaks_stage1.append(p)
-
-        peaks_filtered = np.array(valid_peaks_stage1)
+        # Estágio 1: Triagem e validação morfológica dos pulsos candidatos
+        # Como data_b1 já é filtrado com Butterworth passa-faixa em [b1_min, b1_max],
+        # a envoltória env1_smooth reflete diretamente a banda estridulatória.
+        # Falsos positivos de frequência e cantos distantes são isolados no Estágio 2.5.
+        peaks_filtered = np.asarray(raw_peaks, dtype=int)
         valid_peaks_stage2 = []
         if len(peaks_filtered) > 0:
             widths_samples, _, _, _ = peak_widths(env1_smooth, peaks_filtered, rel_height=0.7)

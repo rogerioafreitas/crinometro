@@ -33,7 +33,7 @@ from utils.styles import get_modern_stylesheet
 
 from core.analyzer import CricketAnalyzer
 from core.learner import PulseLearner
-from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine
+from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine, HighPerfFreqEngine
 from core.worker import GenericWorker
 
 from ui.widgets import ButtonSpinner, ThemeToggle, LoadingScreen, AudioListItemWidget
@@ -110,6 +110,7 @@ class MainWindow(QMainWindow):
         self.expanded_panel = None
         self.spectro_engine = None
         self.line_engine = None
+        self.freq_engine = None
         self.last_draw_time = 0
         self.last_pan_time = 0
         self.sync_throttle_time = 0
@@ -651,6 +652,8 @@ class MainWindow(QMainWindow):
                 self.line_engine.debounce_timer.stop()
             if self.spectro_engine is not None:
                 self.spectro_engine.debounce_timer.stop()
+            if self.freq_engine is not None:
+                self.freq_engine.debounce_timer.stop()
 
             old_main = self.main_panel
             old_stack = list(self.stack_panels)
@@ -1169,6 +1172,13 @@ class MainWindow(QMainWindow):
             self.peaks_detected = []
             self.active_heavy_data = None
             self._adaptive_overrides = {}
+
+        if self.line_engine:
+            self.line_engine.debounce_timer.stop()
+        if self.spectro_engine:
+            self.spectro_engine.debounce_timer.stop()
+        if getattr(self, "freq_engine", None):
+            self.freq_engine.debounce_timer.stop()
 
     def _get_item_widget_by_name(self, filename):
         for i in range(self.list_widget.count()):
@@ -1728,9 +1738,13 @@ class MainWindow(QMainWindow):
         # FREQ
         ax3 = self.panel_freq.ax
         ax3.clear()
-        ax3.scatter(t_spec, dom_freqs, c=dom_freqs, cmap='plasma', s=7, alpha=0.72, edgecolors='none')
         ax3.set_ylabel("Hz")
         ax3.set_xlabel("seconds")
+        ax3.set_xlim(t_spec[0], t_spec[-1])
+        p_freq = params or {}
+        ax3.set_ylim(float(p_freq.get("b1_min", 3200)), float(p_freq.get("b1_max", 6000)))
+        self.freq_engine = HighPerfFreqEngine(ax3, t_spec, dom_freqs, update_bg_callback=self.capture_backgrounds)
+        self.freq_engine.render_high_detail()
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
             freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
@@ -1796,13 +1810,17 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "panel_spec"):
             return
         ax4 = self.panel_spec.ax
+        unit_changed = (getattr(self, "_last_applied_spec_unit", None) != unit)
+        self._last_applied_spec_unit = unit
+
         ax4.set_ylabel(unit)
         ax4.set_ylim(ymin, ymax)
         if hasattr(self, "spectro_engine") and self.spectro_engine:
-            self.spectro_engine.set_unit(unit)
+            if unit_changed:
+                self.spectro_engine.set_unit(unit)
             self.spectro_engine.render_high_detail()
 
-        if getattr(self, "active_heavy_data", None):
+        if unit_changed and getattr(self, "active_heavy_data", None):
             scale = 1000.0 if unit == "kHz" else 1.0
             rate = float(self.active_heavy_data.get("rate", 1.0))
             t_spec = self.active_heavy_data.get("t_spec")
@@ -1838,7 +1856,7 @@ class MainWindow(QMainWindow):
                     if valid_d:
                         d_times = np.array(valid_d) / rate
                         d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
-                        ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
+                        ax4.plot(d_times, d_freqs, 'x', color='#9CA3AF', markersize=4.5, markeredgewidth=1.0, alpha=0.6, zorder=6)
 
         self.panel_spec.canvas.draw_idle()
 
@@ -2711,6 +2729,8 @@ class MainWindow(QMainWindow):
             self.spectro_engine.render_high_detail()
         if self.line_engine:
             self.line_engine.render_high_detail()
+        if getattr(self, "freq_engine", None):
+            self.freq_engine.render_high_detail()
         for panel in self.all_panels:
             panel.canvas.draw()
 
@@ -2723,7 +2743,7 @@ class MainWindow(QMainWindow):
         if getattr(self, "_swapping_panels", False):
             return
         current_time = time.time()
-        if current_time - self.sync_throttle_time < 0.042:
+        if current_time - self.sync_throttle_time < 0.025:
             return
         for panel in target_panels:
             if not panel.isVisible():
@@ -2733,6 +2753,8 @@ class MainWindow(QMainWindow):
                 self.spectro_engine.render_interactive(xmin, xmax, ymin, ymax, is_sync=True)
             elif self.line_engine and panel == self.panel_wave:
                 self.line_engine.render_interactive(xmin, xmax, is_sync=True)
+            elif getattr(self, "freq_engine", None) and panel == self.panel_freq:
+                self.freq_engine.render_interactive(xmin, xmax, is_sync=True)
             else:
                 panel.canvas.draw_idle()
         self.sync_throttle_time = current_time

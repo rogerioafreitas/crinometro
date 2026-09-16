@@ -167,3 +167,56 @@ class HighPerfSpectrogramEngine:
         self.ax.figure.canvas.draw_idle()
 
 
+# ==========================================
+# 3. ENGINE GRÁFICA DE ALTA PERFORMANCE (FREQUÊNCIA DOMINANTE)
+# ==========================================
+class HighPerfFreqEngine:
+    def __init__(self, ax, t_spec, dom_freqs, base_color='#8B5CF6', update_bg_callback=None):
+        self.ax = ax
+        self.t_spec = t_spec
+        self.dom_freqs = dom_freqs
+        self.base_color = base_color
+        self.update_bg_callback = update_bg_callback
+        self.line = None
+        
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self.render_high_detail)
+
+    def get_viewport_slice(self, xmin, xmax):
+        t0 = max(0, int(np.searchsorted(self.t_spec, xmin)) - 1)
+        t1 = min(len(self.t_spec), int(np.searchsorted(self.t_spec, xmax)) + 1)
+        if t1 <= t0:
+            t1 = t0 + 2
+        return t0, t1
+
+    def render_interactive(self, xmin, xmax, is_sync=False):
+        self.debounce_timer.stop()
+        t0, t1 = self.get_viewport_slice(xmin, xmax)
+        length = t1 - t0
+        step = max(1, length // (300 if is_sync else 500))
+        t_sub = self.t_spec[t0:t1:step]
+        y_sub = self.dom_freqs[t0:t1:step]
+        self._update_plot(t_sub, y_sub)
+        self.debounce_timer.start(150 if is_sync else 120)
+
+    def render_high_detail(self):
+        xmin, xmax = self.ax.get_xlim()
+        t0, t1 = self.get_viewport_slice(xmin, xmax)
+        length = t1 - t0
+        step = max(1, length // 2500)
+        t_sub = self.t_spec[t0:t1:step]
+        y_sub = self.dom_freqs[t0:t1:step]
+        self._update_plot(t_sub, y_sub)
+        if self.update_bg_callback:
+            QTimer.singleShot(50, self.update_bg_callback)
+
+    def _update_plot(self, t, y):
+        if self.line is None:
+            self.line, = self.ax.plot(t, y, '.', color=self.base_color, markersize=2.2, alpha=0.72, zorder=2)
+        else:
+            self.line.set_data(t, y)
+        self.ax.figure.canvas.draw_idle()
+
+
+
