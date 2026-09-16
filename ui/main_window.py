@@ -1633,7 +1633,7 @@ class MainWindow(QMainWindow):
         # ao chamar line.remove() na próxima chamada de _align_click_marker().
         self._click_alignment_lines = []
         d = self.active_heavy_data
-        p = d["params"]
+        p = d.get("params") or {}
         rate = d["rate"]
         data = d["data"]
         env = d["env"]
@@ -1741,7 +1741,7 @@ class MainWindow(QMainWindow):
         ax3.set_ylabel("Hz")
         ax3.set_xlabel("seconds")
         ax3.set_xlim(t_spec[0], t_spec[-1])
-        p_freq = params or {}
+        p_freq = p or {}
         ax3.set_ylim(float(p_freq.get("b1_min", 3200)), float(p_freq.get("b1_max", 6000)))
         self.freq_engine = HighPerfFreqEngine(ax3, t_spec, dom_freqs, update_bg_callback=self.capture_backgrounds)
         self.freq_engine.render_high_detail()
