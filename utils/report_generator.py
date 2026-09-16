@@ -71,9 +71,38 @@ def format_timestamp_ms(time_sec):
     return f"{minutes:02d}:{seconds:02d}.{centis:02d}"
 
 
+def extract_specimen_id(filename: str) -> str:
+    """Extrai o identificador do espécime/macho a partir do nome do arquivo.
+    Regra: identifica o identificador do macho/espécime antes do separador underscore '_'
+    (ex.: em 'm015_grav3.wav' -> 'm015', 'macho 15__0468.wav' -> 'macho 15', 'macho 27_0484.wav' -> 'macho 27').
+    Caso não possua underscore, utiliza o nome base sem extensão.
+    """
+    base = os.path.basename(filename)
+    name_no_ext, _ = os.path.splitext(base)
+    if "_" in name_no_ext:
+        specimen = name_no_ext.split("_")[0].strip()
+        if specimen:
+            return specimen
+    return name_no_ext.strip()
+
+
+def safe_mode(values):
+    """Calcula a moda estatística de uma lista de valores com fallback seguro."""
+    if not values:
+        return 0
+    try:
+        import statistics
+        return int(statistics.mode(values))
+    except Exception:
+        vals, counts = np.unique(values, return_counts=True)
+        return int(vals[np.argmax(counts)])
+
+
 def analyze_rhythmic_cadence(chirp_peaks_list, rate):
     """Avalia a cadência rítmica temporal entre chilreios consecutivos (ICI).
     
+    Isola pausas fisiológicas naturais e ruídos transitórios (outliers) do ritmo
+    contínuo antes de inferir aceleração ou desaceleração rítmica.
     Retorna diagnóstico textual, inclinação da regressão, mediana de ICI e CV.
     """
     if not chirp_peaks_list or len(chirp_peaks_list) < 3:
@@ -92,7 +121,7 @@ def analyze_rhythmic_cadence(chirp_peaks_list, rate):
         t_end_cur = chirp_peaks_list[i][-1] / float(rate)
         t_start_next = chirp_peaks_list[i + 1][0] / float(rate)
         dt_ici_s = t_start_next - t_end_cur
-        if dt_ici_s > 0.010: # maior que o gap mínimo
+        if dt_ici_s > 0.010: # maior que o gap mínimo fisiológico
             ici_times_s.append(t_start_next)
             ici_intervals_ms.append(dt_ici_s * 1000.0)
 
@@ -105,10 +134,28 @@ def analyze_rhythmic_cadence(chirp_peaks_list, rate):
             "cv_percent": 0.0,
         }
 
-    x = np.asarray(ici_times_s, dtype=float)
-    y = np.asarray(ici_intervals_ms, dtype=float)
+    raw_y = np.asarray(ici_intervals_ms, dtype=float)
+    raw_x = np.asarray(ici_times_s, dtype=float)
+
+    # 1. Filtro robusto de pausas fisiológicas e ruídos transitórios
+    median_raw_ici = float(np.median(raw_y))
+    q25 = float(np.percentile(raw_y, 25))
+    q75 = float(np.percentile(raw_y, 75))
+    iqr = max(20.0, q75 - q25)
     
-    # Regressão linear (ICI em função do tempo)
+    # Limite superior para ritmo contínuo intrínseco:
+    # intervalos que excedam 2.8x a mediana ou Q75 + 2.5*IQR ou 2000 ms são pausas fisiológicas/ruídos
+    pause_cutoff_ms = min(2000.0, max(median_raw_ici * 2.8, q75 + 2.5 * iqr))
+    continuous_mask = (raw_y >= 20.0) & (raw_y <= pause_cutoff_ms)
+    
+    if np.sum(continuous_mask) >= 3:
+        x = raw_x[continuous_mask]
+        y = raw_y[continuous_mask]
+    else:
+        x = raw_x
+        y = raw_y
+
+    # Regressão linear sobre os intervalos rítmicos contínuos
     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(x, y)
     
     median_ici = float(np.median(y))
@@ -116,19 +163,19 @@ def analyze_rhythmic_cadence(chirp_peaks_list, rate):
     std_ici = float(np.std(y))
     cv = (std_ici / mean_ici * 100.0) if mean_ici > 0 else 0.0
 
-    # Classificação rigorosa baseada na inclinação linear (ms por segundo de gravação)
-    if slope < -0.05:
+    # Classificação rigorosa: exige significância estatística (p < 0.05) e inclinação relevante (|slope| > 0.15 ms/s)
+    if p_value < 0.05 and slope < -0.15:
         diag = "Aceleração Rítmica"
-        desc = (f"Os intervalos inter-chilreios (ICI) apresentaram tendência temporal negativa "
-                f"({slope:.2f} ms/s), indicando aceleração do ritmo estridulatório ao longo do registro gravado.")
-    elif slope > +0.05:
+        desc = (f"Os intervalos inter-chilreios (ICI) contínuos apresentaram tendência temporal negativa "
+                f"({slope:.2f} ms/s, p={p_value:.3f}), indicando aceleração estatisticamente significativa do ritmo estridulatório.")
+    elif p_value < 0.05 and slope > +0.15:
         diag = "Desaceleração Rítmica"
-        desc = (f"Os intervalos inter-chilreios (ICI) apresentaram tendência temporal positiva "
-                f"(+{slope:.2f} ms/s), indicando espaçamento progressivo dos chilreios e perda de cadência rápida.")
+        desc = (f"Os intervalos inter-chilreios (ICI) contínuos apresentaram tendência temporal positiva "
+                f"(+{slope:.2f} ms/s, p={p_value:.3f}), indicando espaçamento progressivo dos chilreios e perda de cadência rápida.")
     else:
         diag = "Cadência Estável"
-        desc = (f"A cadência temporal entre chilreios manteve-se metronômica e consistente "
-                f"(inclinação desprezível de {slope:+.3f} ms/s), com baixa variabilidade inter-chilreio.")
+        desc = (f"A cadência temporal contínua entre chilreios manteve-se metronômica e consistente "
+                f"(inclinação de {slope:+.3f} ms/s, p={p_value:.3f}), com ritmo fisiológico regular.")
 
     return {
         "diagnosis": diag,
@@ -261,54 +308,85 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     story.append(meta_table)
     story.append(Spacer(1, 14))
 
-    # 3. TABELA COMPARATIVA GERAL (Quando houver mais de 1 áudio, especialmente no modo Simplificado)
+    # 3. TABELA COMPARATIVA GERAL (Quando houver mais de 1 áudio, agrupado por espécime)
     if len(selected_cache) > 1:
-        story.append(Paragraph("<b>Síntese Bioacústica Comparativa entre Áudios</b>", section_h1))
+        story.append(Paragraph("<b>Síntese Bioacústica Comparativa entre Espécimes</b>", section_h1))
         comp_headers = [
-            Paragraph("<b>Arquivo / Espécime</b>", table_header),
+            Paragraph("<b>Espécime</b>", table_header),
             Paragraph("<b>Duração</b>", table_header),
             Paragraph("<b>Chilreios</b>", table_header),
             Paragraph("<b>Moda</b>", table_header),
             Paragraph("<b>Média ± Desv</b>", table_header),
             Paragraph("<b>Dens. (chilr/s)</b>", table_header),
             Paragraph("<b>ICI Mediano</b>", table_header),
-            Paragraph("<b>Diagnóstico Rítmico</b>", table_header),
+            Paragraph("<b>Frequência Portadora</b>", table_header),
         ]
         comp_rows = [comp_headers]
 
+        # Agrupamento de gravações pertencentes ao mesmo espécime
+        specimens_dict = {}
         for fname, d in selected_cache.items():
-            dur = float(d.get("duration", 0.0))
-            ch = list(d.get("chirps", []))
-            ch_list = list(d.get("chirp_peaks_list", d.get("chirp_peaks", [])))
-            r = float(d.get("rate", 48000.0))
-            tot_ch = len(ch)
-            m_val = d.get("moda", 0)
-            med_val = float(d.get("media", 0.0))
-            std_val = float(np.std(ch)) if ch else 0.0
-            dens_c = (tot_ch / dur) if dur > 0 else 0.0
-            cad = analyze_rhythmic_cadence(ch_list, r)
-            diag_t = cad["diagnosis"]
-            ici_m = cad["ici_median_ms"]
+            spec_id = extract_specimen_id(fname)
+            if spec_id not in specimens_dict:
+                specimens_dict[spec_id] = []
+            specimens_dict[spec_id].append((fname, d))
 
-            # Cor de diagnóstico
-            if diag_t == "Cadência Estável":
-                d_color = "#059669"
-            elif diag_t == "Aceleração Rítmica":
-                d_color = "#2563EB"
-            elif diag_t == "Desaceleração Rítmica":
-                d_color = "#D97706"
+        for spec_id, audio_list in specimens_dict.items():
+            n_audios = len(audio_list)
+            if n_audios > 1:
+                spec_label = f"<b>{spec_id}</b><br/><font size='6.5' color='#64748B'>({n_audios} gravações)</font>"
             else:
-                d_color = "#64748B"
+                spec_label = f"<b>{spec_id}</b>"
+
+            total_dur = sum(float(d.get("duration", 0.0)) for _, d in audio_list)
+            
+            # Concatenação de métricas brutas de todos os chilreios do espécime
+            combined_chirps = []
+            all_icis_ms = []
+            carrier_vals = []
+            carrier_weights = []
+
+            for _, d in audio_list:
+                ch = list(d.get("chirps", []))
+                combined_chirps.extend(ch)
+                ch_list = list(d.get("chirp_peaks_list", d.get("chirp_peaks", [])))
+                r = float(d.get("rate", 48000.0))
+                for i in range(len(ch_list) - 1):
+                    dt = (ch_list[i + 1][0] - ch_list[i][-1]) / float(r)
+                    if 0.010 <= dt <= 2.0:
+                        all_icis_ms.append(dt * 1000.0)
+                
+                c_freq = d.get("carrier_freq")
+                if c_freq is None:
+                    dom_f = d.get("dom_freqs")
+                    c_freq = float(np.median(dom_f)) if dom_f is not None and len(dom_f) > 0 else 5000.0
+                carrier_vals.append(float(c_freq))
+                carrier_weights.append(max(1, len(ch)))
+
+            tot_ch = len(combined_chirps)
+            m_val = safe_mode(combined_chirps) if combined_chirps else 0
+            med_val = float(np.mean(combined_chirps)) if combined_chirps else 0.0
+            std_val = float(np.std(combined_chirps)) if combined_chirps else 0.0
+            dens_c = (tot_ch / total_dur) if total_dur > 0 else 0.0
+            ici_m = float(np.median(all_icis_ms)) if all_icis_ms else 0.0
+
+            # Frequência portadora consolidada (média ponderada pelo volume de chilreios)
+            if carrier_vals:
+                cons_carrier = float(np.average(carrier_vals, weights=carrier_weights))
+            else:
+                cons_carrier = 5000.0
+
+            carrier_str = f"{cons_carrier / 1000.0:.2f} kHz" if cons_carrier >= 1000.0 else f"{cons_carrier:.0f} Hz"
 
             comp_rows.append([
-                Paragraph(f"<b>{fname}</b>", table_cell_bold),
-                Paragraph(f"{dur:.1f}s", table_cell),
+                Paragraph(spec_label, table_cell_bold),
+                Paragraph(f"{total_dur:.1f}s", table_cell),
                 Paragraph(f"<b>{tot_ch}</b>", table_cell_bold),
                 Paragraph(f"{m_val}", table_cell),
                 Paragraph(f"{med_val:.1f} ± {std_val:.1f}", table_cell),
                 Paragraph(f"{dens_c:.2f}", table_cell),
-                Paragraph(f"{ici_m:.1f} ms", table_cell),
-                Paragraph(f"<font color='{d_color}'><b>{diag_t}</b></font>", table_cell_bold),
+                Paragraph(f"{ici_m:.1f} ms" if ici_m > 0 else "-", table_cell),
+                Paragraph(f"<font color='#0284C7'><b>{carrier_str}</b></font>", table_cell_bold),
             ])
 
         comp_table = Table(comp_rows, colWidths=[120, 48, 52, 40, 72, 60, 58, 73], repeatRows=1)

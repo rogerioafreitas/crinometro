@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.2.2"
+APP_VERSION = "4.3.0"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -14,9 +14,18 @@ DEFAULT_ALGO_PARAMS = {
     "smooth_window_ms": 15.0, "noise_floor": 1.00,
     "adaptation_rate": 0.10,
     "focal_sensitivity": 0.60,
+    "freq_tolerance_hz": 300.0,
 }
 
 CHANGELOG = {
+    "4.3.0": [
+        "Identificação de Frequência Focal por Densidade de Chilreios e Filtro de ±300 Hz: localização automática da frequência portadora com maior densidade de chilreios e expurgo sistemático de pulsos espúrios com mais de 300 Hz de desvio, eliminando falsos positivos e ruídos externos.",
+        "Controles Interativos de Escala e Unidades no Espectrograma: manipulação vertical contínua com spinboxes dedicados para limites inferior e superior, alternância dinâmica de unidade entre Hz e kHz com conversão instantânea de rótulos/marcadores, atalhos de preset ('10k' e 'Focal') e espectrograma de banda ampla abrangendo todo o som do áudio até 10+ kHz.",
+        "Otimização de Performance e Fluidez no Pan/Zoom: eliminação completa de lag e travamentos durante navegação com múltiplos áudios; redução de 50% no consumo de RAM via float32 nos arrays acústicos (data, env, Sxx_db), filtragem ultra-rápida de proximidade temporal (dt_max) no evento de hover e bloqueio de repintura em painéis invisíveis.",
+        "Agrupamento Bioacústico por Espécime no Relatório Geral (PDF): consolidação comparativa agrupada por identificador de espécime (prefixo antes do sublinhado '_'), exibindo métricas globais agregadas e substituindo a coluna 'Diagnóstico Rítmico' por 'Frequência Portadora' consolidada.",
+        "Robustez Estatística no Diagnóstico de Cadência Rítmica: rejeição automática de pausas fisiológicas longas e lacunas de ruído passageiro na análise de regressão do ICI, com exigência de significância estatística (p < 0.05 e |slope| > 0.15 ms/s) para evitar falsos positivos de desaceleração.",
+        "Correção do Bug Crítico de Perda Global de Detecção: eliminação de contaminação cruzada de picos residuais entre áudios com método atômico de reinicialização de estado (reset_audio_state), garantindo que novos áudios longos mantenham detecção integral ao longo de toda a duração, além de salvaguardas contra poda excessiva no PulseLearner."
+    ],
     "4.2.2": [
         "Correção do Instalador e Auto-Updater: isolamento rigoroso de dependências na subpasta '_internal', evitando descompactação indevida de DLLs na raiz, e garantia de reinicialização atômica do executável mais recente instalado.",
         "Ajuste de Tipografia e Layout no Cabeçalho de Metadados: redução para 10px e otimização dos espaçamentos para eliminar truncamentos de texto de parâmetros.",

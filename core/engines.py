@@ -77,25 +77,41 @@ class HighPerfLineEngine:
 # 2. ENGINE GRÁFICA DE ALTA PERFORMANCE (ESPECTROGRAMA)
 # ==========================================
 class HighPerfSpectrogramEngine:
-    def __init__(self, ax, Sxx_db, t_spec, f_spec, update_bg_callback=None):
+    def __init__(self, ax, Sxx_db, t_spec, f_spec, update_bg_callback=None, unit="kHz"):
         self.ax = ax
         self.Sxx_db = Sxx_db
         self.t_spec = t_spec
         self.f_spec = f_spec
         self.update_bg_callback = update_bg_callback
         self.image = None
+        self.unit = unit
+        self.scale = 1000.0 if unit == "kHz" else 1.0
         
         self.tile_cache = {}
         
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.render_high_detail)
+
+    def set_unit(self, unit):
+        if self.unit != unit:
+            self.unit = unit
+            self.scale = 1000.0 if unit == "kHz" else 1.0
+            self.tile_cache.clear()
+            if self.image is not None:
+                try:
+                    self.image.remove()
+                except Exception:
+                    pass
+                self.image = None
         
     def get_viewport_slice(self, xmin, xmax, ymin, ymax):
+        ymin_hz = ymin * self.scale
+        ymax_hz = ymax * self.scale
         t_idx_min = max(0, np.searchsorted(self.t_spec, xmin) - 1)
         t_idx_max = min(len(self.t_spec), np.searchsorted(self.t_spec, xmax) + 1)
-        f_idx_min = max(0, np.searchsorted(self.f_spec, ymin) - 1)
-        f_idx_max = min(len(self.f_spec), np.searchsorted(self.f_spec, ymax) + 1)
+        f_idx_min = max(0, np.searchsorted(self.f_spec, ymin_hz) - 1)
+        f_idx_max = min(len(self.f_spec), np.searchsorted(self.f_spec, ymax_hz) + 1)
         
         if t_idx_max <= t_idx_min: t_idx_max = t_idx_min + 2
         if f_idx_max <= f_idx_min: f_idx_max = f_idx_min + 2
@@ -111,7 +127,9 @@ class HighPerfSpectrogramEngine:
         lod_step = max(1, viewport_width // divisor) 
         
         sliced_data = self.Sxx_db[f0:f1:lod_step, t0:t1:lod_step]
-        self._update_imshow(sliced_data, self.t_spec[t0], self.t_spec[t1-1], self.f_spec[f0], self.f_spec[f1-1])
+        y0 = float(self.f_spec[f0] / self.scale)
+        y1 = float(self.f_spec[f1-1] / self.scale)
+        self._update_imshow(sliced_data, float(self.t_spec[t0]), float(self.t_spec[t1-1]), y0, y1)
         
         self.debounce_timer.start(250 if is_sync else 200)
         
@@ -119,7 +137,7 @@ class HighPerfSpectrogramEngine:
         xmin, xmax = self.ax.get_xlim()
         ymin, ymax = self.ax.get_ylim()
         
-        cache_key = (round(xmin, 1), round(xmax, 1), round(ymin, 0), round(ymax, 0))
+        cache_key = (round(xmin, 1), round(xmax, 1), round(ymin, 2), round(ymax, 2), self.unit)
         
         if cache_key in self.tile_cache:
             high_res_data, extent = self.tile_cache[cache_key]
@@ -127,7 +145,9 @@ class HighPerfSpectrogramEngine:
         else:
             t0, t1, f0, f1 = self.get_viewport_slice(xmin, xmax, ymin, ymax)
             high_res_data = self.Sxx_db[f0:f1, t0:t1]
-            extent = (self.t_spec[t0], self.t_spec[t1-1], self.f_spec[f0], self.f_spec[f1-1])
+            y0 = float(self.f_spec[f0] / self.scale)
+            y1 = float(self.f_spec[f1-1] / self.scale)
+            extent = (float(self.t_spec[t0]), float(self.t_spec[t1-1]), y0, y1)
             
             self._update_imshow(high_res_data, *extent)
             

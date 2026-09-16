@@ -176,16 +176,18 @@ class AdvancedAlgoSettingsDialog(QDialog):
             ("noise_floor", "Limiar de ruído dinâmico:", 0.01, 2.0, 0.01),
             ("adaptation_rate", "Taxa de adaptação:", 0.0, 1.0, 0.01),
             ("focal_sensitivity", "Sensibilidade Focal (Rejeição Grilos Distantes):", 0.0, 1.0, 0.05),
+            ("freq_tolerance_hz", "Tolerância Freq. Focal (±Hz):", 50.0, 2000.0, 25.0),
         ]
         for key, label, vmin, vmax, step in fields:
             widget = QDoubleSpinBox()
             widget.setRange(vmin, vmax)
             widget.setSingleStep(step)
-            widget.setDecimals(4)
+            widget.setDecimals(4 if step < 0.01 else (1 if step < 1.0 else 0))
             widget.setValue(float(current_params.get(key, {
                 "prominence": 0.02, "width_min_ms": 0.0, "width_max_ms": 0.0,
                 "smooth_window_ms": 15.0, "noise_floor": 1.00,
-                "adaptation_rate": 0.10, "focal_sensitivity": 0.60
+                "adaptation_rate": 0.10, "focal_sensitivity": 0.60,
+                "freq_tolerance_hz": 300.0,
             }.get(key, 0.0))))
             self.inputs[key] = widget
             form.addRow(label, widget)

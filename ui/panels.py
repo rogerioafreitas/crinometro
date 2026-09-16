@@ -2,7 +2,8 @@
 Crinômetro - Painéis Gráficos e Timeline Interativa.
 """
 from PyQt6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QDoubleSpinBox
 )
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
@@ -196,6 +197,91 @@ class PlotPanel(QFrame):
         self.apply_dark_theme()
 
         self.layout.addWidget(self.title_bar)
+
+        if self.title_key == "spec":
+            self.spec_unit = "kHz"
+            self.spec_ctrl_bar = QWidget()
+            self.spec_ctrl_bar.setObjectName("specCtrlBar")
+            ctrl_layout = QHBoxLayout(self.spec_ctrl_bar)
+            ctrl_layout.setContentsMargins(10, 2, 10, 4)
+            ctrl_layout.setSpacing(6)
+
+            lbl_y = QLabel("Escala Y:")
+            lbl_y.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
+            ctrl_layout.addWidget(lbl_y)
+
+            self.spin_spec_ymin = QDoubleSpinBox()
+            self.spin_spec_ymin.setRange(0.0, 30.0)
+            self.spin_spec_ymin.setSingleStep(0.5)
+            self.spin_spec_ymin.setDecimals(1)
+            self.spin_spec_ymin.setValue(0.0)
+            self.spin_spec_ymin.setFixedWidth(64)
+            self.spin_spec_ymin.setToolTip("Limite inferior de frequência (expande/contrai verticalmente)")
+            self.spin_spec_ymin.valueChanged.connect(self._on_spec_limits_changed)
+            ctrl_layout.addWidget(self.spin_spec_ymin)
+
+            lbl_to = QLabel("➜")
+            lbl_to.setStyleSheet("color: #64748B; font-size: 10px;")
+            ctrl_layout.addWidget(lbl_to)
+
+            self.spin_spec_ymax = QDoubleSpinBox()
+            self.spin_spec_ymax.setRange(0.5, 50.0)
+            self.spin_spec_ymax.setSingleStep(0.5)
+            self.spin_spec_ymax.setDecimals(1)
+            self.spin_spec_ymax.setValue(10.0)
+            self.spin_spec_ymax.setFixedWidth(64)
+            self.spin_spec_ymax.setToolTip("Limite superior de frequência (padrão inicial até 10 kHz)")
+            self.spin_spec_ymax.valueChanged.connect(self._on_spec_limits_changed)
+            ctrl_layout.addWidget(self.spin_spec_ymax)
+
+            self.btn_spec_unit = QPushButton("kHz")
+            self.btn_spec_unit.setFixedWidth(42)
+            self.btn_spec_unit.setFixedHeight(24)
+            self.btn_spec_unit.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_spec_unit.setToolTip("Clique para alternar a unidade entre kHz e Hz")
+            self.btn_spec_unit.setStyleSheet("""
+                QPushButton {
+                    background-color: #1E293B; color: #38BDF8; font-weight: 700;
+                    font-size: 11px; border: 1px solid #334155; border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #334155; color: #FFFFFF; }
+            """)
+            self.btn_spec_unit.clicked.connect(self._toggle_spec_unit)
+            ctrl_layout.addWidget(self.btn_spec_unit)
+
+            self.btn_spec_preset_10k = QPushButton("10k")
+            self.btn_spec_preset_10k.setFixedWidth(36)
+            self.btn_spec_preset_10k.setFixedHeight(24)
+            self.btn_spec_preset_10k.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_spec_preset_10k.setToolTip("Visualização abrangente até 10 kHz")
+            self.btn_spec_preset_10k.setStyleSheet("""
+                QPushButton {
+                    background-color: #0F172A; color: #94A3B8; font-size: 10px;
+                    border: 1px solid #334155; border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #1E293B; color: #FFFFFF; }
+            """)
+            self.btn_spec_preset_10k.clicked.connect(lambda: self.set_spec_limits(0.0, 10.0, unit="kHz"))
+            ctrl_layout.addWidget(self.btn_spec_preset_10k)
+
+            self.btn_spec_preset_focal = QPushButton("Focal")
+            self.btn_spec_preset_focal.setFixedWidth(44)
+            self.btn_spec_preset_focal.setFixedHeight(24)
+            self.btn_spec_preset_focal.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_spec_preset_focal.setToolTip("Zoom na banda focal estridulatória")
+            self.btn_spec_preset_focal.setStyleSheet("""
+                QPushButton {
+                    background-color: #0F172A; color: #94A3B8; font-size: 10px;
+                    border: 1px solid #334155; border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #1E293B; color: #FFFFFF; }
+            """)
+            self.btn_spec_preset_focal.clicked.connect(self._preset_focal_band)
+            ctrl_layout.addWidget(self.btn_spec_preset_focal)
+
+            ctrl_layout.addStretch()
+            self.layout.addWidget(self.spec_ctrl_bar)
+
         self.layout.addWidget(self.canvas, 1)
 
         self._set_main_visual(main)
@@ -274,6 +360,87 @@ class PlotPanel(QFrame):
             self.btn_move_up.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
         if hasattr(self, "btn_move_down"):
             self.btn_move_down.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
+
+    def _on_spec_limits_changed(self):
+        if not hasattr(self, "spin_spec_ymin") or not hasattr(self, "spin_spec_ymax"):
+            return
+        ymin = self.spin_spec_ymin.value()
+        ymax = self.spin_spec_ymax.value()
+        if ymax <= ymin:
+            return
+        win = self.window()
+        if hasattr(win, "apply_spectrogram_y_limits"):
+            win.apply_spectrogram_y_limits(ymin, ymax, getattr(self, "spec_unit", "kHz"))
+
+    def _toggle_spec_unit(self):
+        if not hasattr(self, "spin_spec_ymin"):
+            return
+        ymin = self.spin_spec_ymin.value()
+        ymax = self.spin_spec_ymax.value()
+        self.spin_spec_ymin.blockSignals(True)
+        self.spin_spec_ymax.blockSignals(True)
+        if getattr(self, "spec_unit", "kHz") == "kHz":
+            self.spec_unit = "Hz"
+            self.btn_spec_unit.setText("Hz")
+            self.spin_spec_ymin.setRange(0.0, 30000.0)
+            self.spin_spec_ymin.setSingleStep(500.0)
+            self.spin_spec_ymin.setDecimals(0)
+            self.spin_spec_ymin.setValue(ymin * 1000.0)
+            self.spin_spec_ymax.setRange(500.0, 50000.0)
+            self.spin_spec_ymax.setSingleStep(500.0)
+            self.spin_spec_ymax.setDecimals(0)
+            self.spin_spec_ymax.setValue(ymax * 1000.0)
+        else:
+            self.spec_unit = "kHz"
+            self.btn_spec_unit.setText("kHz")
+            self.spin_spec_ymin.setRange(0.0, 30.0)
+            self.spin_spec_ymin.setSingleStep(0.5)
+            self.spin_spec_ymin.setDecimals(1)
+            self.spin_spec_ymin.setValue(ymin / 1000.0)
+            self.spin_spec_ymax.setRange(0.5, 50.0)
+            self.spin_spec_ymax.setSingleStep(0.5)
+            self.spin_spec_ymax.setDecimals(1)
+            self.spin_spec_ymax.setValue(ymax / 1000.0)
+        self.spin_spec_ymin.blockSignals(False)
+        self.spin_spec_ymax.blockSignals(False)
+        self._on_spec_limits_changed()
+
+    def set_spec_limits(self, ymin, ymax, unit="kHz"):
+        if not hasattr(self, "spin_spec_ymin"):
+            return
+        if getattr(self, "spec_unit", "kHz") != unit:
+            self.spec_unit = unit
+            self.btn_spec_unit.setText(unit)
+            self.spin_spec_ymin.blockSignals(True)
+            self.spin_spec_ymax.blockSignals(True)
+            if unit == "kHz":
+                self.spin_spec_ymin.setRange(0.0, 30.0)
+                self.spin_spec_ymin.setSingleStep(0.5)
+                self.spin_spec_ymin.setDecimals(1)
+                self.spin_spec_ymax.setRange(0.5, 50.0)
+                self.spin_spec_ymax.setSingleStep(0.5)
+                self.spin_spec_ymax.setDecimals(1)
+            else:
+                self.spin_spec_ymin.setRange(0.0, 30000.0)
+                self.spin_spec_ymin.setSingleStep(500.0)
+                self.spin_spec_ymin.setDecimals(0)
+                self.spin_spec_ymax.setRange(500.0, 50000.0)
+                self.spin_spec_ymax.setSingleStep(500.0)
+                self.spin_spec_ymax.setDecimals(0)
+            self.spin_spec_ymin.blockSignals(False)
+            self.spin_spec_ymax.blockSignals(False)
+        self.spin_spec_ymin.setValue(ymin)
+        self.spin_spec_ymax.setValue(ymax)
+
+    def _preset_focal_band(self):
+        win = self.window()
+        p = getattr(win, "active_heavy_data", {}).get("params", {})
+        b1_min = float(p.get("b1_min", 3200))
+        b1_max = float(p.get("b1_max", 6000))
+        if getattr(self, "spec_unit", "kHz") == "kHz":
+            self.set_spec_limits(round(b1_min / 1000.0, 2), round(b1_max / 1000.0, 2), unit="kHz")
+        else:
+            self.set_spec_limits(b1_min, b1_max, unit="Hz")
 
 
 

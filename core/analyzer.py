@@ -73,20 +73,28 @@ class CricketAnalyzer:
             smooth_window += 1
         hann_win = np.hanning(smooth_window)
         kernel = hann_win / np.sum(hann_win)
-        env1_smooth = np.convolve(env1, kernel, mode='same')
+        env1_smooth = np.convolve(env1, kernel, mode='same').astype(np.float32)
 
-        # Espectrograma para verificação espectral
-        f_spec, t_spec, Sxx = spectrogram(data_b1, rate, nperseg=1024, noverlap=768)
-        Sxx_db = 10 * np.log10(Sxx + 1e-10)
+        # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
+        f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
+        Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
+        f_spec = f_spec.astype(np.float32)
+        t_spec = t_spec.astype(np.float32)
 
         freq_mask = (f_spec >= b1_min) & (f_spec <= b1_max)
-        Sxx_band = Sxx[freq_mask, :]
-        band_ratio = np.sum(Sxx_band, axis=0) / (np.sum(Sxx, axis=0) + 1e-10)
+        if np.any(freq_mask):
+            Sxx_band = Sxx[freq_mask, :]
+            band_ratio = np.sum(Sxx_band, axis=0) / (np.sum(Sxx, axis=0) + 1e-10)
+            band_indices = np.where(freq_mask)[0]
+            dom_in_band = np.argmax(Sxx_band, axis=0)
+            dom_freq_idx = band_indices[dom_in_band]
+        else:
+            band_ratio = np.ones(Sxx.shape[1], dtype=np.float32)
+            dom_freq_idx = np.argmax(Sxx, axis=0)
 
-        dom_freq_idx = np.argmax(Sxx, axis=0)
         dom_freqs = f_spec[dom_freq_idx].astype(np.float64)
-        # Refinamento parabólico sub-bin contínuo da frequência dominante
-        df = f_spec[1] - f_spec[0] if len(f_spec) > 1 else 1.0
+        # Refinamento parabólico sub-bin contínuo da frequência dominante na banda focal
+        df = float(f_spec[1] - f_spec[0]) if len(f_spec) > 1 else 1.0
         for col in range(Sxx.shape[1]):
             k = dom_freq_idx[col]
             if 0 < k < Sxx.shape[0] - 1:
@@ -98,6 +106,7 @@ class CricketAnalyzer:
                     p = 0.5 * (alpha - gamma) / denom
                     if -1.0 <= p <= 1.0:
                         dom_freqs[col] = float(f_spec[k] + p * df)
+        dom_freqs = dom_freqs.astype(np.float32)
         dist_samples = max(1, int(rate * (params.get("gap_min", 25.0) / 1000.0 * 0.75)))
 
         # Limiar adaptativo restritivo de alta especificidade (prioriza precisão e elimina falsos positivos)
@@ -142,18 +151,82 @@ class CricketAnalyzer:
                 if dur_min_lim <= dur <= dur_max_lim:
                     valid_peaks_stage2.append(p)
 
-        candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
-        distant_peaks = []
+        # ----------------------------------------------------------------------
+        # Estágio 2.5: Identificação da Frequência Dominante Focal por Densidade
+        # de Chilreios e Filtro de Tolerância Espectral (±300 Hz)
+        # ----------------------------------------------------------------------
+        carrier_freq = 5000.0
+        if len(valid_peaks_stage2) >= 2:
+            prelim_chirps, prelim_chirp_peaks_list, _, _ = CricketAnalyzer.regroup_chirps(
+                valid_peaks_stage2, params, rate, env1_smooth, raw_signal=data_b1
+            )
+            chirp_freqs = []
+            chirp_weights = []
+            for cp in prelim_chirp_peaks_list:
+                if len(cp) >= int(params.get("min_p", 2)):
+                    times_cp = np.asarray(cp, dtype=float) / rate
+                    freqs_cp = np.interp(times_cp, t_spec, dom_freqs)
+                    chirp_freqs.append(float(np.median(freqs_cp)))
+                    chirp_weights.append(len(cp))
+
+            if chirp_freqs:
+                # Localiza a frequência com maior densidade de chilreios
+                f_min_search = float(params.get("b1_min", 3200))
+                f_max_search = float(params.get("b1_max", 6000))
+                bin_width = 50.0  # resolução espectral de 50 Hz
+                bins = np.arange(f_min_search, f_max_search + bin_width, bin_width)
+                counts, edges = np.histogram(chirp_freqs, bins=bins, weights=chirp_weights)
+                if np.sum(counts) > 0:
+                    best_bin = int(np.argmax(counts))
+                    bin_lo = edges[best_bin] - 75.0
+                    bin_hi = edges[best_bin + 1] + 75.0
+                    modal_freqs = [f for f in chirp_freqs if bin_lo <= f <= bin_hi]
+                    carrier_freq = float(np.median(modal_freqs)) if modal_freqs else float((edges[best_bin] + edges[best_bin + 1]) / 2.0)
+                else:
+                    carrier_freq = float(np.median(chirp_freqs))
+            elif len(valid_peaks_stage2) > 0:
+                times_pks = np.asarray(valid_peaks_stage2, dtype=float) / rate
+                carrier_freq = float(np.median(np.interp(times_pks, t_spec, dom_freqs)))
+        elif len(valid_peaks_stage2) > 0:
+            times_pks = np.asarray(valid_peaks_stage2, dtype=float) / rate
+            carrier_freq = float(np.median(np.interp(times_pks, t_spec, dom_freqs)))
+        elif len(dom_freqs) > 0:
+            carrier_freq = float(np.median(dom_freqs))
+
+        # Filtragem por desvio de frequência: elimina pulsos com diferença > 300 Hz
+        freq_tol = float(params.get("freq_tolerance_hz", 300.0))
+        valid_peaks_stage3 = []
+        freq_outliers = []
+        if len(valid_peaks_stage2) > 0:
+            for p in valid_peaks_stage2:
+                t_p = p / float(rate)
+                f_p = float(np.interp(t_p, t_spec, dom_freqs))
+                if abs(f_p - carrier_freq) <= freq_tol:
+                    valid_peaks_stage3.append(p)
+                else:
+                    freq_outliers.append(p)
+
+        # Se o filtro reteve picos consistentes, descarta os pulsos fora de ±300 Hz
+        if len(valid_peaks_stage3) >= 2:
+            candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
+            distant_peaks = list(freq_outliers)
+        elif len(valid_peaks_stage3) == 1:
+            candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
+            distant_peaks = list(freq_outliers)
+        else:
+            candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
+            distant_peaks = []
 
         # Classificação contextual e segregação focal/distante
         if pulse_learner is not None and len(candidate_peaks) > 0:
             gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
             gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
             focal_sens = float(params.get("focal_sensitivity", 0.60))
-            candidate_peaks, distant_peaks = pulse_learner.filter_peaks(
+            candidate_peaks, ml_distant_peaks = pulse_learner.filter_peaks(
                 candidate_peaks, rate, env1_smooth, raw_signal=data_b1,
                 gap_min_s=gap_min_s, gap_max_s=gap_max_s, focal_sensitivity=focal_sens
             )
+            distant_peaks = list(sorted(set(distant_peaks) | set(ml_distant_peaks)))
 
         # Agrupamento com coerência de trilha acústica em tempo linear O(N)
         peaks = np.asarray(sorted(candidate_peaks), dtype=int)
@@ -161,8 +234,8 @@ class CricketAnalyzer:
             peaks, params, rate, env1_smooth, raw_signal=data_b1
         )
 
-        return (rate, data, data_b1, env1_smooth, peaks, chirps, chirp_peaks_list,
-                media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, distant_peaks)
+        return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
+                media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, distant_peaks, carrier_freq)
 
     @staticmethod
     def regroup_chirps(peaks, params, rate, env, raw_signal=None):

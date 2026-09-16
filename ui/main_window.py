@@ -101,6 +101,7 @@ class MainWindow(QMainWindow):
         self.playback_timer.timeout.connect(self._on_playback_timer_tick)
 
         self.loaded_files = {}
+        self.last_audio_dir = ""
         self.cursor_lines = []
         self.backgrounds = []
         self.bg_cache_valid = False
@@ -1074,12 +1075,17 @@ class MainWindow(QMainWindow):
                     self.update_audio_list_active_states(next_fname)
 
     def action_load_wav(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Load Audio Files", "", "WAV Files (*.wav)")
+        start_dir = getattr(self, "last_audio_dir", "")
+        if not start_dir or not os.path.isdir(start_dir):
+            start_dir = ""
+        files, _ = QFileDialog.getOpenFileNames(self, "Load Audio Files", start_dir, "WAV Files (*.wav)")
         for file_path in files:
             filename = os.path.basename(file_path)
             self.loaded_files[filename] = file_path
             self._add_audio_file_item(filename, is_checked=False)
         if files:
+            self.last_audio_dir = os.path.dirname(files[0])
+            self.save_settings(silent=True)
             target = os.path.basename(files[-1])
             self.select_file_by_name(target)
 
@@ -1097,6 +1103,10 @@ class MainWindow(QMainWindow):
                 self._add_audio_file_item(filename, is_checked=False)
                 loaded_any.append(filename)
         if loaded_any:
+            first_name = loaded_any[0]
+            if first_name in self.loaded_files:
+                self.last_audio_dir = os.path.dirname(self.loaded_files[first_name])
+                self.save_settings(silent=True)
             self.select_file_by_name(loaded_any[-1])
         event.acceptProposedAction()
 
@@ -1131,13 +1141,34 @@ class MainWindow(QMainWindow):
             self.peaks_detected = list(self.active_heavy_data.get("peaks_detected", []))
             self.peaks_user_verified = list(self.active_heavy_data.get("peaks_user_verified", []))
             self.active_filename = filename
+            self._pulse_edit_history = []
             self.render_dashboard(filename)
         else:
             self.btn_reanalisar_main.setText("Analisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
-            self.active_filename = filename
+            self.reset_audio_state(filename)
             self._update_summary_ready_for_analysis(filename)
+
+    def reset_audio_state(self, filename):
+        """Reinicia atomicamente as variáveis de edição e picos para o arquivo especificado, prevenindo contaminação."""
+        self.active_filename = filename
+        self._pulse_edit_history = []
+        self._click_alignment_lines = []
+        stored = self.corrections_by_file.get(filename)
+        if stored is not None:
+            self.peaks_user_verified = list(stored)
+        else:
+            self.peaks_user_verified = []
+
+        cached = self.analysis_cache.get(filename)
+        if cached is not None:
+            self.peaks_detected = list(cached.get("peaks_detected", []))
+            self.active_heavy_data = cached
+        else:
+            self.peaks_detected = []
+            self.active_heavy_data = None
+            self._adaptive_overrides = {}
 
     def _get_item_widget_by_name(self, filename):
         for i in range(self.list_widget.count()):
@@ -1384,6 +1415,8 @@ class MainWindow(QMainWindow):
                     self.pulse_learner.load_from_config()
                 if "use_machine_learning" in data:
                     self.use_machine_learning = bool(data["use_machine_learning"])
+                if "last_audio_dir" in data and isinstance(data["last_audio_dir"], str) and os.path.isdir(data["last_audio_dir"]):
+                    self.last_audio_dir = data["last_audio_dir"]
         except Exception as e:
             print(f"Erro ao carregar configurações: {e}")
 
@@ -1401,6 +1434,7 @@ class MainWindow(QMainWindow):
             config["theme"] = self.theme_mode
             config["corrections_by_file"] = self.corrections_by_file
             config["use_machine_learning"] = getattr(self, "use_machine_learning", True)
+            config["last_audio_dir"] = getattr(self, "last_audio_dir", "")
             if not "pulse_learner" in config:
                 config["pulse_learner"] = None
             if self.pulse_learner.model is not None:
@@ -1452,6 +1486,8 @@ class MainWindow(QMainWindow):
         self._update_pulse_edit_buttons(None)
 
         is_first_time = (filename not in self.analysis_cache)
+        if is_first_time:
+            self.reset_audio_state(filename)
         loading_text = "Analisando..." if is_first_time else "Reanalisando..."
         spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
         spinner.start()
@@ -1462,7 +1498,8 @@ class MainWindow(QMainWindow):
 
         def _task():
             # 1. Se o usuário fez correções no arquivo atual, atualizamos o modelo
-            if self.active_heavy_data and self.peaks_user_verified:
+            if (self.active_heavy_data and self.active_filename == filename and
+                filename in self.corrections_by_file and self.peaks_user_verified):
                 rate = float(self.active_heavy_data.get("rate", 1.0))
                 env = self.active_heavy_data.get("env")
                 data_b1 = self.active_heavy_data.get("data_b1")
@@ -1519,24 +1556,26 @@ class MainWindow(QMainWindow):
             params = self.algo_params.copy()
         rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results[:14]
         distant_peaks = results[14] if len(results) > 14 else []
+        carrier_freq = results[15] if len(results) > 15 else 0.0
+
+        # Converte dados volumosos de ponto flutuante para float32 (reduz 50% do consumo de RAM)
+        if isinstance(data, np.ndarray) and data.dtype != np.float32:
+            data = data.astype(np.float32)
+        if isinstance(data_b1, np.ndarray) and data_b1.dtype != np.float32:
+            data_b1 = data_b1.astype(np.float32)
+        if isinstance(env, np.ndarray) and env.dtype != np.float32:
+            env = env.astype(np.float32)
+        if isinstance(Sxx_db, np.ndarray) and Sxx_db.dtype != np.float32:
+            Sxx_db = Sxx_db.astype(np.float32)
+
         self.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
         self.active_filename = filename
 
         stored_corrections = self.corrections_by_file.get(filename)
         effective_params = {**params, **self._adaptive_overrides}
-        if validate_all and (stored_corrections is not None or self.peaks_user_verified):
-            working_set = stored_corrections if stored_corrections is not None else self.peaks_user_verified
-            self.peaks_detected = list(sorted(set(working_set)))
-            self.peaks_user_verified = list(self.peaks_detected)
-            self.corrections_by_file[filename] = list(self.peaks_user_verified)
-            if len(self.peaks_detected) >= 2:
-                try:
-                    chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                        self.peaks_detected, effective_params, rate, env, raw_signal=data_b1
-                    )
-                except Exception:
-                    pass
-        elif stored_corrections is not None:
+
+        # Aplica estritamente correções específicas deste arquivo
+        if stored_corrections is not None:
             self.peaks_user_verified = list(stored_corrections)
             peaks_added = sorted(set(stored_corrections) - set(self.peaks_detected))
             peaks_removed = sorted(set(self.peaks_detected) - set(stored_corrections))
@@ -1552,6 +1591,10 @@ class MainWindow(QMainWindow):
                         )
                     except Exception:
                         pass
+        elif validate_all:
+            # Primeiro processamento ou validação deste arquivo: picos detectados tornam-se verificados
+            self.peaks_user_verified = list(self.peaks_detected)
+            self.corrections_by_file[filename] = list(self.peaks_user_verified)
         else:
             self.peaks_user_verified = list(self.peaks_detected)
 
@@ -1563,6 +1606,7 @@ class MainWindow(QMainWindow):
             "peaks_detected": list(self.peaks_detected),
             "peaks_user_verified": list(self.peaks_user_verified),
             "distant_peaks": list(distant_peaks),
+            "carrier_freq": carrier_freq,
         }
         self.analysis_cache[filename] = heavy_data
         self.active_heavy_data = heavy_data
@@ -1695,21 +1739,25 @@ class MainWindow(QMainWindow):
         # SPEC
         ax4 = self.panel_spec.ax
         ax4.clear()
-        ax4.set_ylabel("Hz")
+        unit = getattr(self.panel_spec, "spec_unit", "kHz")
+        scale = 1000.0 if unit == "kHz" else 1.0
+        ymin = self.panel_spec.spin_spec_ymin.value() if hasattr(self.panel_spec, "spin_spec_ymin") else 0.0
+        ymax = self.panel_spec.spin_spec_ymax.value() if hasattr(self.panel_spec, "spin_spec_ymax") else (10.0 if unit == "kHz" else 10000.0)
+        ax4.set_ylabel(unit)
         ax4.set_xlabel("seconds")
         ax4.set_xlim(t_spec[0], t_spec[-1])
-        ax4.set_ylim(p['b1_min'], p['b1_max'])
-        self.spectro_engine = HighPerfSpectrogramEngine(ax4, Sxx_db, t_spec, f_spec, update_bg_callback=self.capture_backgrounds)
+        ax4.set_ylim(ymin, ymax)
+        self.spectro_engine = HighPerfSpectrogramEngine(ax4, Sxx_db, t_spec, f_spec, update_bg_callback=self.capture_backgrounds, unit=unit)
         self.spectro_engine.render_high_detail()
         for qnt, pks in sorted(picos_por_contagem.items()):
             pks_t = np.array(pks) / rate
-            freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
+            freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs) / scale
             ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
         if distant_pks:
             valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
             if valid_d:
                 d_times = np.array(valid_d) / rate
-                d_freqs = np.interp(d_times, t_spec, dom_freqs)
+                d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
                 ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
 
         # Atualiza mapa de eixos independente da posição atual.
@@ -1742,6 +1790,57 @@ class MainWindow(QMainWindow):
         self.capture_backgrounds()
         if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
             self.splitter.setSizes(cur_splitter_sizes)
+
+    def apply_spectrogram_y_limits(self, ymin, ymax, unit="kHz"):
+        """Atualiza dinamicamente a escala, limites e unidade do eixo Y do espectrograma."""
+        if not hasattr(self, "panel_spec"):
+            return
+        ax4 = self.panel_spec.ax
+        ax4.set_ylabel(unit)
+        ax4.set_ylim(ymin, ymax)
+        if hasattr(self, "spectro_engine") and self.spectro_engine:
+            self.spectro_engine.set_unit(unit)
+            self.spectro_engine.render_high_detail()
+
+        if getattr(self, "active_heavy_data", None):
+            scale = 1000.0 if unit == "kHz" else 1.0
+            rate = float(self.active_heavy_data.get("rate", 1.0))
+            t_spec = self.active_heavy_data.get("t_spec")
+            dom_freqs = self.active_heavy_data.get("dom_freqs")
+            chirp_peaks_list = self.active_heavy_data.get("chirp_peaks_list", [])
+            distant_pks = self.active_heavy_data.get("distant_peaks", [])
+            env = self.active_heavy_data.get("env")
+            marker_colors = {
+                1: '#F59E0B', 2: '#EC4899', 3: '#8B5CF6', 4: '#3B82F6',
+                5: '#10B981', 6: '#F97316', 7: '#06B6D4', 8: '#84CC16',
+                9: '#EAB308', 10: '#A855F7', 11: '#14B8A6', 12: '#6366F1'
+            }
+            lines_to_keep = set(getattr(self, "cursor_lines", []) + getattr(self, "_click_alignment_lines", []))
+            lines_to_remove = [line for line in ax4.lines if line not in lines_to_keep]
+            for line in lines_to_remove:
+                try:
+                    line.remove()
+                except Exception:
+                    pass
+
+            picos_por_contagem = {}
+            for cp in chirp_peaks_list:
+                qnt = len(cp)
+                picos_por_contagem.setdefault(qnt, []).extend(cp)
+
+            if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
+                for qnt, pks in sorted(picos_por_contagem.items()):
+                    pks_t = np.array(pks) / rate
+                    freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs) / scale
+                    ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
+                if distant_pks:
+                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
+                    if valid_d:
+                        d_times = np.array(valid_d) / rate
+                        d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
+                        ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
+
+        self.panel_spec.canvas.draw_idle()
 
     def _update_pulse_hover_data(self):
         """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""
@@ -2134,7 +2233,10 @@ class MainWindow(QMainWindow):
                     self._wave_user_markers.extend(line_freq)
                     
                     # Espectrograma
-                    line_spec = ax4.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
+                    unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                    scale = 1000.0 if unit == "kHz" else 1.0
+                    freqs_at_pks_spec = freqs_at_pks / scale
+                    line_spec = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
                                         color=color, markersize=8, markeredgewidth=1.2, zorder=4)
                     self._wave_user_markers.extend(line_spec)
 
@@ -2573,7 +2675,9 @@ class MainWindow(QMainWindow):
             ax.set_xlim(0.0, duration)
         self.panel_wave.ax.set_ylim(-1.05, 1.05)
         p = self.active_heavy_data.get("params", {})
-        if p:
+        if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
+            self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
+        elif p:
             self.panel_spec.ax.set_ylim(p.get("b1_min", 3200), p.get("b1_max", 6000))
 
         # Conclui a geometria do Qt e renderiza imediatamente, sem esperar timers.
@@ -2598,7 +2702,9 @@ class MainWindow(QMainWindow):
         self.panel_freq.ax.set_xlim(0.0, duration)
         self.panel_spec.ax.set_xlim(float(self.active_heavy_data["t_spec"][0]) if len(self.active_heavy_data.get("t_spec", [])) else 0.0, float(self.active_heavy_data["t_spec"][-1]) if len(self.active_heavy_data.get("t_spec", [])) else duration)
         self.panel_wave.ax.set_ylim(-1.05, 1.05)
-        if p:
+        if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
+            self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
+        elif p:
             self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)), float(p.get("b1_max", 6000)))
 
         if self.spectro_engine:
@@ -2620,6 +2726,8 @@ class MainWindow(QMainWindow):
         if current_time - self.sync_throttle_time < 0.042:
             return
         for panel in target_panels:
+            if not panel.isVisible():
+                continue
             ymin, ymax = panel.ax.get_ylim()
             if self.spectro_engine and panel == self.panel_spec:
                 self.spectro_engine.render_interactive(xmin, xmax, ymin, ymax, is_sync=True)
@@ -2657,6 +2765,14 @@ class MainWindow(QMainWindow):
                 self.active_ax.set_ylim(new_ymin, new_ymax)
                 mapping = {p.ax: p for p in self.all_panels}
                 self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
+
+            if self.active_ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
+                self.panel_spec.spin_spec_ymin.blockSignals(True)
+                self.panel_spec.spin_spec_ymax.blockSignals(True)
+                self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
+                self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
+                self.panel_spec.spin_spec_ymin.blockSignals(False)
+                self.panel_spec.spin_spec_ymax.blockSignals(False)
             return
 
         # Hover interativo em cima dos marcadores de pulsos (X)
@@ -2678,10 +2794,26 @@ class MainWindow(QMainWindow):
                 best_match = None
                 min_pixel_dist = 20.0  # tolerância de 20 pixels para acionamento fácil do hover
 
+                # Otimização crítica de performance: janela temporal em torno do cursor do mouse
+                # Elimina o lag catastrófico gerado pela transformação de milhares de pontos no hover
+                xlim = ax.get_xlim()
+                bbox = ax.get_window_extent()
+                px_per_sec = bbox.width / max(1e-6, (xlim[1] - xlim[0]))
+                dt_max = max(0.04, 30.0 / max(1.0, px_per_sec))
+                t_mouse = event.xdata
+
+                unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                spec_scale = 1000.0 if unit == "kHz" else 1.0
+
                 for item in self.pulse_hover_data:
+                    if abs(item["time"] - t_mouse) > dt_max:
+                        continue
+
                     # Determina coordenadas Y correspondentes ao eixo atual
                     if is_wave:
                         y_val = item["env_y"]
+                    elif is_spec:
+                        y_val = item["freq_y"] / spec_scale
                     else:
                         y_val = item["freq_y"]
 
@@ -2753,4 +2885,12 @@ class MainWindow(QMainWindow):
             ax.set_ylim(new_ymin, new_ymax)
             mapping = {p.ax: p for p in self.all_panels}
             self._sync_render([mapping[ax]], new_xmin, new_xmax)
+
+        if ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
+            self.panel_spec.spin_spec_ymin.blockSignals(True)
+            self.panel_spec.spin_spec_ymax.blockSignals(True)
+            self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
+            self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
+            self.panel_spec.spin_spec_ymin.blockSignals(False)
+            self.panel_spec.spin_spec_ymax.blockSignals(False)
 

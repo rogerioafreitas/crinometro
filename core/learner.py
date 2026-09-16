@@ -751,8 +751,20 @@ class PulseLearner:
 
         # Aplicação mandatória de regras rígidas de poda pré-inferência
         if pruned_indices:
-            for idx in pruned_indices:
-                kept_mask[idx] = False
+            # Salvaguarda: se as regras de poda descartarem mais de 75% de todos os candidatos
+            # de um novo áudio, não aniquila cegamente; poda apenas candidatos de baixa confiança
+            if len(pruned_indices) < 0.75 * n:
+                for idx in pruned_indices:
+                    kept_mask[idx] = False
+            else:
+                for idx in pruned_indices:
+                    if combined_score[idx] < LOW_CONF_THRESH:
+                        kept_mask[idx] = False
+
+        # Salvaguarda de resgate: se nenhum pico foi aceito mas há candidatos com energia
+        if not np.any(kept_mask) and n > 0:
+            top_cutoff = np.percentile(combined_score, 80) if n >= 5 else np.min(combined_score)
+            kept_mask = (combined_score >= top_cutoff) & (amps >= np.median(amps) * 0.5)
 
         return peaks[kept_mask], peaks[~kept_mask]
 

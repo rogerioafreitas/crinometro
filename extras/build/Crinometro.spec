@@ -1,6 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(SPECPATH, '../..')))
+from utils.constants import APP_VERSION
+
+app_dist_name = f'Crinometro_v{APP_VERSION}'
+
 a = Analysis(
     ['../../crinometro__laucher.py'],
     pathex=['../..'],
@@ -24,7 +30,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Crinometro_v4.2.2',
+    name=app_dist_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -44,5 +50,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Crinometro_v4.2.2',
+    name=app_dist_name,
 )
