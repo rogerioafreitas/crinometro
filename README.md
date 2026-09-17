@@ -1,4 +1,4 @@
-# 🦗 Crinômetro v4.3.0
+# 🦗 Crinômetro v4.3.2
 
 > **Software Especializado em Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -10,7 +10,7 @@ O instalador oficial com assistente de instalação e atualizador automático in
 
 🔗 **[Baixar Instalador Oficial no Google Drive](https://drive.google.com/drive/folders/1CSjbYE-mql_Sg9qmV-argU05RjpwnmpT?usp=sharing)**
 
-- **Nome do Instalador:** Crinometro_setup__v4.3.0.exe
+- **Nome do Instalador:** Crinometro_setup__v4.3.2.exe
 - **Tipo:** Instalador moderno (Inno Setup) com suporte a escolha de diretório de instalação, atalhos na Área de Trabalho e inicialização do aplicativo.
 - **Atualização Automática:** Notifica diretamente no Launcher sobre novas versões e realiza o download e a instalação de forma integrada e silenciosa.
 
@@ -28,10 +28,11 @@ O projeto adota o padrão semântico de versionamento estruturado em três níve
 
 ## 📚 Manuais e Documentações em PDF
 
-Documentações completas e diagramadas estão disponíveis na pasta [docs/](docs/):
+Documentações completas e diagramadas estão disponíveis na pasta [docs/](docs/) e na raiz:
 
 1. 📄 **[Manual Técnico e Científico](docs/Crinometro_Manual_Tecnico_Cientifico.pdf):** Formulação matemática dos filtros Butterworth, demodulação de Hilbert, segregação focal via GMM e arquitetura do classificador supervisionado.
 2. 📘 **[Guia Prático e Didático](docs/Crinometro_Guia_Pratico_Didatico.pdf):** Explicação didática passo a passo, guia visual das cores por contagem de pulsos e dicas práticas de gravação em campo.
+3. 📋 **[Histórico Completo de Mudanças (CHANGELOG)](CHANGELOG.md)** | **[PDF](docs/CHANGELOG.pdf):** Registro exaustivo e cronológico de todas as atualizações desde a v3.0.0 até a versão atual.
 
 ---
 
