@@ -359,10 +359,25 @@ class ChangelogDialog(QDialog):
         text_browser.setHtml(html_content)
         layout.addWidget(text_browser, 1)
         
+        btns_row = QHBoxLayout()
+        btns_row.setContentsMargins(0, 4, 0, 0)
+
+        btn_details = QPushButton("📄 Mais detalhes no GitHub")
+        btn_details.setObjectName("btn_details_github")
+        btn_details.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_details.setToolTip("Abrir histórico detalhado com todas as alterações técnicas no GitHub")
+        btn_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/CHANGELOG.md")))
+        btns_row.addWidget(btn_details)
+
+        btns_row.addStretch()
+
         btn_close = QPushButton("Fechar")
         btn_close.setObjectName("btn_secondary")
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close, 0, Qt.AlignmentFlag.AlignRight)
+        btns_row.addWidget(btn_close)
+
+        layout.addLayout(btns_row)
 
     def apply_styles(self):
         dark = True
@@ -394,6 +409,8 @@ class ChangelogDialog(QDialog):
                 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; border: none; }
                 QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
+                QPushButton#btn_details_github { background-color: rgba(37, 99, 235, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.4); }
+                QPushButton#btn_details_github:hover { background-color: rgba(37, 99, 235, 0.28); border-color: #3B82F6; color: #FFFFFF; }
             """)
         else:
             self.setStyleSheet("""
@@ -418,6 +435,8 @@ class ChangelogDialog(QDialog):
                 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; border: none; }
                 QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
+                QPushButton#btn_details_github { background-color: rgba(37, 99, 235, 0.08); color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.3); }
+                QPushButton#btn_details_github:hover { background-color: rgba(37, 99, 235, 0.15); border-color: #2563EB; }
             """)
 
 
@@ -425,7 +444,7 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Sobre o Crinômetro")
-        self.setFixedSize(450, 275)
+        self.setFixedSize(510, 280)
         self.apply_styles()
         
         layout = QVBoxLayout(self)
@@ -461,12 +480,19 @@ class AboutDialog(QDialog):
             _lbl.setAutoFillBackground(False)
 
         btns_layout = QHBoxLayout()
-        btns_layout.setSpacing(10)
+        btns_layout.setSpacing(8)
 
         self.btn_check_update = QPushButton("🔍 Verificar Atualizações")
         self.btn_check_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_check_update.clicked.connect(self._check_for_updates)
         btns_layout.addWidget(self.btn_check_update)
+
+        self.btn_more_details = QPushButton("📄 Mais detalhes")
+        self.btn_more_details.setObjectName("btn_details_github")
+        self.btn_more_details.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_more_details.setToolTip("Abrir CHANGELOG completo e detalhado no GitHub")
+        self.btn_more_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/CHANGELOG.md")))
+        btns_layout.addWidget(self.btn_more_details)
 
         btns_layout.addStretch()
 
@@ -534,6 +560,8 @@ class AboutDialog(QDialog):
                 QLabel:focus { outline: none; border: none; }
                 QPushButton { background-color: #2D333B; color: #E2E8F0; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #444C56; }
                 QPushButton:hover { background-color: #373E47; }
+                QPushButton#btn_details_github { background-color: rgba(37, 99, 235, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.4); }
+                QPushButton#btn_details_github:hover { background-color: rgba(37, 99, 235, 0.28); border-color: #3B82F6; color: #FFFFFF; }
             """)
         else:
             self.setStyleSheet("""
@@ -542,6 +570,8 @@ class AboutDialog(QDialog):
                 QLabel:focus { outline: none; border: none; }
                 QPushButton { background-color: #F1F5F9; color: #334155; padding: 7px 16px; border-radius: 6px; font-weight: bold; border: 1px solid #CBD5E1; }
                 QPushButton:hover { background-color: #E2E8F0; }
+                QPushButton#btn_details_github { background-color: rgba(37, 99, 235, 0.08); color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.3); }
+                QPushButton#btn_details_github:hover { background-color: rgba(37, 99, 235, 0.15); border-color: #2563EB; }
             """)
 
 

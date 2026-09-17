@@ -14,10 +14,11 @@ from utils.i18n import I18N
 from utils.icons import make_ui_icon
 
 
-class PlotTitleBar(QWidget):
+class PlotTitleBar(QFrame):
     """Barra de título da mini janela com suporte a arrastar e soltar (drag & drop fluido com preview)."""
     def __init__(self, panel, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.panel = panel
         self._drag_start_pos = None
         self._is_dragging = False
@@ -123,6 +124,12 @@ class PlotTitleBar(QWidget):
         super().mouseReleaseEvent(event)
 
 
+class CompactCtrlBar(QFrame):
+    """Barra de controle adaptativa com minimumSizeHint flexível para permitir redimensionamento livre sem travar."""
+    def minimumSizeHint(self):
+        return QSize(0, 0)
+
+
 class PlotPanel(QFrame):
     """Mini janela / Card de gráfico com cantos arredondados e suporte a reordenação."""
     def __init__(self, title_key, lang, expand_callback, main=False):
@@ -193,7 +200,7 @@ class PlotPanel(QFrame):
         self.layout.addWidget(self.title_bar)
 
         if self.title_key == "freq":
-            self.freq_ctrl_bar = QFrame()
+            self.freq_ctrl_bar = CompactCtrlBar()
             self.freq_ctrl_bar.setObjectName("freqCtrlBar")
             self.freq_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
             fctrl_layout = QHBoxLayout(self.freq_ctrl_bar)
@@ -205,7 +212,7 @@ class PlotPanel(QFrame):
 
         if self.title_key == "spec":
             self.spec_unit = "kHz"
-            self.spec_ctrl_bar = QFrame()
+            self.spec_ctrl_bar = CompactCtrlBar()
             self.spec_ctrl_bar.setObjectName("specCtrlBar")
             self.spec_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
             ctrl_layout = QHBoxLayout(self.spec_ctrl_bar)
@@ -377,21 +384,33 @@ class PlotPanel(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_responsive_controls()
+
+    def _update_responsive_controls(self):
+        if self.title_key == "spec":
+            # Quando o painel for estreito (< 520px) ou não for o principal, comprime
+            # a barra de configurações apenas para o filtro e a FP (como na Freq. Dominante vs Tempo).
+            is_main = bool(self.property("mainPlot"))
+            is_wide = self.width() >= 520
+            show_scale_and_presets = is_main and is_wide
+
+            if hasattr(self, "y_scale_box") and self.y_scale_box.isVisible() != show_scale_and_presets:
+                self.y_scale_box.setVisible(show_scale_and_presets)
+            if hasattr(self, "preset_group_box") and self.preset_group_box.isVisible() != show_scale_and_presets:
+                self.preset_group_box.setVisible(show_scale_and_presets)
+            if hasattr(self, "sep_y_scale") and self.sep_y_scale.isVisible() != show_scale_and_presets:
+                self.sep_y_scale.setVisible(show_scale_and_presets)
+            if hasattr(self, "sep_presets") and self.sep_presets.isVisible() != show_scale_and_presets:
+                self.sep_presets.setVisible(show_scale_and_presets)
+
     def set_main(self, main):
         self._set_main_visual(main)
         self.btn_expand.setToolTip(
             "Restaurar posição" if main else "Colocar este gráfico na posição principal"
         )
-        if self.title_key == "spec":
-            is_expanded = bool(main)
-            if hasattr(self, "y_scale_box"):
-                self.y_scale_box.setVisible(is_expanded)
-            if hasattr(self, "preset_group_box"):
-                self.preset_group_box.setVisible(is_expanded)
-            if hasattr(self, "sep_y_scale"):
-                self.sep_y_scale.setVisible(is_expanded)
-            if hasattr(self, "sep_presets"):
-                self.sep_presets.setVisible(is_expanded)
+        self._update_responsive_controls()
 
     def update_lang(self, lang):
         self.lbl_title.setText(I18N[lang][self.title_key])
@@ -702,27 +721,29 @@ class PlotPanel(QFrame):
 
                 /* Grupo de Presets Segmented Control */
                 QFrame#presetGroupBox {
-                    background-color: #14171A;
-                    border: 1px solid #23272F;
+                    background-color: #121519;
+                    border: 1px solid #2D333B;
                     border-radius: 5px;
-                    padding: 1px;
+                    padding: 2px;
                 }
                 QPushButton.segBtn {
-                    background-color: transparent;
-                    color: #8E949D;
-                    font-size: 10.5px;
+                    background-color: #1E232A;
+                    color: #CBD5E1;
+                    font-size: 11px;
                     font-weight: 600;
-                    border: none;
-                    border-radius: 3px;
-                    padding: 2px 7px;
-                    height: 18px;
+                    border: 1px solid #333B47;
+                    border-radius: 4px;
+                    padding: 2px 8px;
+                    height: 19px;
                 }
                 QPushButton.segBtn:hover {
-                    background-color: rgba(255, 255, 255, 0.05);
-                    color: #E2E8F0;
+                    background-color: #28303C;
+                    border-color: #38BDF8;
+                    color: #FFFFFF;
                 }
                 QPushButton.segBtn[active="true"] {
                     background-color: #2563EB;
+                    border: 1px solid #1D4ED8;
                     color: #FFFFFF;
                     font-weight: 700;
                 }
@@ -800,24 +821,24 @@ class PlotPanel(QFrame):
                     border: none;
                 }
                 QPushButton.ghostChip {
-                    background-color: rgba(255, 255, 255, 0.04);
-                    color: #94A3B8;
-                    font-size: 10.5px;
-                    font-weight: 600;
-                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    background-color: #1E232A;
+                    color: #F1F5F9;
+                    font-size: 11px;
+                    font-weight: 700;
+                    border: 1px solid #384252;
                     border-radius: 4px;
-                    padding: 1px 6px;
+                    padding: 2px 7px;
                     height: 20px;
-                    min-width: 34px;
+                    min-width: 36px;
                 }
                 QPushButton.ghostChip:hover {
-                    background-color: rgba(255, 255, 255, 0.10);
+                    background-color: #28303C;
                     border-color: #38BDF8;
                     color: #FFFFFF;
                 }
                 QPushButton.ghostChip:pressed {
                     background-color: #2563EB;
-                    border-color: #3B82F6;
+                    border-color: #1D4ED8;
                     color: #FFFFFF;
                 }
 
@@ -941,27 +962,29 @@ class PlotPanel(QFrame):
 
                 /* Grupo de Presets Segmented Control */
                 QFrame#presetGroupBox {
-                    background-color: #EDF2F7;
+                    background-color: #E2E8F0;
                     border: 1px solid #CBD5E1;
                     border-radius: 5px;
-                    padding: 1px;
+                    padding: 2px;
                 }
                 QPushButton.segBtn {
-                    background-color: transparent;
-                    color: #475569;
-                    font-size: 10.5px;
+                    background-color: #FFFFFF;
+                    color: #1E293B;
+                    font-size: 11px;
                     font-weight: 600;
-                    border: none;
-                    border-radius: 3px;
-                    padding: 2px 7px;
-                    height: 18px;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 4px;
+                    padding: 2px 8px;
+                    height: 19px;
                 }
                 QPushButton.segBtn:hover {
-                    background-color: rgba(0, 0, 0, 0.05);
-                    color: #0F172A;
+                    background-color: #F8FAFC;
+                    border-color: #0284C7;
+                    color: #0284C7;
                 }
                 QPushButton.segBtn[active="true"] {
                     background-color: #2563EB;
+                    border: 1px solid #1D4ED8;
                     color: #FFFFFF;
                     font-weight: 700;
                 }
@@ -1038,20 +1061,20 @@ class PlotPanel(QFrame):
                     border: none;
                 }
                 QPushButton.ghostChip {
-                    background-color: rgba(0, 0, 0, 0.04);
-                    color: #334155;
-                    font-size: 10.5px;
-                    font-weight: 600;
-                    border: 1px solid rgba(0, 0, 0, 0.12);
+                    background-color: #FFFFFF;
+                    color: #0F172A;
+                    font-size: 11px;
+                    font-weight: 700;
+                    border: 1px solid #94A3B8;
                     border-radius: 4px;
-                    padding: 1px 6px;
+                    padding: 2px 7px;
                     height: 20px;
-                    min-width: 34px;
+                    min-width: 36px;
                 }
                 QPushButton.ghostChip:hover {
-                    background-color: rgba(0, 0, 0, 0.08);
+                    background-color: #F1F5F9;
                     border-color: #0284C7;
-                    color: #0F172A;
+                    color: #0284C7;
                 }
                 QPushButton.ghostChip:pressed {
                     background-color: #2563EB;

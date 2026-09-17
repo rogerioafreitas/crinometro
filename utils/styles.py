@@ -191,11 +191,12 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 border: 1.5px solid #2563EB;
                 border-radius: 14px;
             }
-            QWidget#plotTitleBar {
+            QWidget#plotTitleBar, QFrame#plotTitleBar {
                 background: #191D22;
+                border: none;
                 border-top-left-radius: 13px;
                 border-top-right-radius: 13px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+                border-bottom: 1px solid #2D333B;
             }
             QLabel#eyebrow {
                 color: #9CA2AA;
@@ -298,6 +299,34 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 border-color: #23272D;
             }
 
+            /* Container de ações do cabeçalho — deve ser sempre transparente */
+            QWidget#actionsBox {
+                background: transparent;
+                border: none;
+            }
+
+            /* Botão de abortar análise */
+            QPushButton#summaryAbortAction {
+                background-color: rgba(185, 28, 28, 0.20);
+                color: #FCA5A5;
+                border: 1px solid rgba(239, 68, 68, 0.40);
+                border-radius: 5px;
+                min-height: 18px;
+                max-height: 18px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 600;
+                outline: none;
+            }
+            QPushButton#summaryAbortAction:hover {
+                background-color: rgba(220, 38, 38, 0.35);
+                border-color: #EF4444;
+                color: #FEE2E2;
+            }
+            QPushButton#summaryAbortAction:pressed {
+                background-color: rgba(185, 28, 28, 0.50);
+            }
+
             /* Slider Vertical do Eixo Y do Espectrograma */
             QSlider#specYSlider {
                 background: transparent;
@@ -331,10 +360,10 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background: #7DD3FC;
                 border: 1px solid #38BDF8;
             }
-            QWidget#plotTitleBar {
+            QWidget#plotTitleBar, QFrame#plotTitleBar {
                 background: #191C20;
-                border: 0;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+                border: none;
+                border-bottom: 1px solid #2D333B;
                 border-top-left-radius: 11px;
                 border-top-right-radius: 11px;
             }
@@ -346,42 +375,39 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 font-weight: 600;
             }
             QPushButton#plotTool {
-                background: transparent;
-                border: 0;
-                color: #AEB4BD;
-                border-radius: 5px;
-                font-size: 15px;
-                padding: 3px;
+                background: #1E232A;
+                border: 1px solid #2D333B;
+                color: #CBD5E1;
+                border-radius: 4px;
+                font-size: 14px;
+                padding: 2px 4px;
                 outline: none;
             }
-            QPushButton#plotTool:hover { background: #2A3038; color: #60A5FA; }
-            QPushButton#plotTool:pressed { background: #1D2024; }
-            QPushButton#plotTool:disabled { color: #4B5563; background: transparent; }
+            QPushButton#plotTool:hover { background: #2A3038; border-color: #38BDF8; color: #60A5FA; }
+            QPushButton#plotTool:pressed { background: #15181C; }
+            QPushButton#plotTool:disabled { color: #4B5563; background: transparent; border-color: transparent; }
             QPushButton#plotMaximize {
-                background: transparent;
-                border: 0;
-                color: #AEB4BD;
-                font-size: 16px;
-                border-radius: 5px;
-                padding: 3px;
+                background: #1E232A;
+                border: 1px solid #2D333B;
+                color: #CBD5E1;
+                font-size: 15px;
+                border-radius: 4px;
+                padding: 2px 4px;
                 outline: none;
             }
-            QPushButton#plotMaximize:hover { background: #2A3038; color: #60A5FA; }
+            QPushButton#plotMaximize:hover { background: #2A3038; border-color: #38BDF8; color: #60A5FA; }
             QFrame#chipBox { background: transparent; border: none; }
             QPushButton#plotClose {
-                background: transparent;
-                border: 0;
-                color: #AEB4BD;
-                border-radius: 5px;
+                background: #1E232A;
+                border: 1px solid #2D333B;
+                color: #CBD5E1;
+                border-radius: 4px;
                 font-size: 11px;
                 font-weight: bold;
-                padding: 3px;
+                padding: 2px 4px;
                 outline: none;
             }
-            QPushButton#plotClose:hover {
-                background: rgba(239, 68, 68, 0.25);
-                color: #EF4444;
-            }
+            QPushButton#plotClose:hover { background: #3B1818; border-color: #EF4444; color: #EF4444; }
             QPushButton#navIcon, QPushButton#menuButton {
                 color: #AEB4BD; background: transparent; border: 0; border-radius: 6px;
             }
@@ -523,18 +549,48 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background: #E2E8F0; color: #2563EB;
                 }
                 QPushButton#plotTool, QPushButton#plotMaximize {
-                    background: transparent; border: 0; color: #475569; border-radius: 5px; font-size: 15px; padding: 3px; outline: none;
+                    background: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    color: #334155;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    padding: 2px 4px;
+                    outline: none;
                 }
                 QPushButton#plotTool:hover, QPushButton#plotMaximize:hover {
-                    background: #E2E8F0; color: #2563EB;
+                    background: #F1F5F9;
+                    border-color: #2563EB;
+                    color: #2563EB;
                 }
                 QPushButton#plotClose {
-                    background: transparent; border: 0; color: #64748B; border-radius: 5px; font-size: 11px; font-weight: bold; padding: 3px; outline: none;
+                    background: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    color: #64748B;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    padding: 2px 4px;
+                    outline: none;
                 }
                 QPushButton#plotClose:hover {
-                    background: #FEE2E2; color: #DC2626;
+                    background: #FEE2E2;
+                    border-color: #DC2626;
+                    color: #DC2626;
                 }
                 QFrame#chipBox { background: transparent; border: none; }
+                QWidget#actionsBox { background: transparent; border: none; }
+                QPushButton#summaryAbortAction {
+                    background-color: rgba(220, 38, 38, 0.10);
+                    color: #DC2626;
+                    border: 1px solid rgba(220, 38, 38, 0.35);
+                    border-radius: 5px;
+                    min-height: 18px; max-height: 18px;
+                    padding: 4px 10px; font-size: 12px; font-weight: 600; outline: none;
+                }
+                QPushButton#summaryAbortAction:hover {
+                    background-color: rgba(220, 38, 38, 0.20);
+                    border-color: #DC2626;
+                }
                 QSplitter#dashboardSplitter::handle:horizontal {
                     background: #E2E8F0; width: 6px; margin: 0px 1px; border-radius: 3px;
                 }
@@ -668,10 +724,10 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     border: 1.5px solid #2563EB;
                     border-radius: 14px;
                 }
-                QWidget#plotTitleBar {
+                QWidget#plotTitleBar, QFrame#plotTitleBar {
                     background: #F1F5F9;
-                    border: 0;
-                    border-bottom: 1px solid #E2E8F0;
+                    border: none;
+                    border-bottom: 1px solid #CBD5E1;
                     border-top-left-radius: 13px;
                     border-top-right-radius: 13px;
                 }

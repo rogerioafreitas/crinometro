@@ -3,10 +3,14 @@
 ; Non-commercial use only
 
 #define MyAppName "Crinômetro"
-#define MyAppVersion "4.3.0"
+#ifndef MyAppVersion
+#define MyAppVersion "4.3.2"
+#endif
 #define MyAppPublisher "rogerioafreitas"
 #define MyAppURL "https://github.com/rogerioafreitas/crinometro"
-#define MyAppExeName "Crinometro_v4.3.0.exe"
+#ifndef MyAppExeName
+#define MyAppExeName "Crinometro_v" + MyAppVersion + ".exe"
+#endif
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -42,7 +46,7 @@ RestartApplications=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=M:\Documentos\Faculdade\Biologia\extras\dist\Download Versions
-OutputBaseFilename=Crinometro_setup__v4.3.0
+OutputBaseFilename=Crinometro_setup__v{#MyAppVersion}
 SetupIconFile=M:\Documentos\Faculdade\Biologia\grilinho.ico
 SolidCompression=yes
 WizardStyle=modern dynamic windows11

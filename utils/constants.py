@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.3.0"
+APP_VERSION = "4.3.2"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -17,7 +17,62 @@ DEFAULT_ALGO_PARAMS = {
     "freq_tolerance_hz": 300.0,
 }
 
-CHANGELOG = {
+# Resumo simplificado e objetivo para exibição interna no diálogo Sobre / Notas de Atualização
+CHANGELOG_SUMMARY = {
+    "4.3.2": [
+        "Desempenho Ultra-Fluido: eliminação de travamentos no redimensionamento dos gráficos e na navegação de zoom e pan.",
+        "Espectrograma Adaptativo: contração livre sem bloqueios de largura mínima e ocultação contextual de controles em telas compactas.",
+        "Cancelamento Cooperativo: novo botão '✕ Abortar' para interromper análises individuais ou em lote a qualquer momento.",
+        "Ergonomia e Alto Contraste: cabeçalho reorganizado, botões de controle com affordance clicável sólida e mini-menus com fechamento por toggle."
+    ],
+    "4.3.0": [
+        "Frequência Portadora Automática (FP): identificação instantânea da banda focal e filtro espectral de ±300 Hz contra ruídos.",
+        "Controles Interativos no Espectrograma: ajuste de escala Y via slider vertical até 50 kHz, alternância kHz/Hz e presets '10k', 'Focal' e 'Total'.",
+        "Navegação Direta: zoom fluido na roda do mouse (sem Ctrl) e pan rápido com o botão direito.",
+        "Relatórios Agrupados: exportação em PDF consolidada por espécime com diagnóstico bioacústico."
+    ],
+    "4.2.2": [
+        "Cursor de Alta Visibilidade: linha de reprodução com contorno protetor na timeline.",
+        "Controle Manual de Reanálise: reanálise por IA acionada exclusivamente sob demanda."
+    ],
+    "4.2.0": [
+        "Auto-Updater Integrado: verificação e download de atualizações diretamente no aplicativo.",
+        "Manuais Técnicos e Didáticos: documentação científica completa em PDF."
+    ],
+    "4.1.2": [
+        "Reorganização Livre de Gráficos: suporte a arrastar e soltar (drag & drop) para trocar e maximizar gráficos.",
+        "Relatório Simplificado: síntese bioacústica compacta para múltiplos áudios."
+    ],
+    "4.1.0": [
+        "Filtro ICI Gate: expurgo automático de falsos positivos durante o período refratário fisiológico.",
+        "Edição Precisa de Pulsos: snapping inteligente de marcadores e exportação de relatórios completos para publicação."
+    ],
+    "4.0.0": [
+        "Segregação Bioacústica Avançada: separação inteligente de grilos focais vs. coro distante de fundo.",
+        "Classificador Supervisionado: aprendizado de máquina em tempo real com árvore de decisão de alta velocidade."
+    ],
+    "3.5.0": [
+        "Novo Launcher Animado: inicialização temática com mascote vetorial.",
+        "Normalização Robusta: proteção DSP contra impactos e ruídos de baixa frequência."
+    ],
+    "3.4.0": [
+        "Processamento Assíncrono: tarefas pesadas em background com loading spinner animado.",
+        "Paleta Cromática de Pulsos: diferenciação visual de chilreios por contagem de pulsos."
+    ]
+}
+
+# Histórico técnico completo preservado para exportação em CHANGELOG.md e CHANGELOG.pdf
+CHANGELOG_FULL = {
+    "4.3.2": [
+        "Otimização assíncrona de renderização com canvas.draw_idle(), eliminando repaints síncronos bloqueantes e travamentos durante o redimensionamento de janelas e drag do splitter.",
+        "Criação da classe CompactCtrlBar(QFrame) com minimumSizeHint flexível (0, 0), permitindo contração total do espectrograma sem bloqueios mecânicos de layout.",
+        "Compressão contextual adaptativa dos controles do espectrograma: ocultação automática de limites Y e presets quando a largura for < 520px, mantendo apenas FP e Filtro.",
+        "Novo mecanismo de cancelamento cooperativo via GenericWorker.abort(), com botão '✕ Abortar' no cabeçalho e na barra lateral durante análises simples e em lote.",
+        "Correção do comportamento toggle nos mini-menus 'Gráficos ▾' e 'Exportar ▾' com guarda de timestamp de fechamento para evitar reabertura imediata no segundo clique.",
+        "Reestruturação visual do cabeçalho de ações: 'Reanalisar' isolado à esquerda com botão de abortar; demais ferramentas acumuladas da direita para a esquerda.",
+        "Aprimoramento de affordance tátil e contraste dos botões de controle (segBtn, ghostChip e plotTool) com preenchimento sólido e bordas nítidas nos temas escuro e claro.",
+        "Ajuste da proporção padrão do splitter horizontal para 68% / 32% (histograma ~10% mais largo) e linha divisória sutil de 1px nas barras de título dos cards."
+    ],
     "4.3.0": [
         "Identificação de Frequência Focal por Densidade de Chilreios e Filtro de ±300 Hz: localização automática da frequência portadora com maior densidade de chilreios e expurgo sistemático de pulsos espúrios com mais de 300 Hz de desvio, eliminando falsos positivos e ruídos externos.",
         "Controles Interativos de Escala e Unidades no Espectrograma: manipulação vertical contínua com spinboxes dedicados para limites inferior e superior, alternância dinâmica de unidade entre Hz e kHz com conversão instantânea de rótulos/marcadores, atalhos de preset ('10k' e 'Focal') e espectrograma de banda ampla abrangendo todo o som do áudio até 10+ kHz.",
@@ -162,3 +217,5 @@ CHANGELOG = {
     ]
 }
 
+# Alias canônico utilizado pela interface do usuário (resumido e limpo)
+CHANGELOG = CHANGELOG_SUMMARY

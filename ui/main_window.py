@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "action_reset_layout"):
             self.action_reset_layout.setText("↺ Restaurar Layout Padrão" if l == "pt" else "↺ Reset Plot Layout")
         if hasattr(self, "btn_plots_menu"):
-            self.btn_plots_menu.setText("Exibir ▾" if l == "pt" else "View ▾")
+            self.btn_plots_menu.setText("Gráficos ▾" if l == "pt" else "Graphs ▾")
         if hasattr(self, "btn_reset_layout"):
             self.btn_reset_layout.setText("↺ Padrão" if l == "pt" else "↺ Default")
         self.help_menu.setTitle(I18N[l]["help"])
@@ -387,12 +387,27 @@ class MainWindow(QMainWindow):
         self.list_widget.itemSelectionChanged.connect(self.on_file_selected)
         left_layout.addWidget(self.list_widget, 1)
 
+        batch_btn_layout = QHBoxLayout()
+        batch_btn_layout.setContentsMargins(0, 0, 0, 0)
+        batch_btn_layout.setSpacing(6)
+
         self.btn_analyze_selected = QPushButton("⚡ Analisar Selecionados")
         self.btn_analyze_selected.setObjectName("summaryAction")
         self.btn_analyze_selected.setToolTip("Executar análise em todos os arquivos de áudio selecionados (marcados)")
         self.btn_analyze_selected.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_analyze_selected.clicked.connect(self.analyze_selected_audios)
-        left_layout.addWidget(self.btn_analyze_selected)
+        batch_btn_layout.addWidget(self.btn_analyze_selected, 1)
+
+        self.btn_abort_batch = QPushButton("✕ Abortar")
+        self.btn_abort_batch.setObjectName("summaryAbortAction")
+        self.btn_abort_batch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_abort_batch.setFixedHeight(28)
+        self.btn_abort_batch.setToolTip("Cancelar a análise em lote em andamento")
+        self.btn_abort_batch.setVisible(False)
+        self.btn_abort_batch.clicked.connect(self.abort_current_analysis)
+        batch_btn_layout.addWidget(self.btn_abort_batch)
+
+        left_layout.addLayout(batch_btn_layout)
 
         self.right_panel = QWidget()
         right_layout = QVBoxLayout(self.right_panel)
@@ -425,11 +440,13 @@ class MainWindow(QMainWindow):
 
         actions_box = QWidget()
         actions_box.setObjectName("actionsBox")
+        actions_box.setStyleSheet("background: transparent; border: none;")
+        actions_box.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         actions_layout = QVBoxLayout(actions_box)
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(4)
 
-        # Linha 1: Pipeline Analítico e Aprendizado de Máquina
+        # Linha 1: Pipeline Analítico — Reanalisar e Abortar à esquerda; IA e Correções alinhados à direita
         row_analysis = QHBoxLayout()
         row_analysis.setContentsMargins(0, 0, 0, 0)
         row_analysis.setSpacing(6)
@@ -442,6 +459,18 @@ class MainWindow(QMainWindow):
         self.btn_reanalisar_main.setToolTip("Reanalisar áudio atual com os parâmetros vigentes")
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         row_analysis.addWidget(self.btn_reanalisar_main)
+
+        # Botão Abortar Análise (ao lado direto de Reanalisar, visível apenas durante análise)
+        self.btn_abort_analysis = QPushButton("✕ Abortar")
+        self.btn_abort_analysis.setObjectName("summaryAbortAction")
+        self.btn_abort_analysis.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_abort_analysis.setFixedHeight(26)
+        self.btn_abort_analysis.setToolTip("Cancelar a análise em andamento")
+        self.btn_abort_analysis.setVisible(False)
+        self.btn_abort_analysis.clicked.connect(self.abort_current_analysis)
+        row_analysis.addWidget(self.btn_abort_analysis)
+
+        row_analysis.addStretch()
 
         self.btn_toggle_ml = QPushButton()
         self.btn_toggle_ml.setObjectName("summaryToggleMl")
@@ -460,13 +489,13 @@ class MainWindow(QMainWindow):
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         row_analysis.addWidget(self.btn_learn_corrections)
 
-        row_analysis.addStretch()
         actions_layout.addLayout(row_analysis)
 
-        # Linha 2: Operações, Exportação e Exibição de Gráficos
+        # Linha 2: Operações, Exportação e Exibição de Gráficos (alocados da direita para a esquerda)
         row_tools = QHBoxLayout()
         row_tools.setContentsMargins(0, 0, 0, 0)
         row_tools.setSpacing(6)
+        row_tools.addStretch()
 
         self.btn_sync = QPushButton()
         self.btn_sync.setObjectName("btn_sync")
@@ -488,7 +517,7 @@ class MainWindow(QMainWindow):
         self.btn_export_main.clicked.connect(self.show_export_menu)
         row_tools.addWidget(self.btn_export_main)
 
-        self.btn_plots_menu = QPushButton("Exibir ▾" if self.lang == "pt" else "View ▾")
+        self.btn_plots_menu = QPushButton("Gráficos ▾" if self.lang == "pt" else "Graphs ▾")
         self.btn_plots_menu.setObjectName("summaryAction")
         self.btn_plots_menu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_plots_menu.setFixedHeight(26)
@@ -496,7 +525,6 @@ class MainWindow(QMainWindow):
         self.btn_plots_menu.clicked.connect(self.show_plots_menu)
         row_tools.addWidget(self.btn_plots_menu)
 
-        row_tools.addStretch()
         actions_layout.addLayout(row_tools)
 
         summary.addWidget(actions_box)
@@ -726,7 +754,8 @@ class MainWindow(QMainWindow):
         self.stack_splitter.updateGeometry()
         self._update_plot_visibility_state()
         self._update_plot_menu_checks()
-        self._update_active_focus_panel()
+        # Atrasa update de foco para evitar cascata de setVisible/repaint durante arrastar splitter
+        self._schedule_focus_update()
 
     def swap_main_panel(self, panel):
         if panel is self.main_panel or getattr(self, "_swapping_panels", False):
@@ -748,7 +777,7 @@ class MainWindow(QMainWindow):
             self.main_panel = panel
             self.stack_panels = [old_main] + [p for p in old_stack if p is not panel]
             self._rebuild_panel_layout()
-            self._update_active_focus_panel()
+            self._schedule_focus_update(50)  # Curto delay — já passou pelo rebuild
 
             if old_stack_sizes and len(old_stack_sizes) == len(self.stack_splitter.sizes()):
                 self.stack_splitter.setSizes(old_stack_sizes)
@@ -855,7 +884,7 @@ class MainWindow(QMainWindow):
         else:
             self._update_plot_visibility_state()
 
-        self._update_active_focus_panel()
+        self._schedule_focus_update()
         self._update_plot_menu_checks()
 
     def show_plot_panel(self, panel):
@@ -879,7 +908,7 @@ class MainWindow(QMainWindow):
         self._rebuild_panel_layout()
         self._update_plot_visibility_state()
         self._apply_plot_geometry()
-        self._update_active_focus_panel()
+        self._schedule_focus_update()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
 
@@ -897,7 +926,7 @@ class MainWindow(QMainWindow):
             sizes = self.dashboard_splitter.sizes()
             if len(sizes) == 2 and (sizes[1] <= 10 or sizes[0] <= 10):
                 w = max(500, self.dashboard_splitter.width())
-                self.dashboard_splitter.setSizes([int(w * 0.74), int(w * 0.26)])
+                self.dashboard_splitter.setSizes([int(w * 0.68), int(w * 0.32)])
 
     def _update_plot_menu_checks(self):
         """Sincroniza o estado marcado dos menus com a visibilidade dos gráficos."""
@@ -936,11 +965,11 @@ class MainWindow(QMainWindow):
         self.stack_splitter.show()
         self.dashboard_splitter.show()
 
-        # Restaura proporção horizontal: 74% main, 26% lateral
+        # Restaura proporção horizontal: 68% main, 32% lateral (+10% histograma)
         total_w = self.dashboard_splitter.width()
         if total_w < 300:
             total_w = 1200
-        self.dashboard_splitter.setSizes([int(total_w * 0.74), int(total_w * 0.26)])
+        self.dashboard_splitter.setSizes([int(total_w * 0.68), int(total_w * 0.32)])
 
         total_h = self.stack_splitter.height()
         if total_h < 200:
@@ -949,12 +978,23 @@ class MainWindow(QMainWindow):
 
         QApplication.processEvents()
         self._apply_plot_geometry()
-        self._update_active_focus_panel()
+        self._schedule_focus_update()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
 
     def show_plots_menu(self):
-        """Exibe o dropdown popup para ligar/desligar gráficos e restaurar padrão."""
+        """Exibe/oculta o dropdown de gráficos (toggle: clique abre, outro clique fecha)."""
+        now = time.time()
+        if now - getattr(self, "_plots_menu_last_close_time", 0.0) < 0.25:
+            return
+
+        # Fecha se já está aberto
+        if getattr(self, "_plots_menu_open", False):
+            if hasattr(self, "_plots_menu_ref") and self._plots_menu_ref is not None:
+                self._plots_menu_ref.close()
+            self._plots_menu_open = False
+            return
+
         menu = QMenu(self)
         menu.setObjectName("plotsDropdownMenu")
 
@@ -974,7 +1014,14 @@ class MainWindow(QMainWindow):
         act_reset = menu.addAction("↺ Restaurar Layout Padrão" if self.lang == "pt" else "↺ Reset Default Layout")
         act_reset.triggered.connect(self.reset_plot_layout)
 
-        menu.exec(self.btn_plots_menu.mapToGlobal(self.btn_plots_menu.rect().bottomLeft()))
+        def _on_close():
+            self._plots_menu_open = False
+            self._plots_menu_last_close_time = time.time()
+
+        menu.aboutToHide.connect(_on_close)
+        self._plots_menu_ref = menu
+        self._plots_menu_open = True
+        menu.popup(self.btn_plots_menu.mapToGlobal(self.btn_plots_menu.rect().bottomLeft()))
 
     def _fit_all_plots_to_layout(self):
         if not self.active_heavy_data:
@@ -1013,33 +1060,43 @@ class MainWindow(QMainWindow):
 
             if is_main:
                 # Painel principal central (amplo)
-                left = max(0.065, min(0.12, 56.0 / w))
                 right = 1.0 - max(0.015, min(0.04, 16.0 / w))
                 top = 1.0 - max(0.03, min(0.08, 18.0 / h))
-                bottom = max(0.11, min(0.18, 46.0 / h))
+                if panel is self.panel_hist:
+                    left = max(0.06, min(0.12, 50.0 / w))
+                    bottom = max(0.12, min(0.20, 50.0 / h))
+                else:
+                    left = max(0.065, min(0.12, 54.0 / w))
+                    bottom = max(0.10, min(0.18, 44.0 / h))
                 font_size = 8.5
             else:
                 # Mini janelinhas na coluna lateral direita
-                top = 1.0 - max(0.05, min(0.12, 14.0 / h))
-                right = 1.0 - max(0.02, min(0.06, 12.0 / w))
+                top = 1.0 - max(0.04, min(0.10, 12.0 / h))
+                right = 1.0 - max(0.02, min(0.05, 10.0 / w))
 
                 if panel is self.panel_hist:
-                    left = max(0.13, min(0.22, 40.0 / w))
-                    bottom = max(0.28, min(0.38, 44.0 / h))
+                    left = max(0.11, min(0.20, 38.0 / w))
+                    bottom = max(0.24, min(0.40, 48.0 / h))
                 elif panel is self.panel_freq:
                     # Frequência tem números de 4 dígitos na vertical (ex: 6000) + 'Hz'
-                    left = max(0.17, min(0.28, 54.0 / w))
-                    bottom = max(0.28, min(0.38, 42.0 / h))
+                    left = max(0.16, min(0.28, 54.0 / w))
+                    bottom = max(0.22, min(0.35, 38.0 / h))
+                elif panel is self.panel_spec:
+                    # Espectrograma na lateral tem slider Y e números de escala
+                    left = max(0.16, min(0.28, 52.0 / w))
+                    bottom = max(0.22, min(0.35, 38.0 / h))
                 else:  # panel_wave
                     # Onda tem '-1', '0', '1' + 'Amplitude'
-                    left = max(0.15, min(0.25, 48.0 / w))
-                    bottom = max(0.28, min(0.38, 42.0 / h))
+                    left = max(0.14, min(0.24, 46.0 / w))
+                    bottom = max(0.22, min(0.35, 38.0 / h))
 
-                font_size = 7.5
+                font_size = 6.8 if (w < 260 or h < 130) else 7.5
 
             fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
 
-            panel.ax.tick_params(labelsize=font_size, pad=2.5, length=3.0 if is_main else 2.5)
+            tick_pad = 1.5 if not is_main else 2.5
+            tick_len = 2.0 if not is_main else 3.0
+            panel.ax.tick_params(labelsize=font_size, pad=tick_pad, length=tick_len)
             if hasattr(panel.ax, "xaxis") and panel.ax.xaxis.label is not None:
                 panel.ax.xaxis.label.set_size(font_size + 0.5)
             if hasattr(panel.ax, "yaxis") and panel.ax.yaxis.label is not None:
@@ -1258,6 +1315,9 @@ class MainWindow(QMainWindow):
             errors = []
             results = {}
             for fname in checked_files:
+                # Verifica cancelamento cooperativo entre arquivos
+                if worker.abort_requested:
+                    break
                 if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
                     continue
                 try:
@@ -1271,13 +1331,23 @@ class MainWindow(QMainWindow):
 
         worker = GenericWorker(_task)
         self._batch_worker = worker
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(True)
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(True)
 
-        def _on_finished(payload):
+        def _cleanup_batch():
+            if hasattr(self, "btn_abort_batch"):
+                self.btn_abort_batch.setVisible(False)
+            if hasattr(self, "btn_abort_analysis"):
+                self.btn_abort_analysis.setVisible(False)
             for fname in checked_files:
                 w = self._get_item_widget_by_name(fname)
                 if w and hasattr(w, "set_loading"):
                     w.set_loading(False)
 
+        def _on_finished(payload):
+            _cleanup_batch()
             success_count, errors, results = payload
             for fname, res in results.items():
                 self._apply_analysis_results(fname, res, render=(fname == curr_name))
@@ -1300,10 +1370,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, I18N[self.lang]["success"], msg)
 
         def _on_error(err_msg):
-            for fname in checked_files:
-                w = self._get_item_widget_by_name(fname)
-                if w and hasattr(w, "set_loading"):
-                    w.set_loading(False)
+            _cleanup_batch()
             spinner.stop(None, "⚡ Analisar Selecionados")
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
@@ -1813,8 +1880,15 @@ class MainWindow(QMainWindow):
 
         worker = GenericWorker(_task)
         self._reanalyze_worker = worker
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(True)
+
+        def _cleanup():
+            if hasattr(self, "btn_abort_analysis"):
+                self.btn_abort_analysis.setVisible(False)
 
         def _on_finished(results):
+            _cleanup()
             if item_widget and hasattr(item_widget, "set_loading"):
                 item_widget.set_loading(False)
             spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
@@ -1822,6 +1896,7 @@ class MainWindow(QMainWindow):
             self._apply_analysis_results(filename, results, render=True, validate_all=True)
 
         def _on_error(err_msg):
+            _cleanup()
             if item_widget and hasattr(item_widget, "set_loading"):
                 item_widget.set_loading(False)
             restore_text = "Analisar" if is_first_time else "Reanalisar"
@@ -1842,6 +1917,24 @@ class MainWindow(QMainWindow):
             self._apply_analysis_results(filename, res, render=render, validate_all=validate_all, params=params)
         except Exception as e:
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
+
+    def abort_current_analysis(self):
+        """Cancela cooperativamente a análise em andamento (single ou lote)."""
+        aborted = False
+        for attr in ("_reanalyze_worker", "_batch_worker"):
+            worker = getattr(self, attr, None)
+            if worker is not None and worker.isRunning():
+                worker.abort()
+                aborted = True
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(False)
+        if aborted:
+            if hasattr(self, "btn_reanalisar_main"):
+                self.btn_reanalisar_main.setEnabled(True)
+            if hasattr(self, "btn_analyze_selected"):
+                self.btn_analyze_selected.setEnabled(True)
 
     def _apply_analysis_results(self, filename, results, render=True, validate_all=False, params=None):
         if params is None:
@@ -2021,9 +2114,12 @@ class MainWindow(QMainWindow):
         legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
                           for x in unique_pulses]
         if legend_handles:
-            leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.15),
-                             ncol=min(4, len(legend_handles)), frameon=False, fontsize=8.0, handlelength=1.0,
-                             columnspacing=0.6, borderaxespad=0.0)
+            hist_w = self.panel_hist.width()
+            leg_ncol = min(3 if hist_w < 340 else 4, len(legend_handles))
+            leg_fs = 7.0 if hist_w < 280 else (7.5 if hist_w < 340 else 8.0)
+            leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.11),
+                             ncol=leg_ncol, frameon=False, fontsize=leg_fs, handlelength=0.9,
+                             columnspacing=0.5, borderaxespad=0.0)
             leg.get_frame().set_facecolor((0, 0, 0, 0))
             leg.get_frame().set_alpha(0.0)
             leg.get_frame().set_edgecolor((0, 0, 0, 0))
@@ -2404,6 +2500,17 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s).")
 
     def show_export_menu(self):
+        """Exibe/oculta o dropdown de exportação (toggle: clique abre, outro clique fecha)."""
+        now = time.time()
+        if now - getattr(self, "_export_menu_last_close_time", 0.0) < 0.25:
+            return
+
+        if getattr(self, "_export_menu_open", False):
+            if hasattr(self, "_export_menu_ref") and self._export_menu_ref is not None:
+                self._export_menu_ref.close()
+            self._export_menu_open = False
+            return
+
         menu = QMenu(self)
         menu.setObjectName("exportMenu")
         act_pdf_full = menu.addAction(make_ui_icon("export", color="#2563EB", size=15), "📄 Exportar Relatório Completo (.pdf)")
@@ -2412,7 +2519,15 @@ class MainWindow(QMainWindow):
         act_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
         act_txt.triggered.connect(self.action_save_txt)
-        menu.exec(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
+
+        def _on_close():
+            self._export_menu_open = False
+            self._export_menu_last_close_time = time.time()
+
+        menu.aboutToHide.connect(_on_close)
+        self._export_menu_ref = menu
+        self._export_menu_open = True
+        menu.popup(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
 
     def action_save_pdf(self, include_chirp_list=True):
         checked_files = self.get_checked_files()
@@ -2983,7 +3098,7 @@ class MainWindow(QMainWindow):
             self.splitter.setSizes([260, max(700, self.width() - 260)])
             if hasattr(self, "dashboard_splitter"):
                 dash_w = max(500, self.dashboard_splitter.width())
-                self.dashboard_splitter.setSizes([int(dash_w * 0.74), int(dash_w * 0.26)])
+                self.dashboard_splitter.setSizes([int(dash_w * 0.68), int(dash_w * 0.32)])
             if hasattr(self, "stack_splitter"):
                 stack_h = max(300, self.stack_splitter.height())
                 h_each = max(60, stack_h // 3)
@@ -3003,8 +3118,17 @@ class MainWindow(QMainWindow):
                 self._resize_debounce_timer.timeout.connect(self._finish_resize_refresh)
             self._resize_debounce_timer.start(100)
 
+    def _schedule_focus_update(self, delay_ms: int = 200):
+        """Agenda _update_active_focus_panel com debounce para evitar cascata durante drag."""
+        if not hasattr(self, "_focus_debounce_timer"):
+            self._focus_debounce_timer = QTimer(self)
+            self._focus_debounce_timer.setSingleShot(True)
+            self._focus_debounce_timer.timeout.connect(self._update_active_focus_panel)
+        self._focus_debounce_timer.start(delay_ms)
+
     def _update_active_focus_panel(self):
-        """Identifica o gráfico ocupando a maior área na tela e aplica nele a borda azul de maximizado."""
+        """Identifica o gráfico ocupando a maior área na tela e aplica nele a borda azul de maximizado.
+        Usa bloqueio de sinal para evitar recálculos desnecessários de layout."""
         if not hasattr(self, "all_panels") or getattr(self, "_swapping_panels", False):
             return
         visible_panels = [p for p in self.all_panels if p.isVisible() and not getattr(p, "_user_closed", False)]
@@ -3016,16 +3140,18 @@ class MainWindow(QMainWindow):
 
         for p in self.all_panels:
             is_largest = (p is largest_panel)
-            p.set_main(is_largest)
+            # Chama set_main apenas se o estado realmente mudou — evita repaint desnecessário
+            if getattr(p, "_is_main_focused", None) != is_largest:
+                p._is_main_focused = is_largest
+                p.set_main(is_largest)
 
     def _finish_resize_refresh(self):
-        self._update_active_focus_panel()
+        self._schedule_focus_update(50)
         self._apply_plot_geometry()
+        for p in self.all_panels:
+            p.canvas.draw_idle()
         if self.active_heavy_data:
-            self._refresh_all_canvases()
-        else:
-            for p in self.all_panels:
-                p.canvas.draw_idle()
+            QTimer.singleShot(150, self.capture_backgrounds)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape and self.expanded_panel is not None:
