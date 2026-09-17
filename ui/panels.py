@@ -142,7 +142,7 @@ class PlotPanel(QFrame):
         self.title_bar = PlotTitleBar(self)
         self.title_bar.setObjectName("plotTitleBar")
         self.title_bar.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.title_bar.setToolTip("Arraste esta barra para reordenar as mini janelas ou use os botões ▲ e ▼")
+        self.title_bar.setToolTip("Arraste esta barra para reorganizar as posições dos gráficos")
         bar = QHBoxLayout(self.title_bar)
         bar.setContentsMargins(12, 6, 8, 6)
         bar.setSpacing(4)
@@ -151,17 +151,6 @@ class PlotPanel(QFrame):
         self.lbl_title.setObjectName("plotTitle")
         bar.addWidget(self.lbl_title)
         bar.addStretch()
-
-        # Botões para reordenar / trocar a posição da mini janela na pilha lateral
-        self.btn_move_up = self._tool_button("▲", "Mover esta mini janela para cima")
-        self.btn_move_up.setObjectName("plotTool")
-        self.btn_move_up.clicked.connect(lambda: self._on_move_clicked(-1))
-        bar.addWidget(self.btn_move_up)
-
-        self.btn_move_down = self._tool_button("▼", "Mover esta mini janela para baixo")
-        self.btn_move_down.setObjectName("plotTool")
-        self.btn_move_down.clicked.connect(lambda: self._on_move_clicked(1))
-        bar.addWidget(self.btn_move_down)
 
         # Botão de edição de pulsos (ativa/desativa modo de seleção)
         self.btn_pulse_edit = self._tool_button("", "Ativar modo de edição de pulsos (clique para adicionar/remover)")
@@ -279,7 +268,8 @@ class PlotPanel(QFrame):
             ctrl_layout.addWidget(self.y_scale_box)
 
             # Separador vertical sutil
-            ctrl_layout.addWidget(self._make_vsep())
+            self.sep_y_scale = self._make_vsep()
+            ctrl_layout.addWidget(self.sep_y_scale)
 
             # 2. Grupo de Presets Estilo Segmented Control
             self.preset_group_box = QFrame()
@@ -313,7 +303,8 @@ class PlotPanel(QFrame):
             ctrl_layout.addWidget(self.preset_group_box)
 
             # Separador vertical sutil
-            ctrl_layout.addWidget(self._make_vsep())
+            self.sep_presets = self._make_vsep()
+            ctrl_layout.addWidget(self.sep_presets)
 
             # 3. Controle da Portadora e Slider do Filtro
             self._build_carrier_controls(ctrl_layout)
@@ -332,8 +323,9 @@ class PlotPanel(QFrame):
             self.slider_spec_y.setFixedWidth(16)
             self.slider_spec_y.setCursor(Qt.CursorShape.PointingHandCursor)
             self.slider_spec_y.setToolTip("Ajuste direto da altura/frequência máxima do eixo Y")
-            self.slider_spec_y.setRange(500, 24000)
-            self.slider_spec_y.setSingleStep(250)
+            self.slider_spec_y.setRange(500, 50000)
+            self.slider_spec_y.setSingleStep(500)
+            self.slider_spec_y.setPageStep(2000)
             self.slider_spec_y.setValue(10000)
             self.slider_spec_y.valueChanged.connect(self._on_spec_y_slider_changed)
 
@@ -343,7 +335,13 @@ class PlotPanel(QFrame):
         else:
             self.layout.addWidget(self.canvas, 1)
 
-        self._set_main_visual(main)
+        self.setMinimumSize(0, 0)
+        self.canvas.setMinimumSize(0, 0)
+        if hasattr(self, "spec_ctrl_bar"):
+            self.spec_ctrl_bar.setMinimumWidth(0)
+
+        self.set_main(main)
+        self.apply_dark_theme()
 
     def _tool_button(self, glyph, tooltip):
         b = QPushButton(glyph)
@@ -384,10 +382,16 @@ class PlotPanel(QFrame):
         self.btn_expand.setToolTip(
             "Restaurar posição" if main else "Colocar este gráfico na posição principal"
         )
-        if hasattr(self, "btn_move_up"):
-            self.btn_move_up.setVisible(not main)
-        if hasattr(self, "btn_move_down"):
-            self.btn_move_down.setVisible(not main)
+        if self.title_key == "spec":
+            is_expanded = bool(main)
+            if hasattr(self, "y_scale_box"):
+                self.y_scale_box.setVisible(is_expanded)
+            if hasattr(self, "preset_group_box"):
+                self.preset_group_box.setVisible(is_expanded)
+            if hasattr(self, "sep_y_scale"):
+                self.sep_y_scale.setVisible(is_expanded)
+            if hasattr(self, "sep_presets"):
+                self.sep_presets.setVisible(is_expanded)
 
     def update_lang(self, lang):
         self.lbl_title.setText(I18N[lang][self.title_key])
@@ -415,12 +419,13 @@ class PlotPanel(QFrame):
         icon_color = "#D7DCE2" if dark else "#334155"
         self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=15))
         self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=15))
-        if hasattr(self, "btn_move_up"):
-            self.btn_move_up.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
-        if hasattr(self, "btn_move_down"):
-            self.btn_move_down.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
         if hasattr(self, "btn_close"):
             self.btn_close.setStyleSheet(f"QPushButton#plotClose {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton#plotClose:hover {{ background: rgba(239, 68, 68, 0.25); color: #EF4444; border-radius: 4px; }}")
+
+        if hasattr(self, "spec_ctrl_bar"):
+            self.spec_ctrl_bar.setStyleSheet(self._ctrl_bar_style(dark))
+        if hasattr(self, "freq_ctrl_bar"):
+            self.freq_ctrl_bar.setStyleSheet(self._ctrl_bar_style(dark))
 
     def _on_close_clicked(self):
         """Notifica a janela principal para fechar/ocultar este painel."""
@@ -469,7 +474,7 @@ class PlotPanel(QFrame):
             try:
                 hz_val = int(ymax * 1000.0) if getattr(self, "spec_unit", "kHz") == "kHz" else int(ymax)
                 if hz_val > self.slider_spec_y.maximum():
-                    self.slider_spec_y.setMaximum(max(hz_val, 24000))
+                    self.slider_spec_y.setMaximum(max(hz_val, 50000))
                 if hz_val < self.slider_spec_y.minimum():
                     self.slider_spec_y.setMinimum(min(hz_val, 500))
                 self.slider_spec_y.blockSignals(True)
@@ -610,270 +615,483 @@ class PlotPanel(QFrame):
             self.set_spec_limits(0.0, round(nyq, 0), unit="Hz")
 
     @staticmethod
-    def _ctrl_bar_style():
-        return """
-            QFrame#specCtrlBar, QFrame#freqCtrlBar {
-                background-color: #16181B;
-                border-top: 1px solid #20242B;
-                border-bottom: 1px solid #23272E;
-                padding: 2px 6px;
-            }
-            QLabel.specCtrlLabel {
-                color: #8E949D;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QLabel.specCtrlMuted {
-                color: #7A828E;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QLabel.specCtrlSep {
-                color: #555E6B;
-                font-size: 11px;
-            }
+    def _ctrl_bar_style(dark=True):
+        if dark:
+            return """
+                QFrame#specCtrlBar, QFrame#freqCtrlBar {
+                    background-color: #16181B;
+                    border-top: 1px solid #20242B;
+                    border-bottom: 1px solid #23272E;
+                    padding: 2px 6px;
+                }
+                QLabel.specCtrlLabel {
+                    color: #8E949D;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+                QLabel.specCtrlMuted {
+                    color: #7A828E;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+                QLabel.specCtrlSep {
+                    color: #555E6B;
+                    font-size: 11px;
+                }
 
-            /* Bloco de Escala Y Unificado */
-            QFrame#yScaleBox {
-                background-color: #14171A;
-                border: 1px solid #23272F;
-                border-radius: 5px;
-                padding: 1px 3px;
-            }
-            QDoubleSpinBox.specScaleSpin {
-                background: transparent;
-                border: none;
-                color: #F0F2F5;
-                font-size: 11px;
-                font-weight: 600;
-                padding: 1px 0px;
-            }
-            QDoubleSpinBox.specScaleSpin:hover, QDoubleSpinBox.specScaleSpin:focus {
-                color: #FFFFFF;
-            }
-            QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
-                width: 0px;
-                height: 0px;
-                background: transparent;
-                border: none;
-            }
-            QComboBox.specUnitCombo {
-                background-color: #1C2026;
-                color: #38BDF8;
-                font-size: 10.5px;
-                font-weight: 700;
-                border: 1px solid #2B323C;
-                border-radius: 3px;
-                padding: 1px 2px 1px 5px;
-                min-width: 38px;
-                height: 18px;
-            }
-            QComboBox.specUnitCombo:hover {
-                border-color: #38BDF8;
-                background-color: #232933;
-            }
-            QComboBox.specUnitCombo::drop-down {
-                border: none;
-                width: 10px;
-            }
-            QComboBox.specUnitCombo::down-arrow {
-                image: none;
-                border-left: 3px solid transparent;
-                border-right: 3px solid transparent;
-                border-top: 4px solid #38BDF8;
-                width: 0;
-                height: 0;
-                margin-right: 2px;
-            }
-            QComboBox.specUnitCombo QAbstractItemView {
-                background-color: #16181B;
-                border: 1px solid #282D35;
-                selection-background-color: #2563EB;
-                selection-color: #FFFFFF;
-                color: #E2E8F0;
-                font-size: 10.5px;
-            }
+                /* Bloco de Escala Y Unificado */
+                QFrame#yScaleBox {
+                    background-color: #14171A;
+                    border: 1px solid #23272F;
+                    border-radius: 5px;
+                    padding: 1px 3px;
+                }
+                QDoubleSpinBox.specScaleSpin {
+                    background: transparent;
+                    border: none;
+                    color: #F0F2F5;
+                    font-size: 11px;
+                    font-weight: 600;
+                    padding: 1px 0px;
+                }
+                QDoubleSpinBox.specScaleSpin:hover, QDoubleSpinBox.specScaleSpin:focus {
+                    color: #FFFFFF;
+                }
+                QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
+                    width: 0px;
+                    height: 0px;
+                    background: transparent;
+                    border: none;
+                }
+                QComboBox.specUnitCombo {
+                    background-color: #1C2026;
+                    color: #38BDF8;
+                    font-size: 10.5px;
+                    font-weight: 700;
+                    border: 1px solid #2B323C;
+                    border-radius: 3px;
+                    padding: 1px 2px 1px 5px;
+                    min-width: 38px;
+                    height: 18px;
+                }
+                QComboBox.specUnitCombo:hover {
+                    border-color: #38BDF8;
+                    background-color: #232933;
+                }
+                QComboBox.specUnitCombo::drop-down {
+                    border: none;
+                    width: 10px;
+                }
+                QComboBox.specUnitCombo::down-arrow {
+                    image: none;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 4px solid #38BDF8;
+                    width: 0;
+                    height: 0;
+                    margin-right: 2px;
+                }
+                QComboBox.specUnitCombo QAbstractItemView {
+                    background-color: #16181B;
+                    border: 1px solid #282D35;
+                    selection-background-color: #2563EB;
+                    selection-color: #FFFFFF;
+                    color: #E2E8F0;
+                    font-size: 10.5px;
+                }
 
-            /* Grupo de Presets Segmented Control */
-            QFrame#presetGroupBox {
-                background-color: #14171A;
-                border: 1px solid #23272F;
-                border-radius: 5px;
-                padding: 1px;
-            }
-            QPushButton.segBtn {
-                background-color: transparent;
-                color: #8E949D;
-                font-size: 10.5px;
-                font-weight: 600;
-                border: none;
-                border-radius: 3px;
-                padding: 2px 7px;
-                height: 18px;
-            }
-            QPushButton.segBtn:hover {
-                background-color: rgba(255, 255, 255, 0.05);
-                color: #E2E8F0;
-            }
-            QPushButton.segBtn[active="true"] {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                font-weight: 700;
-            }
+                /* Grupo de Presets Segmented Control */
+                QFrame#presetGroupBox {
+                    background-color: #14171A;
+                    border: 1px solid #23272F;
+                    border-radius: 5px;
+                    padding: 1px;
+                }
+                QPushButton.segBtn {
+                    background-color: transparent;
+                    color: #8E949D;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px 7px;
+                    height: 18px;
+                }
+                QPushButton.segBtn:hover {
+                    background-color: rgba(255, 255, 255, 0.05);
+                    color: #E2E8F0;
+                }
+                QPushButton.segBtn[active="true"] {
+                    background-color: #2563EB;
+                    color: #FFFFFF;
+                    font-weight: 700;
+                }
 
-            /* Badge da Portadora */
-            QLabel.carrierBadge {
-                background-color: rgba(14, 165, 233, 0.12);
-                border: 1px solid rgba(56, 189, 248, 0.28);
-                color: #38BDF8;
-                border-radius: 4px;
-                padding: 2px 6px;
-                font-size: 11px;
-                font-weight: 700;
-            }
+                /* Badge da Portadora */
+                QLabel.carrierBadge {
+                    background-color: rgba(14, 165, 233, 0.12);
+                    border: 1px solid rgba(56, 189, 248, 0.28);
+                    color: #38BDF8;
+                    border-radius: 4px;
+                    padding: 2px 6px;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
 
-            /* Tolerância: Valor Monoespaçado */
-            QSpinBox.specMonoSpin {
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 3px;
-                color: #F1F5F9;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 11px;
-                font-weight: 700;
-                padding: 1px 2px;
-                min-width: 58px;
-                max-width: 66px;
-            }
-            QSpinBox.specMonoSpin:hover {
-                background-color: #1A1F26;
-                border: 1px solid #282D35;
-            }
-            QSpinBox.specMonoSpin:focus {
-                background-color: #1A1F26;
-                border: 1px solid #2563EB;
-            }
-            QSpinBox.specMonoSpin::up-button, QSpinBox.specMonoSpin::down-button {
-                width: 0px;
-                height: 0px;
-                border: none;
-            }
+                /* Tolerância: Valor Monoespaçado */
+                QSpinBox.specMonoSpin {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 3px;
+                    color: #F1F5F9;
+                    font-family: 'Consolas', 'Courier New', monospace;
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 1px 2px;
+                    min-width: 58px;
+                    max-width: 66px;
+                }
+                QSpinBox.specMonoSpin:hover {
+                    background-color: #1A1F26;
+                    border: 1px solid #282D35;
+                }
+                QSpinBox.specMonoSpin:focus {
+                    background-color: #1A1F26;
+                    border: 1px solid #2563EB;
+                }
+                QSpinBox.specMonoSpin::up-button, QSpinBox.specMonoSpin::down-button {
+                    width: 0px;
+                    height: 0px;
+                    border: none;
+                }
 
-            /* Slider Horizontal */
-            QSlider.specSlider {
-                background: transparent;
-                border: none;
-                height: 20px;
-            }
-            QSlider.specSlider::groove:horizontal {
-                height: 3px;
-                background: rgba(255, 255, 255, 0.12);
-                border: none;
-                border-radius: 1.5px;
-            }
-            QSlider.specSlider::sub-page:horizontal {
-                background: #2563EB;
-                border-radius: 1.5px;
-            }
-            QSlider.specSlider::handle:horizontal {
-                background: #38BDF8;
-                border: 1px solid #0284C7;
-                width: 10px;
-                height: 10px;
-                margin: -3.5px 0;
-                border-radius: 5px;
-            }
-            QSlider.specSlider::handle:horizontal:hover {
-                background: #7DD3FC;
-                border: 1px solid #38BDF8;
-            }
+                /* Slider Horizontal */
+                QSlider.specSlider {
+                    background: transparent;
+                    border: none;
+                    height: 20px;
+                }
+                QSlider.specSlider::groove:horizontal {
+                    height: 3px;
+                    background: rgba(255, 255, 255, 0.12);
+                    border: none;
+                    border-radius: 1.5px;
+                }
+                QSlider.specSlider::sub-page:horizontal {
+                    background: #2563EB;
+                    border-radius: 1.5px;
+                }
+                QSlider.specSlider::handle:horizontal {
+                    background: #38BDF8;
+                    border: 1px solid #0284C7;
+                    width: 10px;
+                    height: 10px;
+                    margin: -3.5px 0;
+                    border-radius: 5px;
+                }
+                QSlider.specSlider::handle:horizontal:hover {
+                    background: #7DD3FC;
+                    border: 1px solid #38BDF8;
+                }
 
-            /* Ghost Chips de Atalhos */
-            QPushButton.ghostChip {
-                background-color: rgba(255, 255, 255, 0.04);
-                color: #94A3B8;
-                font-size: 10.5px;
-                font-weight: 600;
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 4px;
-                padding: 1px 6px;
-                height: 20px;
-                min-width: 34px;
-            }
-            QPushButton.ghostChip:hover {
-                background-color: rgba(255, 255, 255, 0.10);
-                border-color: #38BDF8;
-                color: #FFFFFF;
-            }
-            QPushButton.ghostChip:pressed {
-                background-color: #2563EB;
-                border-color: #3B82F6;
-                color: #FFFFFF;
-            }
+                /* Ghost Chips de Atalhos */
+                QFrame#chipBox {
+                    background: transparent;
+                    border: none;
+                }
+                QPushButton.ghostChip {
+                    background-color: rgba(255, 255, 255, 0.04);
+                    color: #94A3B8;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 4px;
+                    padding: 1px 6px;
+                    height: 20px;
+                    min-width: 34px;
+                }
+                QPushButton.ghostChip:hover {
+                    background-color: rgba(255, 255, 255, 0.10);
+                    border-color: #38BDF8;
+                    color: #FFFFFF;
+                }
+                QPushButton.ghostChip:pressed {
+                    background-color: #2563EB;
+                    border-color: #3B82F6;
+                    color: #FFFFFF;
+                }
 
-            /* Slider Vertical do Eixo Y */
-            QSlider#specYSlider {
-                background: transparent;
-                border: none;
-                width: 16px;
-                margin: 4px 0px;
-            }
-            QSlider#specYSlider::groove:vertical {
-                width: 3px;
-                background: rgba(255, 255, 255, 0.12);
-                border: none;
-                border-radius: 1.5px;
-            }
-            QSlider#specYSlider::sub-page:vertical {
-                background: rgba(255, 255, 255, 0.12);
-                border-radius: 1.5px;
-            }
-            QSlider#specYSlider::add-page:vertical {
-                background: #2563EB;
-                border-radius: 1.5px;
-            }
-            QSlider#specYSlider::handle:vertical {
-                background: #38BDF8;
-                border: 1px solid #0284C7;
-                width: 10px;
-                height: 10px;
-                margin: 0 -3.5px;
-                border-radius: 5px;
-            }
-            QSlider#specYSlider::handle:vertical:hover {
-                background: #7DD3FC;
-                border: 1px solid #38BDF8;
-            }
+                /* Slider Vertical do Eixo Y */
+                QSlider#specYSlider {
+                    background: transparent;
+                    border: none;
+                    width: 16px;
+                    margin: 4px 0px;
+                }
+                QSlider#specYSlider::groove:vertical {
+                    width: 3px;
+                    background: rgba(255, 255, 255, 0.12);
+                    border: none;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::sub-page:vertical {
+                    background: rgba(255, 255, 255, 0.12);
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::add-page:vertical {
+                    background: #2563EB;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::handle:vertical {
+                    background: #38BDF8;
+                    border: 1px solid #0284C7;
+                    width: 10px;
+                    height: 10px;
+                    margin: 0 -3.5px;
+                    border-radius: 5px;
+                }
+                QSlider#specYSlider::handle:vertical:hover {
+                    background: #7DD3FC;
+                    border: 1px solid #38BDF8;
+                }
+            """
+        else:
+            return """
+                QFrame#specCtrlBar, QFrame#freqCtrlBar {
+                    background-color: #F8FAFC;
+                    border-top: 1px solid #E2E8F0;
+                    border-bottom: 1px solid #E2E8F0;
+                    padding: 2px 6px;
+                }
+                QLabel.specCtrlLabel {
+                    color: #334155;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+                QLabel.specCtrlMuted {
+                    color: #64748B;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+                QLabel.specCtrlSep {
+                    color: #CBD5E1;
+                    font-size: 11px;
+                }
 
-            /* Estilos legados para retrocompatibilidade */
-            QDoubleSpinBox.specSpinBox, QSpinBox.specSpinBox {
-                background-color: #1C2025;
-                color: #F0F2F5;
-                border: 1px solid #333942;
-                border-radius: 4px;
-                padding: 1px 4px;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QPushButton#specUnitBtn {
-                background-color: #21262D;
-                color: #58A6FF;
-                font-weight: 700;
-                font-size: 11px;
-                border: 1px solid #363D47;
-                border-radius: 4px;
-                padding: 2px 7px;
-            }
-            QPushButton.specPresetChip {
-                background-color: #1C2025;
-                color: #9CA3AF;
-                font-size: 10.5px;
-                font-weight: 600;
-                border: 1px solid #333942;
-                border-radius: 4px;
-                padding: 2px 6px;
-            }
-        """
+                /* Bloco de Escala Y Unificado */
+                QFrame#yScaleBox {
+                    background-color: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 5px;
+                    padding: 1px 3px;
+                }
+                QDoubleSpinBox.specScaleSpin {
+                    background: transparent;
+                    border: none;
+                    color: #0F172A;
+                    font-size: 11px;
+                    font-weight: 600;
+                    padding: 1px 0px;
+                }
+                QDoubleSpinBox.specScaleSpin:hover, QDoubleSpinBox.specScaleSpin:focus {
+                    color: #0284C7;
+                }
+                QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
+                    width: 0px;
+                    height: 0px;
+                    background: transparent;
+                    border: none;
+                }
+                QComboBox.specUnitCombo {
+                    background-color: #FFFFFF;
+                    color: #0284C7;
+                    font-size: 10.5px;
+                    font-weight: 700;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 3px;
+                    padding: 1px 2px 1px 5px;
+                    min-width: 38px;
+                    height: 18px;
+                }
+                QComboBox.specUnitCombo:hover {
+                    border-color: #0284C7;
+                    background-color: #F1F5F9;
+                }
+                QComboBox.specUnitCombo::drop-down {
+                    border: none;
+                    width: 10px;
+                }
+                QComboBox.specUnitCombo::down-arrow {
+                    image: none;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 4px solid #0284C7;
+                    width: 0;
+                    height: 0;
+                    margin-right: 2px;
+                }
+                QComboBox.specUnitCombo QAbstractItemView {
+                    background-color: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    selection-background-color: #2563EB;
+                    selection-color: #FFFFFF;
+                    color: #0F172A;
+                    font-size: 10.5px;
+                }
+
+                /* Grupo de Presets Segmented Control */
+                QFrame#presetGroupBox {
+                    background-color: #EDF2F7;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 5px;
+                    padding: 1px;
+                }
+                QPushButton.segBtn {
+                    background-color: transparent;
+                    color: #475569;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px 7px;
+                    height: 18px;
+                }
+                QPushButton.segBtn:hover {
+                    background-color: rgba(0, 0, 0, 0.05);
+                    color: #0F172A;
+                }
+                QPushButton.segBtn[active="true"] {
+                    background-color: #2563EB;
+                    color: #FFFFFF;
+                    font-weight: 700;
+                }
+
+                /* Badge da Portadora */
+                QLabel.carrierBadge {
+                    background-color: rgba(14, 165, 233, 0.10);
+                    border: 1px solid rgba(2, 132, 199, 0.35);
+                    color: #0284C7;
+                    border-radius: 4px;
+                    padding: 2px 6px;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+
+                /* Tolerância: Valor Monoespaçado */
+                QSpinBox.specMonoSpin {
+                    background: #FFFFFF;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 3px;
+                    color: #0F172A;
+                    font-family: 'Consolas', 'Courier New', monospace;
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 1px 2px;
+                    min-width: 58px;
+                    max-width: 66px;
+                }
+                QSpinBox.specMonoSpin:hover {
+                    background-color: #F8FAFC;
+                    border: 1px solid #94A3B8;
+                }
+                QSpinBox.specMonoSpin:focus {
+                    background-color: #FFFFFF;
+                    border: 1px solid #2563EB;
+                }
+                QSpinBox.specMonoSpin::up-button, QSpinBox.specMonoSpin::down-button {
+                    width: 0px;
+                    height: 0px;
+                    border: none;
+                }
+
+                /* Slider Horizontal */
+                QSlider.specSlider {
+                    background: transparent;
+                    border: none;
+                    height: 20px;
+                }
+                QSlider.specSlider::groove:horizontal {
+                    height: 3px;
+                    background: rgba(0, 0, 0, 0.12);
+                    border: none;
+                    border-radius: 1.5px;
+                }
+                QSlider.specSlider::sub-page:horizontal {
+                    background: #2563EB;
+                    border-radius: 1.5px;
+                }
+                QSlider.specSlider::handle:horizontal {
+                    background: #0284C7;
+                    border: 1px solid #0369A1;
+                    width: 10px;
+                    height: 10px;
+                    margin: -3.5px 0;
+                    border-radius: 5px;
+                }
+                QSlider.specSlider::handle:horizontal:hover {
+                    background: #38BDF8;
+                }
+
+                /* Ghost Chips de Atalhos */
+                QFrame#chipBox {
+                    background: transparent;
+                    border: none;
+                }
+                QPushButton.ghostChip {
+                    background-color: rgba(0, 0, 0, 0.04);
+                    color: #334155;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    border: 1px solid rgba(0, 0, 0, 0.12);
+                    border-radius: 4px;
+                    padding: 1px 6px;
+                    height: 20px;
+                    min-width: 34px;
+                }
+                QPushButton.ghostChip:hover {
+                    background-color: rgba(0, 0, 0, 0.08);
+                    border-color: #0284C7;
+                    color: #0F172A;
+                }
+                QPushButton.ghostChip:pressed {
+                    background-color: #2563EB;
+                    border-color: #1D4ED8;
+                    color: #FFFFFF;
+                }
+
+                /* Slider Vertical do Eixo Y */
+                QSlider#specYSlider {
+                    background: transparent;
+                    border: none;
+                    width: 16px;
+                    margin: 4px 0px;
+                }
+                QSlider#specYSlider::groove:vertical {
+                    width: 3px;
+                    background: rgba(0, 0, 0, 0.12);
+                    border: none;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::sub-page:vertical {
+                    background: rgba(0, 0, 0, 0.12);
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::add-page:vertical {
+                    background: #2563EB;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::handle:vertical {
+                    background: #0284C7;
+                    border: 1px solid #0369A1;
+                    width: 10px;
+                    height: 10px;
+                    margin: 0 -3.5px;
+                    border-radius: 5px;
+                }
+                QSlider#specYSlider::handle:vertical:hover {
+                    background: #38BDF8;
+                }
+            """
 
     def _build_carrier_controls(self, layout):
         self.lbl_carrier_info = QLabel("FP: —")
@@ -914,6 +1132,8 @@ class PlotPanel(QFrame):
         layout.addWidget(self.spin_carrier_tol)
 
         chip_box = QFrame()
+        chip_box.setObjectName("chipBox")
+        chip_box.setStyleSheet("background: transparent; border: none;")
         chip_layout = QHBoxLayout(chip_box)
         chip_layout.setContentsMargins(0, 0, 0, 0)
         chip_layout.setSpacing(2)

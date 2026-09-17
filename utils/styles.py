@@ -195,7 +195,7 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background: #191D22;
                 border-top-left-radius: 13px;
                 border-top-right-radius: 13px;
-                border-bottom: 1px solid #23272D;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.10);
             }
             QLabel#eyebrow {
                 color: #9CA2AA;
@@ -334,7 +334,7 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             QWidget#plotTitleBar {
                 background: #191C20;
                 border: 0;
-                border-bottom: 1px solid #262A30;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.10);
                 border-top-left-radius: 11px;
                 border-top-right-radius: 11px;
             }
@@ -358,12 +358,16 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             QPushButton#plotTool:pressed { background: #1D2024; }
             QPushButton#plotTool:disabled { color: #4B5563; background: transparent; }
             QPushButton#plotMaximize {
-                color: #C7CCD2;
+                background: transparent;
+                border: 0;
+                color: #AEB4BD;
                 font-size: 16px;
                 border-radius: 5px;
                 padding: 3px;
+                outline: none;
             }
             QPushButton#plotMaximize:hover { background: #2A3038; color: #60A5FA; }
+            QFrame#chipBox { background: transparent; border: none; }
             QPushButton#plotClose {
                 background: transparent;
                 border: 0;
@@ -530,6 +534,7 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 QPushButton#plotClose:hover {
                     background: #FEE2E2; color: #DC2626;
                 }
+                QFrame#chipBox { background: transparent; border: none; }
                 QSplitter#dashboardSplitter::handle:horizontal {
                     background: #E2E8F0; width: 6px; margin: 0px 1px; border-radius: 3px;
                 }

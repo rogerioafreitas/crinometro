@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "action_reset_layout"):
             self.action_reset_layout.setText("↺ Restaurar Layout Padrão" if l == "pt" else "↺ Reset Plot Layout")
         if hasattr(self, "btn_plots_menu"):
-            self.btn_plots_menu.setText("Gráficos ▾" if l == "pt" else "Plots ▾")
+            self.btn_plots_menu.setText("Exibir ▾" if l == "pt" else "View ▾")
         if hasattr(self, "btn_reset_layout"):
             self.btn_reset_layout.setText("↺ Padrão" if l == "pt" else "↺ Default")
         self.help_menu.setTitle(I18N[l]["help"])
@@ -423,80 +423,83 @@ class MainWindow(QMainWindow):
         summary_info.addWidget(self.lbl_summary_meta)
         summary.addLayout(summary_info, 1)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(6)
+        actions_box = QWidget()
+        actions_box.setObjectName("actionsBox")
+        actions_layout = QVBoxLayout(actions_box)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(4)
 
-        self.btn_sync = QPushButton()
-        self.btn_sync.setObjectName("btn_sync")
-        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=15))
-        self.btn_sync.setCheckable(True)
-        self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_sync.setFixedSize(28, 28)
-        self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
-        self.btn_sync.toggled.connect(self.on_sync_toggled)
-        actions.addWidget(self.btn_sync)
+        # Linha 1: Pipeline Analítico e Aprendizado de Máquina
+        row_analysis = QHBoxLayout()
+        row_analysis.setContentsMargins(0, 0, 0, 0)
+        row_analysis.setSpacing(6)
 
         self.btn_reanalisar_main = QPushButton("Reanalisar")
         self.btn_reanalisar_main.setObjectName("summaryPrimaryAction")
         self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=14))
         self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_reanalisar_main.setFixedHeight(28)
+        self.btn_reanalisar_main.setFixedHeight(26)
         self.btn_reanalisar_main.setToolTip("Reanalisar áudio atual com os parâmetros vigentes")
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
-        actions.addWidget(self.btn_reanalisar_main)
+        row_analysis.addWidget(self.btn_reanalisar_main)
 
         self.btn_toggle_ml = QPushButton()
         self.btn_toggle_ml.setObjectName("summaryToggleMl")
         self.btn_toggle_ml.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle_ml.setFixedHeight(28)
+        self.btn_toggle_ml.setFixedHeight(26)
         self.btn_toggle_ml.clicked.connect(self.toggle_machine_learning)
         self._update_ml_toggle_ui()
-        actions.addWidget(self.btn_toggle_ml)
+        row_analysis.addWidget(self.btn_toggle_ml)
 
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
         self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=14))
         self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_learn_corrections.setFixedHeight(28)
+        self.btn_learn_corrections.setFixedHeight(26)
         self.btn_learn_corrections.setToolTip("Treinar classificador com base nas correções manuais de pulsos")
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
-        actions.addWidget(self.btn_learn_corrections)
+        row_analysis.addWidget(self.btn_learn_corrections)
 
-        self.btn_export_main = QPushButton("Exportar Dados")
+        row_analysis.addStretch()
+        actions_layout.addLayout(row_analysis)
+
+        # Linha 2: Operações, Exportação e Exibição de Gráficos
+        row_tools = QHBoxLayout()
+        row_tools.setContentsMargins(0, 0, 0, 0)
+        row_tools.setSpacing(6)
+
+        self.btn_sync = QPushButton()
+        self.btn_sync.setObjectName("btn_sync")
+        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=14))
+        self.btn_sync.setCheckable(True)
+        self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_sync.setFixedSize(26, 26)
+        self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
+        self.btn_sync.toggled.connect(self.on_sync_toggled)
+        row_tools.addWidget(self.btn_sync)
+
+        self.btn_export_main = QPushButton("Exportar ▾")
         self.btn_export_main.setObjectName("summaryAction")
         self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=14))
         self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_export_main.setFixedHeight(28)
+        self.btn_export_main.setFixedHeight(26)
         self.btn_export_main.setToolTip("Exportar dados e relatórios em PDF ou TXT")
         self.btn_export_main.clicked.connect(self.show_export_menu)
-        actions.addWidget(self.btn_export_main)
+        row_tools.addWidget(self.btn_export_main)
 
-        # Divisor vertical sutil entre ações analíticas e ações de layout
-        sep_layout = QFrame()
-        sep_layout.setFrameShape(QFrame.Shape.NoFrame)
-        sep_layout.setFixedWidth(1)
-        sep_layout.setFixedHeight(20)
-        sep_layout.setStyleSheet("background-color: rgba(255, 255, 255, 0.10); border: none; margin: 4px 2px;")
-        actions.addWidget(sep_layout)
-
-        self.btn_plots_menu = QPushButton("Gráficos ▾" if self.lang == "pt" else "Plots ▾")
+        self.btn_plots_menu = QPushButton("Exibir ▾" if self.lang == "pt" else "View ▾")
         self.btn_plots_menu.setObjectName("summaryAction")
         self.btn_plots_menu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_plots_menu.setFixedHeight(28)
-        self.btn_plots_menu.setToolTip("Exibir ou ocultar gráficos individuais do dashboard")
+        self.btn_plots_menu.setFixedHeight(26)
+        self.btn_plots_menu.setToolTip("Exibir, ocultar ou restaurar layout dos gráficos")
         self.btn_plots_menu.clicked.connect(self.show_plots_menu)
-        actions.addWidget(self.btn_plots_menu)
+        row_tools.addWidget(self.btn_plots_menu)
 
-        self.btn_reset_layout = QPushButton("↺ Padrão" if self.lang == "pt" else "↺ Default")
-        self.btn_reset_layout.setObjectName("summaryAction")
-        self.btn_reset_layout.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_reset_layout.setFixedHeight(28)
-        self.btn_reset_layout.setToolTip("Restaurar layout e posições originais de todos os gráficos")
-        self.btn_reset_layout.clicked.connect(self.reset_plot_layout)
-        actions.addWidget(self.btn_reset_layout)
+        row_tools.addStretch()
+        actions_layout.addLayout(row_tools)
 
-        summary.addLayout(actions)
+        summary.addWidget(actions_box)
 
         divider = QLabel("│")
         divider.setObjectName("metricDivider")
@@ -553,6 +556,13 @@ class MainWindow(QMainWindow):
         self.panel_freq = PlotPanel("freq", self.lang, self.swap_main_panel)
         self.panel_spec = PlotPanel("spec", self.lang, self.swap_main_panel, main=True)
         self.all_panels = [self.panel_wave, self.panel_hist, self.panel_freq, self.panel_spec]
+
+        # Configuração padrão: apenas Espectrograma (principal) e Histograma (lateral) visíveis
+        self.panel_wave._user_closed = True
+        self.panel_wave.hide()
+        self.panel_freq._user_closed = True
+        self.panel_freq.hide()
+
         self.main_panel = self.panel_spec
         self.stack_panels = [self.panel_hist, self.panel_wave, self.panel_freq]
         self._rebuild_panel_layout()
@@ -716,6 +726,7 @@ class MainWindow(QMainWindow):
         self.stack_splitter.updateGeometry()
         self._update_plot_visibility_state()
         self._update_plot_menu_checks()
+        self._update_active_focus_panel()
 
     def swap_main_panel(self, panel):
         if panel is self.main_panel or getattr(self, "_swapping_panels", False):
@@ -737,6 +748,7 @@ class MainWindow(QMainWindow):
             self.main_panel = panel
             self.stack_panels = [old_main] + [p for p in old_stack if p is not panel]
             self._rebuild_panel_layout()
+            self._update_active_focus_panel()
 
             if old_stack_sizes and len(old_stack_sizes) == len(self.stack_splitter.sizes()):
                 self.stack_splitter.setSizes(old_stack_sizes)
@@ -843,6 +855,7 @@ class MainWindow(QMainWindow):
         else:
             self._update_plot_visibility_state()
 
+        self._update_active_focus_panel()
         self._update_plot_menu_checks()
 
     def show_plot_panel(self, panel):
@@ -866,6 +879,7 @@ class MainWindow(QMainWindow):
         self._rebuild_panel_layout()
         self._update_plot_visibility_state()
         self._apply_plot_geometry()
+        self._update_active_focus_panel()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
 
@@ -905,13 +919,14 @@ class MainWindow(QMainWindow):
             self.action_view_spec.blockSignals(False)
 
     def reset_plot_layout(self):
-        """Restaura o layout padrão com todos os 4 gráficos em posições e tamanhos originais."""
+        """Restaura o layout padrão: Espectrograma como principal e Histograma na lateral."""
         if not hasattr(self, "all_panels"):
             return
 
-        for p in self.all_panels:
-            p._user_closed = False
-            p.show()
+        self.panel_spec._user_closed = False
+        self.panel_hist._user_closed = False
+        self.panel_wave._user_closed = True
+        self.panel_freq._user_closed = True
 
         self.main_panel = self.panel_spec
         self.stack_panels = [self.panel_hist, self.panel_wave, self.panel_freq]
@@ -927,15 +942,14 @@ class MainWindow(QMainWindow):
             total_w = 1200
         self.dashboard_splitter.setSizes([int(total_w * 0.74), int(total_w * 0.26)])
 
-        # Restaura proporção vertical da pilha lateral: 1/3 para cada
         total_h = self.stack_splitter.height()
         if total_h < 200:
             total_h = 750
-        h_each = max(60, total_h // 3)
-        self.stack_splitter.setSizes([h_each, h_each, h_each])
+        self.stack_splitter.setSizes([total_h, 0, 0])
 
         QApplication.processEvents()
         self._apply_plot_geometry()
+        self._update_active_focus_panel()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
 
@@ -945,10 +959,10 @@ class MainWindow(QMainWindow):
         menu.setObjectName("plotsDropdownMenu")
 
         panels_info = [
-            ("wave", "Forma de Onda" if self.lang == "pt" else "Waveform", self.panel_wave),
-            ("hist", "Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self.panel_hist),
-            ("freq", "Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self.panel_freq),
             ("spec", "Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self.panel_spec),
+            ("hist", "Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self.panel_hist),
+            ("wave", "Forma de Onda" if self.lang == "pt" else "Waveform", self.panel_wave),
+            ("freq", "Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self.panel_freq),
         ]
         for key, label, panel in panels_info:
             act = menu.addAction(label)
@@ -957,7 +971,7 @@ class MainWindow(QMainWindow):
             act.toggled.connect(lambda checked, p=panel: self.toggle_plot_panel(p, checked))
 
         menu.addSeparator()
-        act_reset = menu.addAction("↺ Restaurar Padrão" if self.lang == "pt" else "↺ Reset Layout")
+        act_reset = menu.addAction("↺ Restaurar Layout Padrão" if self.lang == "pt" else "↺ Reset Default Layout")
         act_reset.triggered.connect(self.reset_plot_layout)
 
         menu.exec(self.btn_plots_menu.mapToGlobal(self.btn_plots_menu.rect().bottomLeft()))
@@ -2989,7 +3003,23 @@ class MainWindow(QMainWindow):
                 self._resize_debounce_timer.timeout.connect(self._finish_resize_refresh)
             self._resize_debounce_timer.start(100)
 
+    def _update_active_focus_panel(self):
+        """Identifica o gráfico ocupando a maior área na tela e aplica nele a borda azul de maximizado."""
+        if not hasattr(self, "all_panels") or getattr(self, "_swapping_panels", False):
+            return
+        visible_panels = [p for p in self.all_panels if p.isVisible() and not getattr(p, "_user_closed", False)]
+        if not visible_panels:
+            return
+
+        # Calcula a área (largura x altura) de cada painel ativo
+        largest_panel = max(visible_panels, key=lambda p: max(0, p.width()) * max(0, p.height()))
+
+        for p in self.all_panels:
+            is_largest = (p is largest_panel)
+            p.set_main(is_largest)
+
     def _finish_resize_refresh(self):
+        self._update_active_focus_panel()
         self._apply_plot_geometry()
         if self.active_heavy_data:
             self._refresh_all_canvases()
@@ -3024,7 +3054,8 @@ class MainWindow(QMainWindow):
 
     def on_press(self, event):
         """Gerencia cliques em painéis. Se modo de edição de pulsos estiver ativo, permite editar."""
-        if event.xdata is not None:
+        # Alinha o marcador de referência temporal com o botão esquerdo (button == 1)
+        if event.button == 1 and event.xdata is not None:
             self._align_click_marker(float(event.xdata))
         
         # Determina qual painel foi clicado
@@ -3034,8 +3065,8 @@ class MainWindow(QMainWindow):
                 clicked_panel = panel
                 break
 
-        # Se modo de edição está ativo e clicou em um painel que suporta edição
-        if clicked_panel and getattr(clicked_panel, 'pulse_edit_mode', False) and event.xdata is not None:
+        # Se modo de edição está ativo e clicou com o botão esquerdo em um painel que suporta edição
+        if event.button == 1 and clicked_panel and getattr(clicked_panel, 'pulse_edit_mode', False) and event.xdata is not None:
             # Converte coordenada X (tempo) para amostras
             if self.active_heavy_data:
                 rate = float(self.active_heavy_data.get('rate', 1.0))
@@ -3043,8 +3074,8 @@ class MainWindow(QMainWindow):
                 self._toggle_peak_marker(time_sec, panel=clicked_panel, event=event)
                 return
 
-        # Comportamento normal de pan/zoom quando não em modo de edição
-        if clicked_panel and clicked_panel != self.panel_hist and event.button == 1:
+        # Arrastar / Pan dos gráficos com o BOTÃO DIREITO do mouse (button == 3)
+        if clicked_panel and clicked_panel != self.panel_hist and event.button == 3:
             self.panning = True
             self.active_ax = event.inaxes
             self.start_xlim = self.active_ax.get_xlim()
@@ -3080,7 +3111,7 @@ class MainWindow(QMainWindow):
                     panel.btn_pulse_edit.blockSignals(False)
 
     def on_release(self, event):
-        if event.button == 1:
+        if event.button == 3:
             self.panning, self.active_ax = False, None
             for panel in self.all_panels:
                 panel.canvas.draw_idle()
@@ -3313,7 +3344,7 @@ class MainWindow(QMainWindow):
                     QToolTip.hideText()
 
     def zoom_graph(self, event):
-        if not event.inaxes or QApplication.keyboardModifiers() != Qt.KeyboardModifier.ControlModifier:
+        if not event.inaxes:
             return
         self.bg_cache_valid = False
         for line in self.cursor_lines:
