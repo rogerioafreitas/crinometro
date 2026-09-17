@@ -3,7 +3,7 @@ Crinômetro - Painéis Gráficos e Timeline Interativa.
 """
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QDoubleSpinBox, QSpinBox, QSlider, QComboBox
+    QDoubleSpinBox, QSpinBox, QSlider, QComboBox, QAbstractSpinBox
 )
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
@@ -188,6 +188,11 @@ class PlotPanel(QFrame):
         self.btn_expand.clicked.connect(lambda: self.expand_callback(self))
         bar.addWidget(self.btn_expand)
 
+        self.btn_close = self._tool_button("✕", "Fechar este gráfico (reabra no menu 'Gráficos' ou restaure o padrão)")
+        self.btn_close.setObjectName("plotClose")
+        self.btn_close.clicked.connect(self._on_close_clicked)
+        bar.addWidget(self.btn_close)
+
         self.figure = Figure(facecolor="none")
         self.figure.patch.set_alpha(0.0)
         self.canvas = FigureCanvas(self.figure)
@@ -231,12 +236,13 @@ class PlotPanel(QFrame):
 
             self.spin_spec_ymin = QDoubleSpinBox()
             self.spin_spec_ymin.setProperty("class", "specScaleSpin")
+            self.spin_spec_ymin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             self.spin_spec_ymin.setRange(0.0, 30.0)
             self.spin_spec_ymin.setSingleStep(0.5)
             self.spin_spec_ymin.setDecimals(1)
             self.spin_spec_ymin.setValue(0.0)
-            self.spin_spec_ymin.setFixedWidth(46)
-            self.spin_spec_ymin.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self.spin_spec_ymin.setFixedWidth(40)
+            self.spin_spec_ymin.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.spin_spec_ymin.setToolTip("Limite inferior do eixo Y (frequência)")
             self.spin_spec_ymin.valueChanged.connect(self._on_spec_limits_changed)
             y_layout.addWidget(self.spin_spec_ymin)
@@ -247,12 +253,13 @@ class PlotPanel(QFrame):
 
             self.spin_spec_ymax = QDoubleSpinBox()
             self.spin_spec_ymax.setProperty("class", "specScaleSpin")
+            self.spin_spec_ymax.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             self.spin_spec_ymax.setRange(0.5, 50.0)
             self.spin_spec_ymax.setSingleStep(0.5)
             self.spin_spec_ymax.setDecimals(1)
             self.spin_spec_ymax.setValue(10.0)
-            self.spin_spec_ymax.setFixedWidth(46)
-            self.spin_spec_ymax.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self.spin_spec_ymax.setFixedWidth(40)
+            self.spin_spec_ymax.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.spin_spec_ymax.setToolTip("Limite superior do eixo Y (frequência)")
             self.spin_spec_ymax.valueChanged.connect(self._on_spec_limits_changed)
             y_layout.addWidget(self.spin_spec_ymax)
@@ -392,11 +399,21 @@ class PlotPanel(QFrame):
             self.btn_move_up.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
         if hasattr(self, "btn_move_down"):
             self.btn_move_down.setStyleSheet(f"QPushButton {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton:hover {{ background: rgba(255,255,255,0.12); border-radius: 4px; }}")
+        if hasattr(self, "btn_close"):
+            self.btn_close.setStyleSheet(f"QPushButton#plotClose {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton#plotClose:hover {{ background: rgba(239, 68, 68, 0.25); color: #EF4444; border-radius: 4px; }}")
+
+    def _on_close_clicked(self):
+        """Notifica a janela principal para fechar/ocultar este painel."""
+        win = self.window()
+        if hasattr(win, "close_plot_panel"):
+            win.close_plot_panel(self)
+        else:
+            self.hide()
 
     @staticmethod
     def _make_vsep():
         sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShape(QFrame.Shape.NoFrame)
         sep.setFixedWidth(1)
         sep.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); border: none; margin: 3px 5px;")
         return sep
@@ -584,12 +601,10 @@ class PlotPanel(QFrame):
                 color: #FFFFFF;
             }
             QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
-                width: 9px;
-                background: #1C2026;
+                width: 0px;
+                height: 0px;
+                background: transparent;
                 border: none;
-            }
-            QDoubleSpinBox.specScaleSpin::up-button:hover, QDoubleSpinBox.specScaleSpin::down-button:hover {
-                background: #2D3748;
             }
             QComboBox.specUnitCombo {
                 background-color: #1C2026;
@@ -696,7 +711,8 @@ class PlotPanel(QFrame):
             /* Slider */
             QSlider.specSlider::groove:horizontal {
                 height: 4px;
-                background: #282E36;
+                background: #1E232B;
+                border: 1px solid #282E37;
                 border-radius: 2px;
             }
             QSlider.specSlider::sub-page:horizontal {
@@ -768,9 +784,9 @@ class PlotPanel(QFrame):
         """
 
     def _build_carrier_controls(self, layout):
-        self.lbl_carrier_info = QLabel("Fc: —")
+        self.lbl_carrier_info = QLabel("FP: —")
         self.lbl_carrier_info.setProperty("class", "carrierBadge")
-        self.lbl_carrier_info.setToolTip("Frequência portadora focal detectada por densidade modal de chilreios")
+        self.lbl_carrier_info.setToolTip("Frequência Portadora (FP) detectada por densidade modal de chilreios")
         layout.addWidget(self.lbl_carrier_info)
 
         # Divisor vertical sutil
@@ -793,6 +809,7 @@ class PlotPanel(QFrame):
 
         self.spin_carrier_tol = QSpinBox()
         self.spin_carrier_tol.setProperty("class", "specMonoSpin")
+        self.spin_carrier_tol.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.spin_carrier_tol.setRange(25, 2000)
         self.spin_carrier_tol.setSingleStep(25)
         self.spin_carrier_tol.setValue(300)
@@ -852,16 +869,16 @@ class PlotPanel(QFrame):
         unit = getattr(self, "spec_unit", "kHz")
         if fc and fc > 0:
             if unit == "kHz":
-                self.lbl_carrier_info.setText(f"Fc: {fc / 1000.0:.2f} kHz")
+                self.lbl_carrier_info.setText(f"FP: {fc / 1000.0:.2f} kHz")
             else:
-                self.lbl_carrier_info.setText(f"Fc: {fc:.0f} Hz")
+                self.lbl_carrier_info.setText(f"FP: {fc:.0f} Hz")
             self.lbl_carrier_info.setToolTip(
-                f"Frequência Portadora Focal (Fc): {fc:.1f} Hz\n"
+                f"Frequência Portadora (FP): {fc:.1f} Hz\n"
                 f"Detectada por densidade modal dos picos estridulatórios"
             )
         else:
-            self.lbl_carrier_info.setText("Fc: —")
-            self.lbl_carrier_info.setToolTip("Frequência portadora focal ainda não detectada")
+            self.lbl_carrier_info.setText("FP: —")
+            self.lbl_carrier_info.setToolTip("Frequência Portadora (FP) ainda não detectada")
 
     def set_carrier_tolerance(self, val, notify=True):
         val = int(val)

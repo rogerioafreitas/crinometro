@@ -18,8 +18,25 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 border: 0;
             }
             QSplitter::handle {
-                background: #22262B;
-                width: 1px;
+                background: #181B1F;
+            }
+            QSplitter#dashboardSplitter::handle:horizontal {
+                background: #15181C;
+                width: 6px;
+                margin: 0px 1px;
+                border-radius: 3px;
+            }
+            QSplitter#dashboardSplitter::handle:horizontal:hover {
+                background: #2563EB;
+            }
+            QSplitter#stackSplitter::handle:vertical {
+                background: #15181C;
+                height: 6px;
+                margin: 1px 0px;
+                border-radius: 3px;
+            }
+            QSplitter#stackSplitter::handle:vertical:hover {
+                background: #2563EB;
             }
             QFrame#topNav {
                 background: transparent;
@@ -258,6 +275,20 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 padding: 3px;
             }
             QPushButton#plotMaximize:hover { background: #2A3038; color: #60A5FA; }
+            QPushButton#plotClose {
+                background: transparent;
+                border: 0;
+                color: #AEB4BD;
+                border-radius: 5px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 3px;
+                outline: none;
+            }
+            QPushButton#plotClose:hover {
+                background: rgba(239, 68, 68, 0.25);
+                color: #EF4444;
+            }
             QPushButton#navIcon, QPushButton#menuButton {
                 color: #AEB4BD; background: transparent; border: 0; border-radius: 6px;
             }
@@ -403,6 +434,24 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 }
                 QPushButton#plotTool:hover, QPushButton#plotMaximize:hover {
                     background: #E2E8F0; color: #2563EB;
+                }
+                QPushButton#plotClose {
+                    background: transparent; border: 0; color: #64748B; border-radius: 5px; font-size: 11px; font-weight: bold; padding: 3px; outline: none;
+                }
+                QPushButton#plotClose:hover {
+                    background: #FEE2E2; color: #DC2626;
+                }
+                QSplitter#dashboardSplitter::handle:horizontal {
+                    background: #E2E8F0; width: 6px; margin: 0px 1px; border-radius: 3px;
+                }
+                QSplitter#dashboardSplitter::handle:horizontal:hover {
+                    background: #2563EB;
+                }
+                QSplitter#stackSplitter::handle:vertical {
+                    background: #E2E8F0; height: 6px; margin: 1px 0px; border-radius: 3px;
+                }
+                QSplitter#stackSplitter::handle:vertical:hover {
+                    background: #2563EB;
                 }
                 QPushButton#plotTool:disabled { color: #94A3B8; background: transparent; }
                 QPushButton#btn_sync {

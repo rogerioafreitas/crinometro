@@ -201,6 +201,28 @@ class MainWindow(QMainWindow):
         self.action_reset_settings = QAction(I18N[self.lang]["reset_settings"], self)
         self.action_reset_settings.triggered.connect(self.reset_to_defaults)
         self.settings_menu.addAction(self.action_reset_settings)
+        self.view_menu = self.app_menu.addMenu("Exibir" if self.lang == "pt" else "View")
+        self.action_view_wave = QAction("Forma de Onda" if self.lang == "pt" else "Waveform", self, checkable=True)
+        self.action_view_wave.setChecked(True)
+        self.action_view_wave.triggered.connect(lambda c: self.toggle_plot_panel_by_key("wave", c))
+        self.view_menu.addAction(self.action_view_wave)
+        self.action_view_hist = QAction("Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self, checkable=True)
+        self.action_view_hist.setChecked(True)
+        self.action_view_hist.triggered.connect(lambda c: self.toggle_plot_panel_by_key("hist", c))
+        self.view_menu.addAction(self.action_view_hist)
+        self.action_view_freq = QAction("Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self, checkable=True)
+        self.action_view_freq.setChecked(True)
+        self.action_view_freq.triggered.connect(lambda c: self.toggle_plot_panel_by_key("freq", c))
+        self.view_menu.addAction(self.action_view_freq)
+        self.action_view_spec = QAction("Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self, checkable=True)
+        self.action_view_spec.setChecked(True)
+        self.action_view_spec.triggered.connect(lambda c: self.toggle_plot_panel_by_key("spec", c))
+        self.view_menu.addAction(self.action_view_spec)
+        self.view_menu.addSeparator()
+        self.action_reset_layout = QAction("↺ Restaurar Layout Padrão" if self.lang == "pt" else "↺ Reset Plot Layout", self)
+        self.action_reset_layout.triggered.connect(self.reset_plot_layout)
+        self.view_menu.addAction(self.action_reset_layout)
+
         self.help_menu = self.app_menu.addMenu(I18N[self.lang]["help"])
         self.action_check_updates = QAction(I18N[self.lang].get("check_updates", "Verificar Atualizações..."), self)
         self.action_check_updates.setIcon(make_ui_icon("export", color="#10B981", size=16))
@@ -227,6 +249,22 @@ class MainWindow(QMainWindow):
         self.action_import_training.setText(I18N[l]["import_training"])
         self.action_save_settings.setText(I18N[l]["save_settings"])
         self.action_reset_settings.setText(I18N[l]["reset_settings"])
+        if hasattr(self, "view_menu"):
+            self.view_menu.setTitle("Exibir" if l == "pt" else "View")
+        if hasattr(self, "action_view_wave"):
+            self.action_view_wave.setText("Forma de Onda" if l == "pt" else "Waveform")
+        if hasattr(self, "action_view_hist"):
+            self.action_view_hist.setText("Histograma de Intervalos" if l == "pt" else "Interval Histogram")
+        if hasattr(self, "action_view_freq"):
+            self.action_view_freq.setText("Frequência Instantânea" if l == "pt" else "Instantaneous Frequency")
+        if hasattr(self, "action_view_spec"):
+            self.action_view_spec.setText("Espectrograma Focal" if l == "pt" else "Focal Spectrogram")
+        if hasattr(self, "action_reset_layout"):
+            self.action_reset_layout.setText("↺ Restaurar Layout Padrão" if l == "pt" else "↺ Reset Plot Layout")
+        if hasattr(self, "btn_plots_menu"):
+            self.btn_plots_menu.setText("Gráficos ▾" if l == "pt" else "Plots ▾")
+        if hasattr(self, "btn_reset_layout"):
+            self.btn_reset_layout.setText("↺ Padrão" if l == "pt" else "↺ Default")
         self.help_menu.setTitle(I18N[l]["help"])
         if hasattr(self, "action_check_updates"):
             self.action_check_updates.setText(I18N[l].get("check_updates", "Verificar Atualizações..."))
@@ -430,6 +468,20 @@ class MainWindow(QMainWindow):
         self.btn_export_main.clicked.connect(self.show_export_menu)
         actions.addWidget(self.btn_export_main)
 
+        self.btn_plots_menu = QPushButton("Gráficos ▾" if self.lang == "pt" else "Plots ▾")
+        self.btn_plots_menu.setObjectName("summaryAction")
+        self.btn_plots_menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_plots_menu.setToolTip("Exibir ou ocultar gráficos individuais do dashboard")
+        self.btn_plots_menu.clicked.connect(self.show_plots_menu)
+        actions.addWidget(self.btn_plots_menu)
+
+        self.btn_reset_layout = QPushButton("↺ Padrão" if self.lang == "pt" else "↺ Default")
+        self.btn_reset_layout.setObjectName("summaryAction")
+        self.btn_reset_layout.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset_layout.setToolTip("Restaurar layout e posições originais de todos os gráficos")
+        self.btn_reset_layout.clicked.connect(self.reset_plot_layout)
+        actions.addWidget(self.btn_reset_layout)
+
         summary.addLayout(actions)
 
         divider = QLabel("│")
@@ -457,27 +509,30 @@ class MainWindow(QMainWindow):
         summary.addLayout(metrics)
         right_layout.addWidget(self.summary_card)
 
-        # DASHBOARD: um painel grande + três empilhados
-        self.dashboard_grid = QGridLayout()
-        self.dashboard_grid.setContentsMargins(0, 0, 0, 0)
-        self.dashboard_grid.setHorizontalSpacing(10)
-        self.dashboard_grid.setVerticalSpacing(10)
-        self.dashboard_grid.setColumnStretch(0, 3)
-        self.dashboard_grid.setColumnStretch(1, 1)
-        self.dashboard_grid.setRowStretch(0, 1)
-        right_layout.addLayout(self.dashboard_grid, 1)
+        # DASHBOARD: Painel principal + pilha lateral livremente redimensionáveis com QSplitter
+        self.dashboard_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.dashboard_splitter.setObjectName("dashboardSplitter")
+        self.dashboard_splitter.setChildrenCollapsible(False)
+        self.dashboard_splitter.setOpaqueResize(True)
+        self.dashboard_splitter.splitterMoved.connect(self._on_dashboard_splitter_moved)
+        right_layout.addWidget(self.dashboard_splitter, 1)
 
         self.main_host = QWidget()
+        self.main_host.setObjectName("mainHostWidget")
         self.main_host_layout = QVBoxLayout(self.main_host)
         self.main_host_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_host_layout.setSpacing(0)
 
-        self.stack_host = QWidget()
-        self.stack_layout = QVBoxLayout(self.stack_host)
-        self.stack_layout.setContentsMargins(0, 0, 0, 0)
-        self.stack_layout.setSpacing(10)
+        self.stack_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.stack_splitter.setObjectName("stackSplitter")
+        self.stack_splitter.setChildrenCollapsible(False)
+        self.stack_splitter.setOpaqueResize(True)
+        self.stack_splitter.splitterMoved.connect(self._on_dashboard_splitter_moved)
 
-        self.dashboard_grid.addWidget(self.main_host, 0, 0)
-        self.dashboard_grid.addWidget(self.stack_host, 0, 1)
+        self.dashboard_splitter.addWidget(self.main_host)
+        self.dashboard_splitter.addWidget(self.stack_splitter)
+        self.dashboard_splitter.setStretchFactor(0, 3)
+        self.dashboard_splitter.setStretchFactor(1, 1)
 
         self.panel_wave = PlotPanel("wave", self.lang, self.swap_main_panel)
         self.panel_hist = PlotPanel("hist", self.lang, self.swap_main_panel)
@@ -618,28 +673,35 @@ class MainWindow(QMainWindow):
         return QIcon(pix)
 
     def _rebuild_panel_layout(self):
-        """Reposiciona os cards sem disparar renderizações intermediárias.
+        """Reposiciona os cards nos splitters sem disparar renderizações intermediárias.
         Isso evita reentrância/lock quando a sincronização X está ativa."""
         while self.main_host_layout.count():
             item = self.main_host_layout.takeAt(0)
             if item.widget():
                 item.widget().setParent(None)
-        while self.stack_layout.count():
-            item = self.stack_layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
 
-        self.main_host_layout.addWidget(self.main_panel)
+        if self.main_panel is not None:
+            self.main_host_layout.addWidget(self.main_panel)
+            self.main_panel.set_main(True)
+            if not getattr(self.main_panel, "_user_closed", False):
+                self.main_panel.show()
+            else:
+                self.main_panel.hide()
+
         for panel in self.stack_panels:
-            self.stack_layout.addWidget(panel, 1)
-        self.main_panel.set_main(True)
-        for panel in self.stack_panels:
-            panel.set_main(False)
+            if panel is not self.main_panel:
+                self.stack_splitter.addWidget(panel)
+                panel.set_main(False)
+                if not getattr(panel, "_user_closed", False):
+                    panel.show()
+                else:
+                    panel.hide()
 
         self.main_host_layout.activate()
-        self.stack_layout.activate()
         self.main_host.updateGeometry()
-        self.stack_host.updateGeometry()
+        self.stack_splitter.updateGeometry()
+        self._update_plot_visibility_state()
+        self._update_plot_menu_checks()
 
     def swap_main_panel(self, panel):
         if panel is self.main_panel or getattr(self, "_swapping_panels", False):
@@ -655,11 +717,15 @@ class MainWindow(QMainWindow):
             if self.freq_engine is not None:
                 self.freq_engine.debounce_timer.stop()
 
+            old_stack_sizes = self.stack_splitter.sizes()
             old_main = self.main_panel
             old_stack = list(self.stack_panels)
             self.main_panel = panel
             self.stack_panels = [old_main] + [p for p in old_stack if p is not panel]
             self._rebuild_panel_layout()
+
+            if old_stack_sizes and len(old_stack_sizes) == len(self.stack_splitter.sizes()):
+                self.stack_splitter.setSizes(old_stack_sizes)
 
             # Consolida a nova geometria sem permitir callbacks de sincronização
             # durante o reparenting. Em seguida, libera a guarda e faz um único draw.
@@ -703,6 +769,184 @@ class MainWindow(QMainWindow):
                 p.canvas.draw_idle()
         finally:
             self._swapping_panels = False
+
+    def _on_dashboard_splitter_moved(self, pos, index):
+        self.bg_cache_valid = False
+        if not hasattr(self, "_dashboard_splitter_debounce_timer"):
+            self._dashboard_splitter_debounce_timer = QTimer(self)
+            self._dashboard_splitter_debounce_timer.setSingleShot(True)
+            self._dashboard_splitter_debounce_timer.timeout.connect(self._finish_resize_refresh)
+        self._dashboard_splitter_debounce_timer.start(80)
+
+    def _get_panel_by_key(self, key: str):
+        if key == "wave":
+            return getattr(self, "panel_wave", None)
+        elif key == "hist":
+            return getattr(self, "panel_hist", None)
+        elif key == "freq":
+            return getattr(self, "panel_freq", None)
+        elif key == "spec":
+            return getattr(self, "panel_spec", None)
+        return None
+
+    def toggle_plot_panel_by_key(self, key: str, visible: bool):
+        panel = self._get_panel_by_key(key)
+        if panel is not None:
+            self.toggle_plot_panel(panel, visible)
+
+    def toggle_plot_panel(self, panel, visible: bool):
+        if visible:
+            self.show_plot_panel(panel)
+        else:
+            self.close_plot_panel(panel)
+
+    def close_plot_panel(self, panel):
+        """Oculta/fecha um painel individual do dashboard."""
+        if panel is None:
+            return
+        panel._user_closed = True
+        panel.hide()
+
+        # Se o painel fechado era o main_panel, promove o primeiro painel visível da pilha lateral
+        if panel is self.main_panel:
+            next_main = None
+            for p in self.stack_panels:
+                if not getattr(p, "_user_closed", False):
+                    next_main = p
+                    break
+
+            if next_main is not None:
+                old_main = self.main_panel
+                self.stack_panels = [p for p in self.stack_panels if p is not next_main]
+                self.stack_panels.append(old_main)
+                self.main_panel = next_main
+                self._rebuild_panel_layout()
+                self._apply_plot_geometry()
+                self._refresh_all_canvases()
+            else:
+                self.main_panel = None
+                self._update_plot_visibility_state()
+        else:
+            self._update_plot_visibility_state()
+
+        self._update_plot_menu_checks()
+
+    def show_plot_panel(self, panel):
+        """Reabre/exibe um painel previamente fechado."""
+        if panel is None:
+            return
+        panel._user_closed = False
+
+        if self.main_panel is None or getattr(self.main_panel, "_user_closed", False):
+            if self.main_panel is not None and self.main_panel is not panel:
+                if self.main_panel not in self.stack_panels:
+                    self.stack_panels.append(self.main_panel)
+            self.main_panel = panel
+            if panel in self.stack_panels:
+                self.stack_panels.remove(panel)
+        else:
+            if panel is not self.main_panel and panel not in self.stack_panels:
+                self.stack_panels.append(panel)
+
+        panel.show()
+        self._rebuild_panel_layout()
+        self._update_plot_visibility_state()
+        self._apply_plot_geometry()
+        self._refresh_all_canvases()
+        self._update_plot_menu_checks()
+
+    def _update_plot_visibility_state(self):
+        """Ajusta a visibilidade dos splitters conforme painéis abertos."""
+        main_vis = (self.main_panel is not None and not getattr(self.main_panel, "_user_closed", False))
+        self.main_host.setVisible(main_vis)
+
+        visible_stack = [p for p in self.stack_panels if not getattr(p, "_user_closed", False)]
+        self.stack_splitter.setVisible(len(visible_stack) > 0)
+        self.dashboard_splitter.setVisible(main_vis or len(visible_stack) > 0)
+
+        # Se ambos estão visíveis, garante proporções válidas no dashboard_splitter
+        if main_vis and len(visible_stack) > 0:
+            sizes = self.dashboard_splitter.sizes()
+            if len(sizes) == 2 and (sizes[1] <= 10 or sizes[0] <= 10):
+                w = max(500, self.dashboard_splitter.width())
+                self.dashboard_splitter.setSizes([int(w * 0.74), int(w * 0.26)])
+
+    def _update_plot_menu_checks(self):
+        """Sincroniza o estado marcado dos menus com a visibilidade dos gráficos."""
+        if hasattr(self, "action_view_wave") and hasattr(self, "panel_wave"):
+            self.action_view_wave.blockSignals(True)
+            self.action_view_wave.setChecked(not getattr(self.panel_wave, "_user_closed", False))
+            self.action_view_wave.blockSignals(False)
+        if hasattr(self, "action_view_hist") and hasattr(self, "panel_hist"):
+            self.action_view_hist.blockSignals(True)
+            self.action_view_hist.setChecked(not getattr(self.panel_hist, "_user_closed", False))
+            self.action_view_hist.blockSignals(False)
+        if hasattr(self, "action_view_freq") and hasattr(self, "panel_freq"):
+            self.action_view_freq.blockSignals(True)
+            self.action_view_freq.setChecked(not getattr(self.panel_freq, "_user_closed", False))
+            self.action_view_freq.blockSignals(False)
+        if hasattr(self, "action_view_spec") and hasattr(self, "panel_spec"):
+            self.action_view_spec.blockSignals(True)
+            self.action_view_spec.setChecked(not getattr(self.panel_spec, "_user_closed", False))
+            self.action_view_spec.blockSignals(False)
+
+    def reset_plot_layout(self):
+        """Restaura o layout padrão com todos os 4 gráficos em posições e tamanhos originais."""
+        if not hasattr(self, "all_panels"):
+            return
+
+        for p in self.all_panels:
+            p._user_closed = False
+            p.show()
+
+        self.main_panel = self.panel_spec
+        self.stack_panels = [self.panel_hist, self.panel_wave, self.panel_freq]
+
+        self._rebuild_panel_layout()
+        self.main_host.show()
+        self.stack_splitter.show()
+        self.dashboard_splitter.show()
+
+        # Restaura proporção horizontal: 74% main, 26% lateral
+        total_w = self.dashboard_splitter.width()
+        if total_w < 300:
+            total_w = 1200
+        self.dashboard_splitter.setSizes([int(total_w * 0.74), int(total_w * 0.26)])
+
+        # Restaura proporção vertical da pilha lateral: 1/3 para cada
+        total_h = self.stack_splitter.height()
+        if total_h < 200:
+            total_h = 750
+        h_each = max(60, total_h // 3)
+        self.stack_splitter.setSizes([h_each, h_each, h_each])
+
+        QApplication.processEvents()
+        self._apply_plot_geometry()
+        self._refresh_all_canvases()
+        self._update_plot_menu_checks()
+
+    def show_plots_menu(self):
+        """Exibe o dropdown popup para ligar/desligar gráficos e restaurar padrão."""
+        menu = QMenu(self)
+        menu.setObjectName("plotsDropdownMenu")
+
+        panels_info = [
+            ("wave", "Forma de Onda" if self.lang == "pt" else "Waveform", self.panel_wave),
+            ("hist", "Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self.panel_hist),
+            ("freq", "Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self.panel_freq),
+            ("spec", "Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self.panel_spec),
+        ]
+        for key, label, panel in panels_info:
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(not getattr(panel, "_user_closed", False))
+            act.toggled.connect(lambda checked, p=panel: self.toggle_plot_panel(p, checked))
+
+        menu.addSeparator()
+        act_reset = menu.addAction("↺ Restaurar Padrão" if self.lang == "pt" else "↺ Reset Layout")
+        act_reset.triggered.connect(self.reset_plot_layout)
+
+        menu.exec(self.btn_plots_menu.mapToGlobal(self.btn_plots_menu.rect().bottomLeft()))
 
     def _fit_all_plots_to_layout(self):
         if not self.active_heavy_data:
@@ -810,7 +1054,10 @@ class MainWindow(QMainWindow):
         try:
             self.setUpdatesEnabled(False)
             self.main_host_layout.activate()
-            self.stack_layout.activate()
+            if hasattr(self, "stack_splitter"):
+                self.stack_splitter.updateGeometry()
+            elif hasattr(self, "stack_layout"):
+                self.stack_layout.activate()
             QApplication.processEvents()
             self._fit_all_plots_to_layout()
             self._apply_plot_geometry()
@@ -2699,6 +2946,13 @@ class MainWindow(QMainWindow):
             self.splitter.setStretchFactor(0, 0)
             self.splitter.setStretchFactor(1, 1)
             self.splitter.setSizes([260, max(700, self.width() - 260)])
+            if hasattr(self, "dashboard_splitter"):
+                dash_w = max(500, self.dashboard_splitter.width())
+                self.dashboard_splitter.setSizes([int(dash_w * 0.74), int(dash_w * 0.26)])
+            if hasattr(self, "stack_splitter"):
+                stack_h = max(300, self.stack_splitter.height())
+                h_each = max(60, stack_h // 3)
+                self.stack_splitter.setSizes([h_each, h_each, h_each])
             QTimer.singleShot(30, self._apply_plot_geometry)
             if not self.active_heavy_data:
                 QTimer.singleShot(45, self._draw_empty_plots)
