@@ -132,6 +132,9 @@ class CricketAnalyzer:
         # Falsos positivos de frequência e cantos distantes são isolados no Estágio 2.5.
         peaks_filtered = np.asarray(raw_peaks, dtype=int)
         valid_peaks_stage2 = []
+        peak_dur_dict = {}
+        discarded_peaks_reasons = {}
+
         if len(peaks_filtered) > 0:
             widths_samples, _, _, _ = peak_widths(env1_smooth, peaks_filtered, rel_height=0.7)
             pulse_durations_s = widths_samples / rate
@@ -144,10 +147,14 @@ class CricketAnalyzer:
                 dur = peak_dur_dict[p]
                 if dur_min_lim <= dur <= dur_max_lim:
                     valid_peaks_stage2.append(p)
+                else:
+                    discarded_peaks_reasons[int(p)] = (
+                        f"Duração fora da faixa ({dur*1000.0:.1f} ms; faixa permitida: {dur_min_lim*1000.0:.1f}–{dur_max_lim*1000.0:.1f} ms)"
+                    )
 
         # ----------------------------------------------------------------------
         # Estágio 2.5: Identificação da Frequência Dominante Focal por Densidade
-        # de Chilreios e Filtro de Tolerância Espectral (±300 Hz)
+        # de Chilreios e Filtro de Tolerância Espectral (±300 Hz padrão)
         # ----------------------------------------------------------------------
         carrier_freq = 5000.0
         if len(valid_peaks_stage2) >= 2:
@@ -187,7 +194,7 @@ class CricketAnalyzer:
         elif len(dom_freqs) > 0:
             carrier_freq = float(np.median(dom_freqs))
 
-        # Filtragem por desvio de frequência: elimina pulsos com diferença > 300 Hz
+        # Filtragem por desvio de frequência em relação à portadora
         freq_tol = float(params.get("freq_tolerance_hz", 300.0))
         valid_peaks_stage3 = []
         freq_outliers = []
@@ -195,23 +202,25 @@ class CricketAnalyzer:
             for p in valid_peaks_stage2:
                 t_p = p / float(rate)
                 f_p = float(np.interp(t_p, t_spec, dom_freqs))
-                if abs(f_p - carrier_freq) <= freq_tol:
+                diff = f_p - carrier_freq
+                if abs(diff) <= freq_tol:
                     valid_peaks_stage3.append(p)
                 else:
                     freq_outliers.append(p)
+                    discarded_peaks_reasons[int(p)] = (
+                        f"Frequência fora da tolerância da portadora "
+                        f"({f_p:.0f} Hz; desvio de {diff:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
+                    )
 
-        # Se o filtro reteve picos consistentes, descarta os pulsos fora de ±300 Hz
-        if len(valid_peaks_stage3) >= 2:
-            candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
-            distant_peaks = list(freq_outliers)
-        elif len(valid_peaks_stage3) == 1:
+        # Se o filtro reteve picos consistentes, descarta os pulsos fora da tolerância
+        if len(valid_peaks_stage3) >= 1:
             candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
             distant_peaks = list(freq_outliers)
         else:
             candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
             distant_peaks = []
 
-        # Classificação contextual e segregação focal/distante
+        # Classificação contextual e segregação focal/distante (ML)
         if pulse_learner is not None and len(candidate_peaks) > 0:
             gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
             gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
@@ -220,6 +229,8 @@ class CricketAnalyzer:
                 candidate_peaks, rate, env1_smooth, raw_signal=data_b1,
                 gap_min_s=gap_min_s, gap_max_s=gap_max_s, focal_sensitivity=focal_sens
             )
+            for p in ml_distant_peaks:
+                discarded_peaks_reasons[int(p)] = "Classificado pelo modelo ML como ruído / canto distante"
             distant_peaks = list(sorted(set(distant_peaks) | set(ml_distant_peaks)))
 
         # Agrupamento com coerência de trilha acústica em tempo linear O(N)
@@ -228,8 +239,99 @@ class CricketAnalyzer:
             peaks, params, rate, env1_smooth, raw_signal=data_b1
         )
 
+        # Identifica pulsos candidatos que não foram retidos em nenhum chilreio
+        valid_in_chirps = set()
+        for cp in chirp_peaks_list:
+            valid_in_chirps.update(cp)
+
+        min_p = int(params.get("min_p", 2))
+        for p in candidate_peaks:
+            p_int = int(p)
+            if p_int not in valid_in_chirps and p_int not in discarded_peaks_reasons:
+                discarded_peaks_reasons[p_int] = f"Pulso isolado / sequência incompleta (< {min_p} pulsos por chilreio)"
+
+        all_distant = sorted(list(set(distant_peaks) | set(discarded_peaks_reasons.keys())))
+
         return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
-                media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, distant_peaks, carrier_freq)
+                media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, all_distant, carrier_freq,
+                discarded_peaks_reasons, valid_peaks_stage2, peak_dur_dict)
+
+    @staticmethod
+    def reevaluate_carrier_tolerance(
+        valid_peaks_stage2, carrier_freq, new_tol_hz,
+        rate, t_spec, dom_freqs, env, params, data_b1=None,
+        pulse_learner=None, base_discarded_reasons=None
+    ):
+        """Re-avalia rapidamente em tempo real a tolerância espectral da portadora.
+
+        Executa em menos de 30 ms sem recalcular transformadas pesadas.
+        Retorna: (peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons)
+        """
+        valid_peaks_stage2 = np.asarray(valid_peaks_stage2, dtype=int)
+        freq_tol = float(new_tol_hz)
+        discarded_reasons = {}
+
+        # 1. Preserva motivos prévios não espectrais (ex: duração fora da faixa ou ML)
+        if base_discarded_reasons:
+            for pk, reason in base_discarded_reasons.items():
+                if "Frequência fora da tolerância" not in reason and "Pulso isolado" not in reason:
+                    discarded_reasons[int(pk)] = reason
+
+        # 2. Triagem rápida por desvio da frequência portadora
+        if len(valid_peaks_stage2) > 0 and len(dom_freqs) > 0 and len(t_spec) > 0:
+            times_pks = valid_peaks_stage2 / float(rate)
+            f_pks = np.interp(times_pks, t_spec, dom_freqs)
+            diffs = f_pks - carrier_freq
+            mask = np.abs(diffs) <= freq_tol
+
+            valid_peaks_stage3 = valid_peaks_stage2[mask]
+            outliers = valid_peaks_stage2[~mask]
+            outliers_f = f_pks[~mask]
+            outliers_diff = diffs[~mask]
+
+            for p, f_val, d_val in zip(outliers, outliers_f, outliers_diff):
+                discarded_reasons[int(p)] = (
+                    f"Frequência fora da tolerância da portadora "
+                    f"({f_val:.0f} Hz; desvio de {d_val:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
+                )
+        else:
+            valid_peaks_stage3 = valid_peaks_stage2
+
+        if len(valid_peaks_stage3) >= 1:
+            candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
+        else:
+            candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
+
+        # 3. Classificação ML se ativa
+        if pulse_learner is not None and len(candidate_peaks) > 0:
+            gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
+            gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
+            focal_sens = float(params.get("focal_sensitivity", 0.60))
+            candidate_peaks, ml_distant_peaks = pulse_learner.filter_peaks(
+                candidate_peaks, rate, env, raw_signal=data_b1,
+                gap_min_s=gap_min_s, gap_max_s=gap_max_s, focal_sensitivity=focal_sens
+            )
+            for p in ml_distant_peaks:
+                discarded_reasons[int(p)] = "Classificado pelo modelo ML como ruído / canto distante"
+
+        # 4. Agrupamento em chilreios
+        peaks = np.asarray(sorted(candidate_peaks), dtype=int)
+        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+            peaks, params, rate, env, raw_signal=data_b1
+        )
+
+        valid_in_chirps = set()
+        for cp in chirp_peaks_list:
+            valid_in_chirps.update(cp)
+
+        min_p = int(params.get("min_p", 2))
+        for p in candidate_peaks:
+            p_int = int(p)
+            if p_int not in valid_in_chirps and p_int not in discarded_reasons:
+                discarded_reasons[p_int] = f"Pulso isolado / sequência incompleta (< {min_p} pulsos por chilreio)"
+
+        all_distant = sorted(list(discarded_reasons.keys()))
+        return (peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons)
 
     @staticmethod
     def regroup_chirps(peaks, params, rate, env, raw_signal=None):

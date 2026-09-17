@@ -1566,7 +1566,10 @@ class MainWindow(QMainWindow):
             params = self.algo_params.copy()
         rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results[:14]
         distant_peaks = results[14] if len(results) > 14 else []
-        carrier_freq = results[15] if len(results) > 15 else 0.0
+        carrier_freq = float(results[15]) if len(results) > 15 else 0.0
+        discarded_peaks_reasons = results[16] if len(results) > 16 else {}
+        valid_peaks_stage2 = results[17] if len(results) > 17 else list(peaks)
+        peak_dur_dict = results[18] if len(results) > 18 else {}
 
         # Converte dados volumosos de ponto flutuante para float32 (reduz 50% do consumo de RAM)
         if isinstance(data, np.ndarray) and data.dtype != np.float32:
@@ -1617,10 +1620,21 @@ class MainWindow(QMainWindow):
             "peaks_user_verified": list(self.peaks_user_verified),
             "distant_peaks": list(distant_peaks),
             "carrier_freq": carrier_freq,
+            "discarded_peaks_reasons": discarded_peaks_reasons,
+            "valid_peaks_stage2": list(valid_peaks_stage2),
+            "peak_dur_dict": peak_dur_dict,
         }
         self.analysis_cache[filename] = heavy_data
         self.active_heavy_data = heavy_data
         self.active_filename = filename
+
+        # Sincroniza informações da frequência portadora e tolerância nos painéis
+        tol_val = float(params.get("freq_tolerance_hz", 300.0))
+        if hasattr(self, "panel_spec"):
+            self.panel_spec.set_carrier_info(carrier_freq, tol_val)
+        if hasattr(self, "panel_freq"):
+            self.panel_freq.set_carrier_info(carrier_freq, tol_val)
+
         if render:
             self.render_dashboard(filename)
 
@@ -1749,6 +1763,12 @@ class MainWindow(QMainWindow):
             pks_t = np.array(pks) / rate
             freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
             ax3.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4, zorder=7)
+        if distant_pks:
+            valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
+            if valid_d:
+                d_times = np.array(valid_d) / rate
+                d_freqs = np.interp(d_times, t_spec, dom_freqs)
+                ax3.plot(d_times, d_freqs, 'x', color='#64748B', markersize=5, markeredgewidth=1.1, alpha=0.55, zorder=5)
 
         # SPEC
         ax4 = self.panel_spec.ax
@@ -1860,6 +1880,80 @@ class MainWindow(QMainWindow):
 
         self.panel_spec.canvas.draw_idle()
 
+    def apply_realtime_freq_tolerance(self, new_tol, source_panel=None):
+        """Ajusta em tempo real a tolerância espectral (±Hz) em torno da frequência portadora."""
+        new_tol = float(new_tol)
+        self.algo_params["freq_tolerance_hz"] = new_tol
+
+        # Sincroniza controles dos painéis para manter o mesmo valor visual
+        if hasattr(self, "panel_spec") and self.panel_spec is not source_panel and hasattr(self.panel_spec, "set_carrier_tolerance"):
+            self.panel_spec.set_carrier_tolerance(new_tol, notify=False)
+        if hasattr(self, "panel_freq") and self.panel_freq is not source_panel and hasattr(self.panel_freq, "set_carrier_tolerance"):
+            self.panel_freq.set_carrier_tolerance(new_tol, notify=False)
+
+        d = getattr(self, "active_heavy_data", None)
+        if not d:
+            return
+
+        # Debounce suave de 25 ms para deslizamento contínuo sem sobrecarga
+        if not hasattr(self, "_carrier_tol_timer"):
+            self._carrier_tol_timer = QTimer(self)
+            self._carrier_tol_timer.setSingleShot(True)
+            self._carrier_tol_timer.timeout.connect(self._execute_realtime_freq_tolerance)
+
+        self._pending_carrier_tol = new_tol
+        self._carrier_tol_timer.start(25)
+
+    def _execute_realtime_freq_tolerance(self):
+        d = getattr(self, "active_heavy_data", None)
+        if not d:
+            return
+        new_tol = getattr(self, "_pending_carrier_tol", float(self.algo_params.get("freq_tolerance_hz", 300.0)))
+
+        valid_peaks_stage2 = d.get("valid_peaks_stage2", d.get("peaks_detected", []))
+        carrier_freq = float(d.get("carrier_freq", 5000.0))
+        rate = float(d.get("rate", 44100))
+        t_spec = d.get("t_spec", np.array([]))
+        dom_freqs = d.get("dom_freqs", np.array([]))
+        env = d.get("env1_smooth", d.get("env", np.array([])))
+        data_b1 = d.get("data_b1", None)
+        effective_params = {**self.algo_params, **self._adaptive_overrides, "freq_tolerance_hz": new_tol}
+        learner = self.pulse_learner if getattr(self, "use_machine_learning", False) else None
+        raw_peaks = d.get("peaks_detected", None)
+        peak_dur_dict = d.get("peak_dur_dict", None)
+
+        peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons = (
+            CricketAnalyzer.reevaluate_carrier_tolerance(
+                valid_peaks_stage2, carrier_freq, new_tol,
+                rate, t_spec, dom_freqs, env, effective_params,
+                data_b1=data_b1, pulse_learner=learner,
+                base_discarded_reasons=d.get("discarded_peaks_reasons", {})
+            )
+        )
+
+        d["peaks"] = list(peaks)
+        d["chirps"] = chirps
+        d["chirp_peaks_list"] = chirp_peaks_list
+        d["media"] = media
+        d["moda"] = moda
+        d["distant_peaks"] = list(all_distant)
+        d["discarded_peaks_reasons"] = discarded_reasons
+        if "params" in d:
+            d["params"]["freq_tolerance_hz"] = new_tol
+
+        # Preserva o enquadramento (zoom e pan X) atual dos gráficos
+        cur_xlim = self.panel_wave.ax.get_xlim() if hasattr(self, "panel_wave") else None
+
+        if self.active_filename:
+            self.render_dashboard(self.active_filename)
+
+        if cur_xlim is not None and cur_xlim[0] is not None and cur_xlim[1] is not None:
+            for panel in (self.panel_wave, self.panel_freq, self.panel_spec):
+                if hasattr(panel, "ax"):
+                    panel.ax.set_xlim(cur_xlim)
+            for panel in self.all_panels:
+                panel.canvas.draw_idle()
+
     def _update_pulse_hover_data(self):
         """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""
         self.pulse_hover_data = []
@@ -1871,11 +1965,16 @@ class MainWindow(QMainWindow):
         chirp_peaks_list = d.get("chirp_peaks_list", [])
         dom_freqs = d.get("dom_freqs", np.array([]))
         t_spec = d.get("t_spec", np.array([]))
+        carrier_freq = float(d.get("carrier_freq", 0.0))
+        freq_tol = float(d.get("params", {}).get("freq_tolerance_hz", 300.0))
 
+        # 1. Pulsos válidos agrupados em chilreios
+        seen_samples = set()
         for c_idx, cp in enumerate(chirp_peaks_list):
             qnt = len(cp)
             for p_idx, pk in enumerate(cp):
                 pk = int(pk)
+                seen_samples.add(pk)
                 t_val = float(pk) / rate
                 y_env = float(env[pk]) if (env is not None and len(env) > pk) else 0.0
                 if len(t_spec) > 0 and len(dom_freqs) > 0:
@@ -1890,7 +1989,45 @@ class MainWindow(QMainWindow):
                     "chirp_pulses": qnt,
                     "chirp_idx": c_idx + 1,
                     "pulse_num": p_idx + 1,
+                    "status": "valid",
+                    "carrier_freq": carrier_freq,
                 })
+
+        # 2. Pulsos descartados (marcados em cinza)
+        distant_pks = d.get("distant_peaks", [])
+        discarded_reasons = d.get("discarded_peaks_reasons", {})
+
+        for pk in distant_pks:
+            pk = int(pk)
+            if pk in seen_samples:
+                continue
+            t_val = float(pk) / rate
+            y_env = float(env[pk]) if (env is not None and len(env) > pk) else 0.0
+            if len(t_spec) > 0 and len(dom_freqs) > 0:
+                y_freq = float(np.interp(t_val, t_spec, dom_freqs))
+            else:
+                y_freq = 0.0
+
+            reason = discarded_reasons.get(pk)
+            if not reason:
+                if carrier_freq > 0 and abs(y_freq - carrier_freq) > freq_tol:
+                    diff = y_freq - carrier_freq
+                    reason = (
+                        f"Frequência fora da tolerância da portadora "
+                        f"({y_freq:.0f} Hz; desvio de {diff:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
+                    )
+                else:
+                    reason = "Pulso isolado / ruído fora do padrão rítmico focal"
+
+            self.pulse_hover_data.append({
+                "sample": pk,
+                "time": t_val,
+                "env_y": y_env,
+                "freq_y": y_freq,
+                "status": "discarded",
+                "reason": reason,
+                "carrier_freq": carrier_freq,
+            })
 
     def _update_summary_placeholder(self, filename=""):
         self.lbl_summary_file.setText(filename or "Nenhum arquivo selecionado")
@@ -2858,15 +2995,43 @@ class MainWindow(QMainWindow):
                         continue
 
                 if best_match is not None:
-                    qnt = best_match["chirp_pulses"]
-                    p_num = best_match["pulse_num"]
-                    t_val = best_match["time"]
-                    c_idx = best_match["chirp_idx"]
-                    msg = (
-                        f"<b>Chilreio #{c_idx}: {qnt} pulsos</b><br>"
-                        f"Pulso: {p_num} de {qnt}<br>"
-                        f"Tempo: {t_val:.3f} s"
-                    )
+                    if best_match.get("status") == "discarded":
+                        t_val = best_match["time"]
+                        f_val = best_match.get("freq_y", 0.0)
+                        c_freq = best_match.get("carrier_freq", 0.0)
+                        reason = best_match.get("reason", "Pulso descartado pelo filtro acústico")
+
+                        freq_line = ""
+                        if f_val > 0:
+                            if c_freq > 0:
+                                diff = f_val - c_freq
+                                freq_line = f"<b>Frequência:</b> {f_val:.0f} Hz (Portadora: {c_freq:.0f} Hz | Desvio: {diff:+.0f} Hz)<br>"
+                            else:
+                                freq_line = f"<b>Frequência:</b> {f_val:.0f} Hz<br>"
+
+                        msg = (
+                            f"<div style='font-family: sans-serif; line-height: 1.35;'>"
+                            f"<span style='color: #F87171; font-weight: 700;'>✖ Pulso Descartado</span><br>"
+                            f"<b>Tempo:</b> {t_val:.3f} s<br>"
+                            f"{freq_line}"
+                            f"<b>Motivo:</b> <span style='color: #E2E8F0;'>{reason}</span>"
+                            f"</div>"
+                        )
+                    else:
+                        qnt = best_match["chirp_pulses"]
+                        p_num = best_match["pulse_num"]
+                        t_val = best_match["time"]
+                        c_idx = best_match["chirp_idx"]
+                        f_val = best_match.get("freq_y", 0.0)
+                        freq_line = f"<br><b>Frequência:</b> {f_val:.0f} Hz" if f_val > 0 else ""
+                        msg = (
+                            f"<div style='font-family: sans-serif; line-height: 1.35;'>"
+                            f"<b style='color: #38BDF8;'>Chilreio #{c_idx}: {qnt} pulsos</b><br>"
+                            f"<b>Pulso:</b> {p_num} de {qnt}<br>"
+                            f"<b>Tempo:</b> {t_val:.3f} s"
+                            f"{freq_line}"
+                            f"</div>"
+                        )
                     QToolTip.showText(QCursor.pos(), msg, target_panel.canvas)
                     return
                 else:

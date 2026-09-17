@@ -3,7 +3,7 @@ Crinômetro - Painéis Gráficos e Timeline Interativa.
 """
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QDoubleSpinBox
+    QDoubleSpinBox, QSpinBox, QSlider
 )
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
@@ -198,79 +198,22 @@ class PlotPanel(QFrame):
 
         self.layout.addWidget(self.title_bar)
 
+        if self.title_key == "freq":
+            self.freq_ctrl_bar = QFrame()
+            self.freq_ctrl_bar.setObjectName("freqCtrlBar")
+            self.freq_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
+            fctrl_layout = QHBoxLayout(self.freq_ctrl_bar)
+            fctrl_layout.setContentsMargins(4, 2, 4, 3)
+            fctrl_layout.setSpacing(6)
+            self._build_carrier_controls(fctrl_layout)
+            fctrl_layout.addStretch()
+            self.layout.addWidget(self.freq_ctrl_bar)
+
         if self.title_key == "spec":
             self.spec_unit = "kHz"
             self.spec_ctrl_bar = QFrame()
             self.spec_ctrl_bar.setObjectName("specCtrlBar")
-            self.spec_ctrl_bar.setStyleSheet("""
-                QFrame#specCtrlBar {
-                    background-color: #16181B;
-                    border-top: 1px solid #20242B;
-                    border-bottom: 1px solid #23272E;
-                    padding: 2px 8px;
-                }
-                QLabel.specCtrlLabel {
-                    color: #8E949D;
-                    font-size: 11px;
-                    font-weight: 600;
-                }
-                QLabel.specCtrlSep {
-                    color: #555E6B;
-                    font-size: 11px;
-                }
-                QDoubleSpinBox.specSpinBox {
-                    background-color: #1C2025;
-                    color: #F0F2F5;
-                    border: 1px solid #333942;
-                    border-radius: 4px;
-                    padding: 1px 4px;
-                    font-size: 11px;
-                    font-weight: 600;
-                }
-                QDoubleSpinBox.specSpinBox:hover {
-                    border-color: #4B5563;
-                }
-                QDoubleSpinBox.specSpinBox:focus {
-                    border-color: #2563EB;
-                    background-color: #22272E;
-                }
-                QDoubleSpinBox.specSpinBox::up-button, QDoubleSpinBox.specSpinBox::down-button {
-                    background-color: #262B32;
-                    border: none;
-                    width: 13px;
-                }
-                QDoubleSpinBox.specSpinBox::up-button:hover, QDoubleSpinBox.specSpinBox::down-button:hover {
-                    background-color: #38414D;
-                }
-                QPushButton#specUnitBtn {
-                    background-color: #21262D;
-                    color: #58A6FF;
-                    font-weight: 700;
-                    font-size: 11px;
-                    border: 1px solid #363D47;
-                    border-radius: 4px;
-                    padding: 2px 7px;
-                }
-                QPushButton#specUnitBtn:hover {
-                    background-color: #2B3340;
-                    border-color: #58A6FF;
-                    color: #79C0FF;
-                }
-                QPushButton.specPresetChip {
-                    background-color: #1C2025;
-                    color: #9CA3AF;
-                    font-size: 10.5px;
-                    font-weight: 600;
-                    border: 1px solid #333942;
-                    border-radius: 4px;
-                    padding: 2px 7px;
-                }
-                QPushButton.specPresetChip:hover {
-                    background-color: #2563EB;
-                    border-color: #2563EB;
-                    color: #FFFFFF;
-                }
-            """)
+            self.spec_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
             ctrl_layout = QHBoxLayout(self.spec_ctrl_bar)
             ctrl_layout.setContentsMargins(4, 2, 4, 3)
             ctrl_layout.setSpacing(5)
@@ -343,6 +286,14 @@ class PlotPanel(QFrame):
             self.btn_spec_preset_full.setToolTip("Visualização completa até a frequência de Nyquist")
             self.btn_spec_preset_full.clicked.connect(self._preset_full_nyquist)
             ctrl_layout.addWidget(self.btn_spec_preset_full)
+
+            # Divisor sutil para a seção do filtro da portadora
+            sep2 = QFrame()
+            sep2.setFrameShape(QFrame.Shape.VLine)
+            sep2.setStyleSheet("color: #2B3037; margin: 2px 4px;")
+            ctrl_layout.addWidget(sep2)
+
+            self._build_carrier_controls(ctrl_layout)
 
             ctrl_layout.addStretch()
             self.layout.addWidget(self.spec_ctrl_bar)
@@ -526,6 +477,185 @@ class PlotPanel(QFrame):
             self.set_spec_limits(0.0, round(nyq / 1000.0, 1), unit="kHz")
         else:
             self.set_spec_limits(0.0, round(nyq, 0), unit="Hz")
+
+    @staticmethod
+    def _ctrl_bar_style():
+        return """
+            QFrame#specCtrlBar, QFrame#freqCtrlBar {
+                background-color: #16181B;
+                border-top: 1px solid #20242B;
+                border-bottom: 1px solid #23272E;
+                padding: 2px 8px;
+            }
+            QLabel.specCtrlLabel {
+                color: #8E949D;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QLabel.specCtrlSep {
+                color: #555E6B;
+                font-size: 11px;
+            }
+            QDoubleSpinBox.specSpinBox, QSpinBox.specSpinBox {
+                background-color: #1C2025;
+                color: #F0F2F5;
+                border: 1px solid #333942;
+                border-radius: 4px;
+                padding: 1px 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QDoubleSpinBox.specSpinBox:hover, QSpinBox.specSpinBox:hover {
+                border-color: #4B5563;
+            }
+            QDoubleSpinBox.specSpinBox:focus, QSpinBox.specSpinBox:focus {
+                border-color: #2563EB;
+                background-color: #22272E;
+            }
+            QDoubleSpinBox.specSpinBox::up-button, QDoubleSpinBox.specSpinBox::down-button,
+            QSpinBox.specSpinBox::up-button, QSpinBox.specSpinBox::down-button {
+                background-color: #262B32;
+                border: none;
+                width: 13px;
+            }
+            QDoubleSpinBox.specSpinBox::up-button:hover, QDoubleSpinBox.specSpinBox::down-button:hover,
+            QSpinBox.specSpinBox::up-button:hover, QSpinBox.specSpinBox::down-button:hover {
+                background-color: #38414D;
+            }
+            QPushButton#specUnitBtn {
+                background-color: #21262D;
+                color: #58A6FF;
+                font-weight: 700;
+                font-size: 11px;
+                border: 1px solid #363D47;
+                border-radius: 4px;
+                padding: 2px 7px;
+            }
+            QPushButton#specUnitBtn:hover {
+                background-color: #2B3340;
+                border-color: #58A6FF;
+                color: #79C0FF;
+            }
+            QPushButton.specPresetChip {
+                background-color: #1C2025;
+                color: #9CA3AF;
+                font-size: 10.5px;
+                font-weight: 600;
+                border: 1px solid #333942;
+                border-radius: 4px;
+                padding: 2px 6px;
+            }
+            QPushButton.specPresetChip:hover {
+                background-color: #2563EB;
+                border-color: #2563EB;
+                color: #FFFFFF;
+            }
+            QSlider.specSlider::groove:horizontal {
+                height: 4px;
+                background: #282E36;
+                border-radius: 2px;
+            }
+            QSlider.specSlider::sub-page:horizontal {
+                background: #2563EB;
+                border-radius: 2px;
+            }
+            QSlider.specSlider::handle:horizontal {
+                background: #60A5FA;
+                border: 1px solid #1D4ED8;
+                width: 12px;
+                height: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }
+            QSlider.specSlider::handle:horizontal:hover {
+                background: #93C5FD;
+            }
+        """
+
+    def _build_carrier_controls(self, layout):
+        self.lbl_carrier_info = QLabel("Portadora: —")
+        self.lbl_carrier_info.setProperty("class", "specCtrlLabel")
+        self.lbl_carrier_info.setStyleSheet("color: #38BDF8; font-weight: 700; font-size: 11px;")
+        self.lbl_carrier_info.setToolTip("Frequência portadora focal detectada por densidade modal de chilreios")
+        layout.addWidget(self.lbl_carrier_info)
+
+        lbl_tol = QLabel("Filtro:")
+        lbl_tol.setProperty("class", "specCtrlLabel")
+        layout.addWidget(lbl_tol)
+
+        self.spin_carrier_tol = QSpinBox()
+        self.spin_carrier_tol.setProperty("class", "specSpinBox")
+        self.spin_carrier_tol.setRange(25, 2000)
+        self.spin_carrier_tol.setSingleStep(25)
+        self.spin_carrier_tol.setValue(300)
+        self.spin_carrier_tol.setPrefix("± ")
+        self.spin_carrier_tol.setSuffix(" Hz")
+        self.spin_carrier_tol.setFixedWidth(82)
+        self.spin_carrier_tol.setToolTip("Tolerância espectral em torno da frequência portadora (tempo real)")
+        self.spin_carrier_tol.valueChanged.connect(self._on_carrier_tol_spin_changed)
+        layout.addWidget(self.spin_carrier_tol)
+
+        self.slider_carrier_tol = QSlider(Qt.Orientation.Horizontal)
+        self.slider_carrier_tol.setProperty("class", "specSlider")
+        self.slider_carrier_tol.setRange(25, 1500)
+        self.slider_carrier_tol.setSingleStep(25)
+        self.slider_carrier_tol.setValue(300)
+        self.slider_carrier_tol.setFixedWidth(68)
+        self.slider_carrier_tol.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.slider_carrier_tol.setToolTip("Arraste para regular a tolerância espectral em tempo real")
+        self.slider_carrier_tol.valueChanged.connect(self._on_carrier_tol_slider_changed)
+        layout.addWidget(self.slider_carrier_tol)
+
+        for tol_val in (150, 300, 500):
+            btn_chip = QPushButton(f"±{tol_val}")
+            btn_chip.setProperty("class", "specPresetChip")
+            btn_chip.setFixedHeight(22)
+            btn_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_chip.setToolTip(f"Ajustar tolerância para ±{tol_val} Hz")
+            btn_chip.clicked.connect(lambda checked=False, v=tol_val: self.set_carrier_tolerance(v))
+            layout.addWidget(btn_chip)
+
+    def _on_carrier_tol_spin_changed(self, val):
+        if hasattr(self, "slider_carrier_tol") and self.slider_carrier_tol.value() != val:
+            self.slider_carrier_tol.blockSignals(True)
+            self.slider_carrier_tol.setValue(val)
+            self.slider_carrier_tol.blockSignals(False)
+        self._notify_carrier_tol_changed(val)
+
+    def _on_carrier_tol_slider_changed(self, val):
+        if hasattr(self, "spin_carrier_tol") and self.spin_carrier_tol.value() != val:
+            self.spin_carrier_tol.blockSignals(True)
+            self.spin_carrier_tol.setValue(val)
+            self.spin_carrier_tol.blockSignals(False)
+        self._notify_carrier_tol_changed(val)
+
+    def _notify_carrier_tol_changed(self, val):
+        win = self.window()
+        if hasattr(win, "apply_realtime_freq_tolerance"):
+            win.apply_realtime_freq_tolerance(val, source_panel=self)
+
+    def set_carrier_info(self, carrier_freq, tol_hz=None):
+        if hasattr(self, "lbl_carrier_info"):
+            if carrier_freq and carrier_freq > 0:
+                self.lbl_carrier_info.setText(f"Portadora: {carrier_freq:.0f} Hz")
+                self.lbl_carrier_info.setToolTip(f"Frequência portadora focal detectada: {carrier_freq:.1f} Hz")
+            else:
+                self.lbl_carrier_info.setText("Portadora: —")
+        if tol_hz is not None:
+            self.set_carrier_tolerance(int(tol_hz), notify=False)
+
+    def set_carrier_tolerance(self, val, notify=True):
+        val = int(val)
+        if hasattr(self, "spin_carrier_tol"):
+            self.spin_carrier_tol.blockSignals(True)
+            self.spin_carrier_tol.setValue(val)
+            self.spin_carrier_tol.blockSignals(False)
+        if hasattr(self, "slider_carrier_tol"):
+            self.slider_carrier_tol.blockSignals(True)
+            self.slider_carrier_tol.setValue(val)
+            self.slider_carrier_tol.blockSignals(False)
+        if notify:
+            self._notify_carrier_tol_changed(val)
 
 
 
