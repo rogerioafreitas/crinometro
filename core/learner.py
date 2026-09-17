@@ -665,18 +665,24 @@ class PulseLearner:
             # Picos aceitos: alta probabilidade no GMM e amplitude acima do piso focal
             kept_mask = (priors >= gmm_thresh) & (amps >= focal_floor)
 
-            # Resgate contextual restritivo: apenas para vizinho imediato de pulso já confirmado
-            for i in range(len(peaks)):
-                if not kept_mask[i] and priors[i] >= 0.40 and amps[i] >= focal_floor * 0.80:
-                    t_cur = peaks[i] / float(rate)
-                    has_left = (i > 0 and kept_mask[i - 1] and
-                                (gap_min_s <= t_cur - peaks[i - 1] / float(rate) <= gap_max_s) and
-                                amps[i] >= 0.50 * amps[i - 1])
-                    has_right = (i < len(peaks) - 1 and kept_mask[i + 1] and
-                                 (gap_min_s <= peaks[i + 1] / float(rate) - t_cur <= gap_max_s) and
-                                 amps[i] >= 0.50 * amps[i + 1])
-                    if has_left or has_right:
-                        kept_mask[i] = True
+            # Resgate contextual iterativo: propaga a aceitação através do chilreio (ataque e decaimento)
+            changed = True
+            pass_count = 0
+            while changed and pass_count < 5:
+                changed = False
+                pass_count += 1
+                for i in range(len(peaks)):
+                    if not kept_mask[i] and (priors[i] >= 0.30 or amps[i] >= max(0.03, focal_floor * 0.50)):
+                        t_cur = peaks[i] / float(rate)
+                        has_left = (i > 0 and kept_mask[i - 1] and
+                                    (gap_min_s * 0.85 <= t_cur - peaks[i - 1] / float(rate) <= gap_max_s * 1.15) and
+                                    (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
+                        has_right = (i < len(peaks) - 1 and kept_mask[i + 1] and
+                                     (gap_min_s * 0.85 <= peaks[i + 1] / float(rate) - t_cur <= gap_max_s * 1.15) and
+                                     (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
+                        if has_left or has_right:
+                            kept_mask[i] = True
+                            changed = True
 
             if pruned_indices:
                 for idx in pruned_indices:
@@ -735,19 +741,25 @@ class PulseLearner:
         # 1. Pulsos de alta confiança e que respeitam o piso focal: aprovados diretamente
         kept_mask[(combined_score >= HIGH_CONF_THRESH) & (amps >= focal_floor)] = True
 
-        # 2. Contextual Gating restritivo: pulsos intermediários aceitos apenas se forem vizinhos
-        # de um pulso JÁ CONFIRMADO e com amplitude coerente (evita que ruídos se aprovem mutuamente)
-        for i in range(n):
-            if not kept_mask[i] and combined_score[i] >= LOW_CONF_THRESH and amps[i] >= focal_floor * 0.75:
-                t_cur = pulse_times[i]
-                has_prev_match = (i > 0 and kept_mask[i - 1] and
-                                  gap_min_s <= (t_cur - pulse_times[i - 1]) <= gap_max_s and
-                                  amps[i] >= 0.50 * amps[i - 1])
-                has_next_match = (i < n - 1 and kept_mask[i + 1] and
-                                  gap_min_s <= (pulse_times[i + 1] - t_cur) <= gap_max_s and
-                                  amps[i] >= 0.50 * amps[i + 1])
-                if has_prev_match or has_next_match:
-                    kept_mask[i] = True
+        # 2. Contextual Gating iterativo: resgata pulsos de ataque e decaimento intra-chilreio
+        # vizinhos a pulso já confirmado
+        changed = True
+        pass_count = 0
+        while changed and pass_count < 5:
+            changed = False
+            pass_count += 1
+            for i in range(n):
+                if not kept_mask[i] and (combined_score[i] >= LOW_CONF_THRESH or amps[i] >= max(0.03, focal_floor * 0.50)):
+                    t_cur = pulse_times[i]
+                    has_prev_match = (i > 0 and kept_mask[i - 1] and
+                                      gap_min_s * 0.85 <= (t_cur - pulse_times[i - 1]) <= gap_max_s * 1.15 and
+                                      (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
+                    has_next_match = (i < n - 1 and kept_mask[i + 1] and
+                                      gap_min_s * 0.85 <= (pulse_times[i + 1] - t_cur) <= gap_max_s * 1.15 and
+                                      (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
+                    if has_prev_match or has_next_match:
+                        kept_mask[i] = True
+                        changed = True
 
         # Aplicação mandatória de regras rígidas de poda pré-inferência
         if pruned_indices:

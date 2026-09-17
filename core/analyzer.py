@@ -376,8 +376,8 @@ class CricketAnalyzer:
             amps = env[valid_idx]
             ref_amp = float(np.median(amps))
 
-            # Coerência de amplitude fisiológica: descarta ecos e picos de fundo espúrios
-            allowed_var = float(params.get("amp_var", 0.40)) * 1.25
+            # Coerência de amplitude fisiológica: permite modulação suave (crescendo/decrescendo natural)
+            allowed_var = float(params.get("amp_var", 0.40)) * 1.65
             coherent_pulses = []
             for p in valid_idx:
                 dev = abs(env[p] - ref_amp) / (ref_amp + 1e-6)
@@ -419,9 +419,9 @@ class CricketAnalyzer:
                     refined_chirps.append(sc)
 
         # 3. Filtro Rítmico Fisiológico Inter-Chilreio (Inter-Chirp Interval - ICI Gate)
-        # A fisiologia neuromuscular do grilo focal impõe um período refratário mínimo entre chilreios consecutivos:
-        # O intervalo entre o término do último pulso de um chilreio e o início do próximo chilreio (ΔT_ICI)
-        # pode se alongar caso o grilo silencie ou pause, mas nunca pode ser drasticamente menor do que a cadência típica.
+        # O intervalo entre chilreios pode variar naturalmente; o período refratário visa
+        # podar apenas colisões de grilos intrusos sobrepostos (dt < 150 ms), sem descartar
+        # chilreios legítimos de grilos que cantam com cadência rápida.
         if len(refined_chirps) >= 3:
             refined_chirps.sort(key=lambda cp: cp[0])
             ici_intervals_s = []
@@ -434,8 +434,9 @@ class CricketAnalyzer:
 
             if len(ici_intervals_s) >= 2:
                 ici_median_s = float(np.median(ici_intervals_s))
-                # Limiar fisiológico refratário: 70% do intervalo mediano entre chilreios
-                ici_min_refractory_s = 0.70 * ici_median_s
+                ici_param_s = float(params.get("ici_min", 200.0)) / 1000.0 * 0.70
+                # Limiar fisiológico refratário adaptativo: entre 120 ms e 180 ms
+                ici_min_refractory_s = max(0.120, min(0.180, 0.45 * ici_median_s, ici_param_s))
 
                 gated_chirps = [refined_chirps[0]]
                 for i in range(1, len(refined_chirps)):
@@ -446,19 +447,18 @@ class CricketAnalyzer:
                     dt_from_last = t_cand_start - t_last_end
 
                     if dt_from_last < ici_min_refractory_s:
-                        # Conflito de período refratário fisiológico: o candidato surgiu prematuramente
-                        # durante a janela de silêncio obrigatória do grilo focal.
+                        # Colisão estrita intra-refratária (< 150 ms):
                         cand_amps = env[cand] if len(cand) > 0 and 0 <= cand[0] < len(env) else [0.0]
                         last_amps = env[last_valid] if len(last_valid) > 0 and 0 <= last_valid[0] < len(env) else [0.0]
                         cand_mean_amp = float(np.mean(cand_amps))
                         last_mean_amp = float(np.mean(last_amps))
 
-                        # Se o candidato for expressivamente mais forte e consistente, substitui o anterior;
-                        # caso contrário, descarta o candidato como ruído espúrio ou grilo secundário de fundo.
-                        if cand_mean_amp > 1.35 * last_mean_amp and len(cand) >= len(last_valid):
+                        # Candidato com múltiplos pulsos (> 3) e amplitude consistente não é descartado
+                        if len(cand) >= 3 and cand_mean_amp >= 0.70 * last_mean_amp:
+                            gated_chirps.append(cand)
+                        elif cand_mean_amp > 1.20 * last_mean_amp and len(cand) >= len(last_valid):
                             gated_chirps[-1] = cand
                         else:
-                            # Descarta o candidato prematuro
                             continue
                     else:
                         gated_chirps.append(cand)

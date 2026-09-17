@@ -78,11 +78,11 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background: #1E293B;
                 color: #CBD5E1;
                 border: 1px solid #334155;
-                border-radius: 6px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 32px;
-                max-height: 32px;
+                border-radius: 5px;
+                min-width: 26px;
+                max-width: 26px;
+                min-height: 26px;
+                max-height: 26px;
                 padding: 0px;
             }
             QPushButton#btn_sync:hover {
@@ -217,30 +217,119 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             QLabel#volumeLabel { background: transparent; color: #7F8790; font-size: 10px; font-weight: 600; }
             QWidget#volumeCluster { background: transparent; border: 0; }
             QLabel#metricDivider { color: #363A40; }
-            QPushButton#summaryAction {
+            /* Ação Primária do Cabeçalho (Reanalisar) */
+            QPushButton#summaryPrimaryAction {
                 background-color: #2563EB;
                 color: #FFFFFF;
                 border: 1px solid #3B82F6;
-                border-radius: 6px;
-                min-height: 32px;
-                max-height: 32px;
-                padding: 4px 10px;
+                border-radius: 5px;
+                min-height: 18px;
+                max-height: 18px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 600;
+                outline: none;
+            }
+            QPushButton#summaryPrimaryAction:hover {
+                background-color: #1D4ED8;
+                border-color: #60A5FA;
+            }
+            QPushButton#summaryPrimaryAction:pressed {
+                background-color: #1E40AF;
+                border-color: #1D4ED8;
+            }
+
+            /* Alternância de Inteligência Artificial (Pill Toggle) */
+            QPushButton#summaryToggleMl {
+                min-height: 18px;
+                max-height: 18px;
+                border-radius: 14px;
+                padding: 4px 12px;
                 font-size: 11.5px;
                 font-weight: 600;
                 outline: none;
             }
-            QPushButton#summaryAction:hover {
-                background-color: #3B82F6;
-                border-color: #60A5FA;
+            QPushButton#summaryToggleMl[active="true"] {
+                background-color: #064E3B;
+                border: 1px solid #059669;
+                color: #34D399;
             }
-            QPushButton#summaryAction:pressed {
-                background-color: #1D4ED8;
-                border-color: #1E40AF;
+            QPushButton#summaryToggleMl[active="true"]:hover {
+                background-color: #065F46;
+                border-color: #10B981;
+                color: #6EE7B7;
             }
-            QPushButton#summaryAction:disabled {
-                background-color: #24282F;
-                color: #58616D;
-                border-color: #333842;
+            QPushButton#summaryToggleMl[active="false"] {
+                background-color: #1E2530;
+                border: 1px solid #2D3748;
+                color: #94A3B8;
+            }
+            QPushButton#summaryToggleMl[active="false"]:hover {
+                background-color: #283344;
+                border-color: #4A5568;
+                color: #CBD5E1;
+            }
+
+            /* Ações Secundárias do Cabeçalho */
+            QPushButton#summaryAction, QPushButton.summarySecondaryAction {
+                background-color: #1E2530;
+                color: #E2E8F0;
+                border: 1px solid #2D3748;
+                border-radius: 5px;
+                min-height: 18px;
+                max-height: 18px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 500;
+                outline: none;
+            }
+            QPushButton#summaryAction:hover, QPushButton.summarySecondaryAction:hover {
+                background-color: #283344;
+                border-color: #4A5568;
+                color: #FFFFFF;
+            }
+            QPushButton#summaryAction:pressed, QPushButton.summarySecondaryAction:pressed {
+                background-color: #171D26;
+                border-color: #1F2937;
+            }
+            QPushButton#summaryAction:disabled, QPushButton.summarySecondaryAction:disabled {
+                background-color: #181B1F;
+                color: #4B5563;
+                border-color: #23272D;
+            }
+
+            /* Slider Vertical do Eixo Y do Espectrograma */
+            QSlider#specYSlider {
+                background: transparent;
+                border: none;
+                width: 16px;
+                margin: 4px 0px;
+            }
+            QSlider#specYSlider::groove:vertical {
+                width: 3px;
+                background: rgba(255, 255, 255, 0.12);
+                border: none;
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::sub-page:vertical {
+                background: rgba(255, 255, 255, 0.12);
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::add-page:vertical {
+                background: #2563EB;
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::handle:vertical {
+                background: #38BDF8;
+                border: 1px solid #0284C7;
+                width: 10px;
+                height: 10px;
+                margin: 0 -3.5px;
+                border-radius: 5px;
+            }
+            QSlider#specYSlider::handle:vertical:hover {
+                background: #7DD3FC;
+                border: 1px solid #38BDF8;
             }
             QWidget#plotTitleBar {
                 background: #191C20;
@@ -458,11 +547,11 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     background: #F1F5F9;
                     border: 1px solid #CBD5E1;
                     color: #475569;
-                    border-radius: 6px;
-                    min-width: 32px;
-                    max-width: 32px;
-                    min-height: 32px;
-                    max-height: 32px;
+                    border-radius: 5px;
+                    min-width: 26px;
+                    max-width: 26px;
+                    min-height: 26px;
+                    max-height: 26px;
                     padding: 0px;
                 }
                 QPushButton#btn_sync:hover {
@@ -593,30 +682,119 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 }
                 QLabel#summaryFile, QLabel#metricValue { color: #1D2329; }
                 QLabel#summaryMeta, QLabel#metricTitle, QLabel#metricSub, QLabel#volumeLabel, QLabel#elapsedLabel { color: #69737D; }
-                QPushButton#summaryAction {
+                /* Ação Primária do Cabeçalho (Reanalisar) */
+                QPushButton#summaryPrimaryAction {
                     background-color: #2563EB;
                     color: #FFFFFF;
                     border: 1px solid #2563EB;
-                    border-radius: 6px;
-                    min-height: 32px;
-                    max-height: 32px;
-                    padding: 4px 10px;
+                    border-radius: 5px;
+                    min-height: 18px;
+                    max-height: 18px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    outline: none;
+                }
+                QPushButton#summaryPrimaryAction:hover {
+                    background-color: #1D4ED8;
+                    border-color: #1D4ED8;
+                }
+                QPushButton#summaryPrimaryAction:pressed {
+                    background-color: #1E40AF;
+                    border-color: #1E40AF;
+                }
+
+                /* Alternância de Inteligência Artificial (Pill Toggle) */
+                QPushButton#summaryToggleMl {
+                    min-height: 18px;
+                    max-height: 18px;
+                    border-radius: 14px;
+                    padding: 4px 12px;
                     font-size: 11.5px;
                     font-weight: 600;
                     outline: none;
                 }
-                QPushButton#summaryAction:hover {
-                    background-color: #3B82F6;
-                    border-color: #3B82F6;
+                QPushButton#summaryToggleMl[active="true"] {
+                    background-color: #ECFDF5;
+                    border: 1px solid #059669;
+                    color: #065F46;
                 }
-                QPushButton#summaryAction:pressed {
-                    background-color: #1D4ED8;
-                    border-color: #1D4ED8;
+                QPushButton#summaryToggleMl[active="true"]:hover {
+                    background-color: #D1FAE5;
+                    border-color: #047857;
+                    color: #064E3B;
                 }
-                QPushButton#summaryAction:disabled {
+                QPushButton#summaryToggleMl[active="false"] {
+                    background-color: #F1F5F9;
+                    border: 1px solid #CBD5E1;
+                    color: #64748B;
+                }
+                QPushButton#summaryToggleMl[active="false"]:hover {
                     background-color: #E2E8F0;
+                    border-color: #94A3B8;
+                    color: #334155;
+                }
+
+                /* Ações Secundárias do Cabeçalho */
+                QPushButton#summaryAction, QPushButton.summarySecondaryAction {
+                    background-color: #F1F5F9;
+                    color: #334155;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 5px;
+                    min-height: 18px;
+                    max-height: 18px;
+                    padding: 4px 10px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    outline: none;
+                }
+                QPushButton#summaryAction:hover, QPushButton.summarySecondaryAction:hover {
+                    background-color: #E2E8F0;
+                    border-color: #94A3B8;
+                    color: #0F172A;
+                }
+                QPushButton#summaryAction:pressed, QPushButton.summarySecondaryAction:pressed {
+                    background-color: #CBD5E1;
+                    border-color: #64748B;
+                }
+                QPushButton#summaryAction:disabled, QPushButton.summarySecondaryAction:disabled {
+                    background-color: #F8FAFC;
                     color: #94A3B8;
-                    border-color: #CBD5E1;
+                    border-color: #E2E8F0;
+                }
+
+                /* Slider Vertical do Eixo Y do Espectrograma */
+                QSlider#specYSlider {
+                    background: transparent;
+                    border: none;
+                    width: 16px;
+                    margin: 4px 0px;
+                }
+                QSlider#specYSlider::groove:vertical {
+                    width: 3px;
+                    background: #E2E8F0;
+                    border: none;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::sub-page:vertical {
+                    background: #E2E8F0;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::add-page:vertical {
+                    background: #2563EB;
+                    border-radius: 1.5px;
+                }
+                QSlider#specYSlider::handle:vertical {
+                    background: #2563EB;
+                    border: 1px solid #1D4ED8;
+                    width: 10px;
+                    height: 10px;
+                    margin: 0 -3.5px;
+                    border-radius: 5px;
+                }
+                QSlider#specYSlider::handle:vertical:hover {
+                    background: #3B82F6;
+                    border: 1px solid #2563EB;
                 }
                 QSlider#volumeSlider::groove:horizontal { background: #CFD6DD; }
                 QSlider#volumeSlider::sub-page:horizontal { background: #3C93D8; }

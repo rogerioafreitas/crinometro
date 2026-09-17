@@ -321,7 +321,27 @@ class PlotPanel(QFrame):
             ctrl_layout.addStretch()
             self.layout.addWidget(self.spec_ctrl_bar)
 
-        self.layout.addWidget(self.canvas, 1)
+        if self.title_key == "spec":
+            self.canvas_container = QWidget()
+            canvas_layout = QHBoxLayout(self.canvas_container)
+            canvas_layout.setContentsMargins(0, 0, 0, 0)
+            canvas_layout.setSpacing(2)
+
+            self.slider_spec_y = QSlider(Qt.Orientation.Vertical)
+            self.slider_spec_y.setObjectName("specYSlider")
+            self.slider_spec_y.setFixedWidth(16)
+            self.slider_spec_y.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.slider_spec_y.setToolTip("Ajuste direto da altura/frequência máxima do eixo Y")
+            self.slider_spec_y.setRange(500, 24000)
+            self.slider_spec_y.setSingleStep(250)
+            self.slider_spec_y.setValue(10000)
+            self.slider_spec_y.valueChanged.connect(self._on_spec_y_slider_changed)
+
+            canvas_layout.addWidget(self.slider_spec_y)
+            canvas_layout.addWidget(self.canvas, 1)
+            self.layout.addWidget(self.canvas_container, 1)
+        else:
+            self.layout.addWidget(self.canvas, 1)
 
         self._set_main_visual(main)
 
@@ -443,6 +463,34 @@ class PlotPanel(QFrame):
         finally:
             self._is_applying_preset = False
 
+    def _sync_y_slider_from_ymax(self, ymax):
+        if hasattr(self, "slider_spec_y") and not getattr(self, "_is_syncing_y_slider", False):
+            self._is_syncing_y_slider = True
+            try:
+                hz_val = int(ymax * 1000.0) if getattr(self, "spec_unit", "kHz") == "kHz" else int(ymax)
+                if hz_val > self.slider_spec_y.maximum():
+                    self.slider_spec_y.setMaximum(max(hz_val, 24000))
+                if hz_val < self.slider_spec_y.minimum():
+                    self.slider_spec_y.setMinimum(min(hz_val, 500))
+                self.slider_spec_y.blockSignals(True)
+                self.slider_spec_y.setValue(hz_val)
+                self.slider_spec_y.blockSignals(False)
+            finally:
+                self._is_syncing_y_slider = False
+
+    def _on_spec_y_slider_changed(self, val):
+        if not hasattr(self, "spin_spec_ymax") or getattr(self, "_is_syncing_y_slider", False):
+            return
+        self._is_syncing_y_slider = True
+        try:
+            if getattr(self, "spec_unit", "kHz") == "kHz":
+                target_val = round(val / 1000.0, 1)
+            else:
+                target_val = float(val)
+            self.spin_spec_ymax.setValue(target_val)
+        finally:
+            self._is_syncing_y_slider = False
+
     def _on_spec_limits_changed(self):
         if not hasattr(self, "spin_spec_ymin") or not hasattr(self, "spin_spec_ymax"):
             return
@@ -462,6 +510,8 @@ class PlotPanel(QFrame):
                 self.spin_spec_ymin.blockSignals(True)
                 self.spin_spec_ymin.setValue(ymin)
                 self.spin_spec_ymin.blockSignals(False)
+
+        self._sync_y_slider_from_ymax(ymax)
 
         win = self.window()
         if hasattr(win, "apply_spectrogram_y_limits"):
@@ -538,6 +588,7 @@ class PlotPanel(QFrame):
             self._update_carrier_badge()
         self.spin_spec_ymin.setValue(ymin)
         self.spin_spec_ymax.setValue(ymax)
+        self._sync_y_slider_from_ymax(ymax)
 
     def _preset_focal_band(self):
         win = self.window()
@@ -708,49 +759,90 @@ class PlotPanel(QFrame):
                 border: none;
             }
 
-            /* Slider */
+            /* Slider Horizontal */
+            QSlider.specSlider {
+                background: transparent;
+                border: none;
+                height: 20px;
+            }
             QSlider.specSlider::groove:horizontal {
-                height: 4px;
-                background: #1E232B;
-                border: 1px solid #282E37;
-                border-radius: 2px;
+                height: 3px;
+                background: rgba(255, 255, 255, 0.12);
+                border: none;
+                border-radius: 1.5px;
             }
             QSlider.specSlider::sub-page:horizontal {
                 background: #2563EB;
-                border-radius: 2px;
+                border-radius: 1.5px;
             }
             QSlider.specSlider::handle:horizontal {
-                background: #60A5FA;
-                border: 1px solid #1D4ED8;
-                width: 12px;
-                height: 12px;
-                margin: -4px 0;
-                border-radius: 6px;
+                background: #38BDF8;
+                border: 1px solid #0284C7;
+                width: 10px;
+                height: 10px;
+                margin: -3.5px 0;
+                border-radius: 5px;
             }
             QSlider.specSlider::handle:horizontal:hover {
-                background: #93C5FD;
+                background: #7DD3FC;
+                border: 1px solid #38BDF8;
             }
 
             /* Ghost Chips de Atalhos */
             QPushButton.ghostChip {
-                background-color: transparent;
+                background-color: rgba(255, 255, 255, 0.04);
                 color: #94A3B8;
-                font-size: 10px;
+                font-size: 10.5px;
                 font-weight: 600;
-                border: 1px solid #2D3748;
-                border-radius: 3px;
-                padding: 1px 4px;
-                height: 18px;
-                min-width: 32px;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 1px 6px;
+                height: 20px;
+                min-width: 34px;
             }
             QPushButton.ghostChip:hover {
-                background-color: rgba(37, 99, 235, 0.15);
-                border-color: #3B82F6;
-                color: #60A5FA;
+                background-color: rgba(255, 255, 255, 0.10);
+                border-color: #38BDF8;
+                color: #FFFFFF;
             }
             QPushButton.ghostChip:pressed {
                 background-color: #2563EB;
+                border-color: #3B82F6;
                 color: #FFFFFF;
+            }
+
+            /* Slider Vertical do Eixo Y */
+            QSlider#specYSlider {
+                background: transparent;
+                border: none;
+                width: 16px;
+                margin: 4px 0px;
+            }
+            QSlider#specYSlider::groove:vertical {
+                width: 3px;
+                background: rgba(255, 255, 255, 0.12);
+                border: none;
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::sub-page:vertical {
+                background: rgba(255, 255, 255, 0.12);
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::add-page:vertical {
+                background: #2563EB;
+                border-radius: 1.5px;
+            }
+            QSlider#specYSlider::handle:vertical {
+                background: #38BDF8;
+                border: 1px solid #0284C7;
+                width: 10px;
+                height: 10px;
+                margin: 0 -3.5px;
+                border-radius: 5px;
+            }
+            QSlider#specYSlider::handle:vertical:hover {
+                background: #7DD3FC;
+                border: 1px solid #38BDF8;
             }
 
             /* Estilos legados para retrocompatibilidade */
@@ -829,7 +921,7 @@ class PlotPanel(QFrame):
         for tol_val in (150, 300, 500):
             btn_chip = QPushButton(f"±{tol_val}")
             btn_chip.setProperty("class", "ghostChip")
-            btn_chip.setFixedHeight(18)
+            btn_chip.setFixedHeight(20)
             btn_chip.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_chip.setToolTip(f"Ajustar tolerância para ±{tol_val} Hz")
             btn_chip.clicked.connect(lambda checked=False, v=tol_val: self.set_carrier_tolerance(v))

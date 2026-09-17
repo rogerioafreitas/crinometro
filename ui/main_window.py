@@ -424,53 +424,66 @@ class MainWindow(QMainWindow):
         summary.addLayout(summary_info, 1)
 
         actions = QHBoxLayout()
-        actions.setSpacing(5)
+        actions.setSpacing(6)
 
         self.btn_sync = QPushButton()
         self.btn_sync.setObjectName("btn_sync")
-        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=16))
+        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=15))
         self.btn_sync.setCheckable(True)
         self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_sync.setFixedSize(32, 32)
+        self.btn_sync.setFixedSize(28, 28)
         self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
         self.btn_sync.toggled.connect(self.on_sync_toggled)
         actions.addWidget(self.btn_sync)
 
         self.btn_reanalisar_main = QPushButton("Reanalisar")
-        self.btn_reanalisar_main.setObjectName("summaryAction")
-        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=15))
+        self.btn_reanalisar_main.setObjectName("summaryPrimaryAction")
+        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=14))
         self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reanalisar_main.setFixedHeight(28)
         self.btn_reanalisar_main.setToolTip("Reanalisar áudio atual com os parâmetros vigentes")
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         actions.addWidget(self.btn_reanalisar_main)
 
         self.btn_toggle_ml = QPushButton()
-        self.btn_toggle_ml.setObjectName("summaryAction")
+        self.btn_toggle_ml.setObjectName("summaryToggleMl")
         self.btn_toggle_ml.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_ml.setFixedHeight(28)
         self.btn_toggle_ml.clicked.connect(self.toggle_machine_learning)
         self._update_ml_toggle_ui()
         actions.addWidget(self.btn_toggle_ml)
 
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
-        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=15))
+        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=14))
         self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_learn_corrections.setFixedHeight(28)
         self.btn_learn_corrections.setToolTip("Treinar classificador com base nas correções manuais de pulsos")
         self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         actions.addWidget(self.btn_learn_corrections)
 
         self.btn_export_main = QPushButton("Exportar Dados")
         self.btn_export_main.setObjectName("summaryAction")
-        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=15))
+        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=14))
         self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export_main.setFixedHeight(28)
         self.btn_export_main.setToolTip("Exportar dados e relatórios em PDF ou TXT")
         self.btn_export_main.clicked.connect(self.show_export_menu)
         actions.addWidget(self.btn_export_main)
 
+        # Divisor vertical sutil entre ações analíticas e ações de layout
+        sep_layout = QFrame()
+        sep_layout.setFrameShape(QFrame.Shape.NoFrame)
+        sep_layout.setFixedWidth(1)
+        sep_layout.setFixedHeight(20)
+        sep_layout.setStyleSheet("background-color: rgba(255, 255, 255, 0.10); border: none; margin: 4px 2px;")
+        actions.addWidget(sep_layout)
+
         self.btn_plots_menu = QPushButton("Gráficos ▾" if self.lang == "pt" else "Plots ▾")
         self.btn_plots_menu.setObjectName("summaryAction")
         self.btn_plots_menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_plots_menu.setFixedHeight(28)
         self.btn_plots_menu.setToolTip("Exibir ou ocultar gráficos individuais do dashboard")
         self.btn_plots_menu.clicked.connect(self.show_plots_menu)
         actions.addWidget(self.btn_plots_menu)
@@ -478,6 +491,7 @@ class MainWindow(QMainWindow):
         self.btn_reset_layout = QPushButton("↺ Padrão" if self.lang == "pt" else "↺ Default")
         self.btn_reset_layout.setObjectName("summaryAction")
         self.btn_reset_layout.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset_layout.setFixedHeight(28)
         self.btn_reset_layout.setToolTip("Restaurar layout e posições originais de todos os gráficos")
         self.btn_reset_layout.clicked.connect(self.reset_plot_layout)
         actions.addWidget(self.btn_reset_layout)
@@ -956,7 +970,12 @@ class MainWindow(QMainWindow):
         self.panel_freq.ax.set_xlim(0.0,duration)
         if len(d.get("t_spec",[])):
             self.panel_spec.ax.set_xlim(float(d["t_spec"][0]),float(d["t_spec"][-1]))
-        if p: self.panel_spec.ax.set_ylim(float(p.get("b1_min",3200)),float(p.get("b1_max",6000)))
+        if p:
+            spec_unit = getattr(self.panel_spec, "spec_unit", "kHz")
+            if spec_unit == "kHz":
+                self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)) / 1000.0, float(p.get("b1_max", 6000)) / 1000.0)
+            else:
+                self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)), float(p.get("b1_max", 6000)))
         if len(d.get("chirps",[])):
             vals=np.asarray(d["chirps"]); self.panel_hist.ax.set_xlim(float(vals.min())-0.65,float(vals.max())+0.65)
             ymax=max(1,int(np.bincount(vals.astype(int)).max()) if vals.size else 1); self.panel_hist.ax.set_ylim(0,ymax*1.20)
@@ -1715,10 +1734,13 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "btn_toggle_ml"):
             return
         is_active = getattr(self, "use_machine_learning", False)
+        self.btn_toggle_ml.setProperty("active", "true" if is_active else "false")
+        self.btn_toggle_ml.setStyleSheet("")
+        self.btn_toggle_ml.style().unpolish(self.btn_toggle_ml)
+        self.btn_toggle_ml.style().polish(self.btn_toggle_ml)
         if is_active:
             self.btn_toggle_ml.setText("🧠 IA: Ativada")
             self.btn_toggle_ml.setToolTip("IA Ativada: filtra ruído e discrimina grilos distantes. Clique para desativar.")
-            self.btn_toggle_ml.setStyleSheet("background-color: #2563EB; color: #FFFFFF; font-weight: 600; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; min-height: 32px; max-height: 32px;")
             if hasattr(self, "lbl_model_status"):
                 status_txt = "🧠 IA: Ativada (Modelo Supervisionado)" if self.pulse_learner.is_trained() else "🧠 IA: Ativada (GMM não-supervisionado)"
                 self.lbl_model_status.setText(status_txt)
@@ -1726,7 +1748,6 @@ class MainWindow(QMainWindow):
         else:
             self.btn_toggle_ml.setText("🧠 IA: Desativada")
             self.btn_toggle_ml.setToolTip("IA Desativada: análise executada estritamente por processamento de sinal (DSP). Clique para ativar.")
-            self.btn_toggle_ml.setStyleSheet("background-color: #475569; color: #E2E8F0; font-weight: 600; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; min-height: 32px; max-height: 32px;")
             if hasattr(self, "lbl_model_status"):
                 self.lbl_model_status.setText("🧠 IA: Desativada (Modo DSP)")
                 self.lbl_model_status.setStyleSheet("color: #94A3B8;")
