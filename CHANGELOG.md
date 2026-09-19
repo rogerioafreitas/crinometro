@@ -95,7 +95,7 @@ Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre**
 
 ---
 
-## [4.1.0] - 2026-08-30
+## [4.1.0] - 2026-09-03
 
 ### Aprendizado Ativo & Bioacústica
 - **Indução de Regras Contrastivas de Poda (*Hard Negative Mining*):** Inferência de regras paramétricas a partir das exclusões manuais feitas pelo pesquisador.
@@ -105,7 +105,7 @@ Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre**
 
 ---
 
-## [4.0.0] - 2026-08-15
+## [4.0.0] - 2026-09-01
 
 ### Bioacústica Avançada & Inteligência Artificial
 - **Segregação de Grilo Focal vs. Coro Distante:** Separação bioacústica de indivíduos em primeiro plano contra ruídos e cantos de fundo.
@@ -116,45 +116,45 @@ Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre**
 
 ---
 
-## [3.5.1] - 2026-07-28
+## [3.5.1] - 2026-08-23
 - Expansão para 14 descritores acústicos invariantes a ganho.
 - Mineração regularizada de ruído de fundo para eliminação de desbalanceamento amostral.
 - Portão contextual de chilreios (*Chirp-Aware Contextual Gating*).
 
 ---
 
-## [3.5.0] - 2026-07-10
+## [3.5.0] - 2026-08-22
 - Novo launcher interativo animado com mascote vetorial e mensagens de carregamento temáticas.
 - Publicação dos primeiros manuais e guias científicos de operação em formato PDF.
 
 ---
 
-## [3.4.0] - 2026-06-20
+## [3.4.0] - 2026-08-21
 - Tolerância total para gravações sem chilreios (0 detecções permitidas para anotação manual).
 - Execução assíncrona de tarefas demoradas com animação de indicador de atividade (*loading spinner*).
 - Paleta cromática com 10 cores contrastantes para categorização visual de chilreios por quantidade de pulsos.
 
 ---
 
-## [3.3.0] - 2026-05-15
+## [3.3.0] - 2026-08-20
 - Edição manual instantânea com latência imperceptível em tempo real.
 - Execução desacoplada de rotinas de aprendizado de máquina em threads dedicadas.
 
 ---
 
-## [3.2.0] - 2026-04-02
+## [3.2.0] - 2026-08-19
 - Exportação e importação de modelos treinados e correções acumuladas em arquivos compactos `.pkl`.
 - Expansão do classificador Random Forest para 500 estimadores paralelos.
 
 ---
 
-## [3.1.0] - 2026-03-12
+## [3.1.0] - 2026-08-16
 - Atualização em alta frequência do cursor de áudio na timeline (100 Hz / 10 ms).
 - Eliminação de falhas e travamentos durante o deslocamento contínuo da reprodução.
 
 ---
 
-## [3.0.0] - 2026-02-01
+## [3.0.0] - 2026-08-15
 - Lançamento da nova identidade visual com suporte integral a Temas Escuro e Claro.
 - Sistema de análise em lote com marcação seletiva de arquivos.
 - Dicas interativas (*tooltips*) em marcadores de eventos acústicos.
