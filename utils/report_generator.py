@@ -298,8 +298,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     meta_table = Table(meta_data, colWidths=[90, 170, 95, 168])
     meta_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#E2E8F0")),
-        ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#F1F5F9")),
+        ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#64748B")),
+        ('INNERGRID', (0, 0), (-1, -1), 0.6, colors.HexColor("#94A3B8")),
         ('TOPPADDING', (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ('LEFTPADDING', (0, 0), (-1, -1), 6),
@@ -394,8 +394,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+            ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#64748B")),
+            ('INNERGRID', (0, 0), (-1, -1), 0.6, colors.HexColor("#94A3B8")),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]
@@ -472,8 +472,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor("#F8FAFC")),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#64748B")),
+            ('INNERGRID', (0, 0), (-1, -1), 0.6, colors.HexColor("#94A3B8")),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
@@ -509,8 +509,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
         cadence_table = Table(cadence_data, colWidths=[310, 213])
         cadence_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(badge_color)),
-            ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+            ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor(badge_color)),
+            ('INNERGRID', (0, 0), (-1, -1), 0.6, colors.HexColor("#94A3B8")),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
@@ -569,8 +569,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#CBD5E1")),
-                ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#64748B")),
+                ('INNERGRID', (0, 0), (-1, -1), 0.6, colors.HexColor("#94A3B8")),
                 ('TOPPADDING', (0, 0), (-1, -1), 3.5),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
             ]

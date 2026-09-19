@@ -4,7 +4,7 @@
 
 #define MyAppName "Crinômetro"
 #ifndef MyAppVersion
-#define MyAppVersion "4.3.2"
+#define MyAppVersion "4.4.0"
 #endif
 #define MyAppPublisher "rogerioafreitas"
 #define MyAppURL "https://github.com/rogerioafreitas/crinometro"

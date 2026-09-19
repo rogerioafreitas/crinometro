@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
 
         self.setup_menu()
         self.setup_ui()
+        self._update_theme_icons()
         # Início limpo: nenhum arquivo fictício é carregado automaticamente.
 
     # ---------- tema ----------
@@ -137,6 +138,25 @@ class MainWindow(QMainWindow):
         for sld in self.findChildren(QSlider):
             sld.setCursor(Qt.CursorShape.PointingHandCursor)
 
+    def _update_theme_icons(self):
+        """Atualiza ícones que dependem do tema para garantir alto contraste nos dois modos."""
+        dark = self.theme_mode == "dark"
+        icon_col = "#E4E8EC" if dark else "#334155"
+        sec_icon_col = "#FFFFFF" if dark else "#334155"
+        if hasattr(self, "btn_collapse"):
+            collapse_icon = "chevron_left" if not getattr(self, "_sidebar_collapsed", False) else "chevron_right"
+            self.btn_collapse.setIcon(make_ui_icon(collapse_icon, color=icon_col, size=18))
+        if hasattr(self, "btn_menu"):
+            self.btn_menu.setIcon(make_ui_icon("menu", color=icon_col, size=18))
+        if hasattr(self, "btn_learn_corrections"):
+            self.btn_learn_corrections.setIcon(make_ui_icon("brain", color=sec_icon_col, size=14))
+        if hasattr(self, "btn_export_main"):
+            self.btn_export_main.setIcon(make_ui_icon("export", color=sec_icon_col, size=14))
+        if hasattr(self, "btn_sync") and not self.btn_sync.isChecked():
+            self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1" if dark else "#475569", size=14))
+        if hasattr(self, "btn_play"):
+            self._update_play_icon()
+
     def set_theme_mode(self, mode):
         mode = "light" if mode == "light" else "dark"
         if self.theme_mode == mode:
@@ -145,14 +165,14 @@ class MainWindow(QMainWindow):
         self.apply_modern_styles()
         for panel in getattr(self, "all_panels", []):
             panel.apply_dark_theme()
-        if hasattr(self, "btn_collapse"):
-            collapse_icon = "chevron_left" if not getattr(self, "_sidebar_collapsed", False) else "chevron_right"
-            icon_col = "#E4E8EC" if self.theme_mode == "dark" else "#334155"
-            self.btn_collapse.setIcon(make_ui_icon(collapse_icon, color=icon_col, size=18))
-        if hasattr(self, "btn_play"):
-            self._update_play_icon()
+        self._update_theme_icons()
         if self.active_heavy_data:
-            self._refresh_all_canvases()
+            if hasattr(self, "active_filename") and self.active_filename:
+                self.render_dashboard(self.active_filename)
+            else:
+                self._refresh_all_canvases()
+        else:
+            self._draw_empty_plots()
         self.update_menu_text()
 
     def toggle_theme(self):
@@ -201,6 +221,9 @@ class MainWindow(QMainWindow):
         self.action_reset_settings = QAction(I18N[self.lang]["reset_settings"], self)
         self.action_reset_settings.triggered.connect(self.reset_to_defaults)
         self.settings_menu.addAction(self.action_reset_settings)
+        self.action_reset_learning = QAction("Resetar Aprendizado da IA", self)
+        self.action_reset_learning.triggered.connect(self.reset_learning)
+        self.settings_menu.addAction(self.action_reset_learning)
         self.view_menu = self.app_menu.addMenu("Exibir" if self.lang == "pt" else "View")
         self.action_view_wave = QAction("Forma de Onda" if self.lang == "pt" else "Waveform", self, checkable=True)
         self.action_view_wave.setChecked(True)
@@ -210,7 +233,7 @@ class MainWindow(QMainWindow):
         self.action_view_hist.setChecked(True)
         self.action_view_hist.triggered.connect(lambda c: self.toggle_plot_panel_by_key("hist", c))
         self.view_menu.addAction(self.action_view_hist)
-        self.action_view_freq = QAction("Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self, checkable=True)
+        self.action_view_freq = QAction("Espectro de Potência (PSD)" if self.lang == "pt" else "Power Spectral Density (PSD)", self, checkable=True)
         self.action_view_freq.setChecked(True)
         self.action_view_freq.triggered.connect(lambda c: self.toggle_plot_panel_by_key("freq", c))
         self.view_menu.addAction(self.action_view_freq)
@@ -256,7 +279,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "action_view_hist"):
             self.action_view_hist.setText("Histograma de Intervalos" if l == "pt" else "Interval Histogram")
         if hasattr(self, "action_view_freq"):
-            self.action_view_freq.setText("Frequência Instantânea" if l == "pt" else "Instantaneous Frequency")
+            self.action_view_freq.setText("Espectro de Potência (PSD)" if l == "pt" else "Power Spectral Density (PSD)")
         if hasattr(self, "action_view_spec"):
             self.action_view_spec.setText("Espectrograma Focal" if l == "pt" else "Focal Spectrogram")
         if hasattr(self, "action_reset_layout"):
@@ -337,13 +360,16 @@ class MainWindow(QMainWindow):
 
         # CONTEÚDO: sidebar + dashboard
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setObjectName("mainSplitter")
         self.splitter.setChildrenCollapsible(True)
         self.splitter.setOpaqueResize(True)
+        self.splitter.setHandleWidth(4)
         self.splitter.splitterMoved.connect(self._on_splitter_moved)
         root.addWidget(self.splitter, 1)
 
         self.left_panel = QFrame()
         self.left_panel.setObjectName("sidebar")
+        self.left_panel.setFrameShape(QFrame.Shape.NoFrame)
         left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(8, 12, 8, 10)
         left_layout.setSpacing(6)
@@ -440,7 +466,6 @@ class MainWindow(QMainWindow):
 
         actions_box = QWidget()
         actions_box.setObjectName("actionsBox")
-        actions_box.setStyleSheet("background: transparent; border: none;")
         actions_box.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         actions_layout = QVBoxLayout(actions_box)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -451,12 +476,12 @@ class MainWindow(QMainWindow):
         row_analysis.setContentsMargins(0, 0, 0, 0)
         row_analysis.setSpacing(6)
 
-        self.btn_reanalisar_main = QPushButton("Reanalisar")
+        self.btn_reanalisar_main = QPushButton("Analisar")
         self.btn_reanalisar_main.setObjectName("summaryPrimaryAction")
-        self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=14))
+        self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
         self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reanalisar_main.setFixedHeight(26)
-        self.btn_reanalisar_main.setToolTip("Reanalisar áudio atual com os parâmetros vigentes")
+        self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
         self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         row_analysis.addWidget(self.btn_reanalisar_main)
 
@@ -477,12 +502,12 @@ class MainWindow(QMainWindow):
         self.btn_toggle_ml.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_ml.setFixedHeight(26)
         self.btn_toggle_ml.clicked.connect(self.toggle_machine_learning)
-        self._update_ml_toggle_ui()
         row_analysis.addWidget(self.btn_toggle_ml)
 
         self.btn_learn_corrections = QPushButton(I18N[self.lang]["learn_corrections"])
         self.btn_learn_corrections.setObjectName("summaryAction")
-        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color="#FFFFFF", size=14))
+        init_sec_icon = "#FFFFFF" if self.theme_mode == "dark" else "#334155"
+        self.btn_learn_corrections.setIcon(make_ui_icon("brain", color=init_sec_icon, size=14))
         self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_learn_corrections.setFixedHeight(26)
         self.btn_learn_corrections.setToolTip("Treinar classificador com base nas correções manuais de pulsos")
@@ -499,7 +524,7 @@ class MainWindow(QMainWindow):
 
         self.btn_sync = QPushButton()
         self.btn_sync.setObjectName("btn_sync")
-        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1", size=14))
+        self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1" if self.theme_mode == "dark" else "#475569", size=14))
         self.btn_sync.setCheckable(True)
         self.btn_sync.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -510,7 +535,7 @@ class MainWindow(QMainWindow):
 
         self.btn_export_main = QPushButton("Exportar ▾")
         self.btn_export_main.setObjectName("summaryAction")
-        self.btn_export_main.setIcon(make_ui_icon("export", color="#FFFFFF", size=14))
+        self.btn_export_main.setIcon(make_ui_icon("export", color=init_sec_icon, size=14))
         self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_export_main.setFixedHeight(26)
         self.btn_export_main.setToolTip("Exportar dados e relatórios em PDF ou TXT")
@@ -541,9 +566,8 @@ class MainWindow(QMainWindow):
         self.lbl_total.setObjectName("metricValue")
         self.lbl_metric_sub = QLabel("Moda: —   |   Média: —")
         self.lbl_metric_sub.setObjectName("metricSub")
-        self.lbl_model_status = QLabel("🧠 Modelo: não treinado")
+        self.lbl_model_status = QLabel("")
         self.lbl_model_status.setObjectName("metricSub")
-        self.lbl_model_status.setStyleSheet("color: #F97316;")
         for _label in (self.lbl_metric_title, self.lbl_total, self.lbl_metric_sub, self.lbl_model_status):
             _label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             _label.setAutoFillBackground(False)
@@ -604,6 +628,7 @@ class MainWindow(QMainWindow):
             panel.canvas.mpl_connect("button_press_event", self.on_press)
             panel.canvas.mpl_connect("button_release_event", self.on_release)
             panel.canvas.mpl_connect("motion_notify_event", self.on_motion)
+            panel.canvas.mpl_connect("axes_leave_event", self.on_axes_leave)
 
         # CONTROLES DE REPRODUÇÃO — velocidade à esquerda, play no centro, volume à direita
         self.playback_card = QFrame()
@@ -698,6 +723,9 @@ class MainWindow(QMainWindow):
         self.slider.setRange(0, 0)
         self.slider.setVisible(False)
         self._on_playback_state(self.player.playbackState())
+        
+        # Sincroniza labels e botões de IA agora que todos estão criados
+        self._update_ml_toggle_ui()
 
     def _transport_button(self, text, tooltip, play=False, checkable=False):
         b = QPushButton(text)
@@ -727,10 +755,9 @@ class MainWindow(QMainWindow):
     def _rebuild_panel_layout(self):
         """Reposiciona os cards nos splitters sem disparar renderizações intermediárias.
         Isso evita reentrância/lock quando a sincronização X está ativa."""
+        # Apenas removemos do layout, sem setParent(None) que causa lags massivos no SO
         while self.main_host_layout.count():
             item = self.main_host_layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
 
         if self.main_panel is not None:
             self.main_host_layout.addWidget(self.main_panel)
@@ -907,7 +934,6 @@ class MainWindow(QMainWindow):
         panel.show()
         self._rebuild_panel_layout()
         self._update_plot_visibility_state()
-        self._apply_plot_geometry()
         self._schedule_focus_update()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
@@ -1002,7 +1028,7 @@ class MainWindow(QMainWindow):
             ("spec", "Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self.panel_spec),
             ("hist", "Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self.panel_hist),
             ("wave", "Forma de Onda" if self.lang == "pt" else "Waveform", self.panel_wave),
-            ("freq", "Frequência Instantânea" if self.lang == "pt" else "Instantaneous Frequency", self.panel_freq),
+            ("freq", "Espectro de Potência (PSD)" if self.lang == "pt" else "Power Spectral Density (PSD)", self.panel_freq),
         ]
         for key, label, panel in panels_info:
             act = menu.addAction(label)
@@ -1028,15 +1054,31 @@ class MainWindow(QMainWindow):
             return
         d=self.active_heavy_data; duration=max(0.001,float(d.get("duration",0.0))); p=d.get("params",{})
         self.panel_wave.ax.set_xlim(0.0,duration); self.panel_wave.ax.set_ylim(-1.05,1.05)
-        self.panel_freq.ax.set_xlim(0.0,duration)
         if len(d.get("t_spec",[])):
             self.panel_spec.ax.set_xlim(float(d["t_spec"][0]),float(d["t_spec"][-1]))
         if p:
             spec_unit = getattr(self.panel_spec, "spec_unit", "kHz")
+            rate = float(d.get("rate", 44100.0))
+            nyq = rate / 2.0
+            ymin_f = 0.0
+            ymax_f = nyq
+                
             if spec_unit == "kHz":
-                self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)) / 1000.0, float(p.get("b1_max", 6000)) / 1000.0)
+                self.panel_spec.ax.set_ylim(ymin_f / 1000.0, ymax_f / 1000.0)
             else:
-                self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)), float(p.get("b1_max", 6000)))
+                self.panel_spec.ax.set_ylim(ymin_f, ymax_f)
+                
+            if hasattr(self.panel_spec, "spin_spec_ymin") and hasattr(self.panel_spec, "spin_spec_ymax"):
+                self.panel_spec.spin_spec_ymin.blockSignals(True)
+                self.panel_spec.spin_spec_ymax.blockSignals(True)
+                self.panel_spec.spin_spec_ymin.setValue(ymin_f / 1000.0 if spec_unit == "kHz" else ymin_f)
+                self.panel_spec.spin_spec_ymax.setValue(ymax_f / 1000.0 if spec_unit == "kHz" else ymax_f)
+                self.panel_spec.spin_spec_ymin.blockSignals(False)
+                self.panel_spec.spin_spec_ymax.blockSignals(False)
+            
+            # Garante que o preset visual "Total" esteja marcado, se houver painel
+            if hasattr(self.panel_spec, "btn_spec_preset_full"):
+                self.panel_spec._set_active_preset(self.panel_spec.btn_spec_preset_full)
         if len(d.get("chirps",[])):
             vals=np.asarray(d["chirps"]); self.panel_hist.ax.set_xlim(float(vals.min())-0.65,float(vals.max())+0.65)
             ymax=max(1,int(np.bincount(vals.astype(int)).max()) if vals.size else 1); self.panel_hist.ax.set_ylim(0,ymax*1.20)
@@ -1065,8 +1107,11 @@ class MainWindow(QMainWindow):
                 if panel is self.panel_hist:
                     left = max(0.06, min(0.12, 50.0 / w))
                     bottom = max(0.12, min(0.20, 50.0 / h))
-                else:
-                    left = max(0.065, min(0.12, 54.0 / w))
+                elif panel in (self.panel_spec, self.panel_freq):
+                    left = max(0.08, min(0.15, 70.0 / w))
+                    bottom = max(0.10, min(0.18, 44.0 / h))
+                else:  # panel_wave
+                    left = max(0.07, min(0.13, 60.0 / w))
                     bottom = max(0.10, min(0.18, 44.0 / h))
                 font_size = 8.5
             else:
@@ -1075,19 +1120,13 @@ class MainWindow(QMainWindow):
                 right = 1.0 - max(0.02, min(0.05, 10.0 / w))
 
                 if panel is self.panel_hist:
-                    left = max(0.11, min(0.20, 38.0 / w))
+                    left = max(0.11, min(0.20, 40.0 / w))
                     bottom = max(0.24, min(0.40, 48.0 / h))
-                elif panel is self.panel_freq:
-                    # Frequência tem números de 4 dígitos na vertical (ex: 6000) + 'Hz'
-                    left = max(0.16, min(0.28, 54.0 / w))
-                    bottom = max(0.22, min(0.35, 38.0 / h))
-                elif panel is self.panel_spec:
-                    # Espectrograma na lateral tem slider Y e números de escala
-                    left = max(0.16, min(0.28, 52.0 / w))
+                elif panel in (self.panel_freq, self.panel_spec):
+                    left = max(0.18, min(0.30, 64.0 / w))
                     bottom = max(0.22, min(0.35, 38.0 / h))
                 else:  # panel_wave
-                    # Onda tem '-1', '0', '1' + 'Amplitude'
-                    left = max(0.14, min(0.24, 46.0 / w))
+                    left = max(0.14, min(0.24, 48.0 / w))
                     bottom = max(0.22, min(0.35, 38.0 / h))
 
                 font_size = 6.8 if (w < 260 or h < 130) else 7.5
@@ -1101,6 +1140,7 @@ class MainWindow(QMainWindow):
                 panel.ax.xaxis.label.set_size(font_size + 0.5)
             if hasattr(panel.ax, "yaxis") and panel.ax.yaxis.label is not None:
                 panel.ax.yaxis.label.set_size(font_size + 0.5)
+                panel.ax.yaxis.labelpad = 3.0
 
             panel.canvas.updateGeometry()
 
@@ -1124,9 +1164,9 @@ class MainWindow(QMainWindow):
         self.panel_hist.ax.set_ylabel("")
 
         self.panel_freq.ax.set_xlim(0.0, 10.0)
-        self.panel_freq.ax.set_ylim(3200, 6000)
-        self.panel_freq.ax.set_xlabel("seconds")
-        self.panel_freq.ax.set_ylabel("Hz")
+        self.panel_freq.ax.set_ylim(-120, 0)
+        self.panel_freq.ax.set_xlabel("Frequency (kHz)")
+        self.panel_freq.ax.set_ylabel("Power (dB/Hz)")
 
         self.panel_spec.ax.set_xlim(0.0, 10.0)
         self.panel_spec.ax.set_ylim(3200, 6000)
@@ -1148,7 +1188,6 @@ class MainWindow(QMainWindow):
                 self.stack_splitter.updateGeometry()
             elif hasattr(self, "stack_layout"):
                 self.stack_layout.activate()
-            QApplication.processEvents()
             self._fit_all_plots_to_layout()
             self._apply_plot_geometry()
             for panel in self.all_panels:
@@ -1300,6 +1339,7 @@ class MainWindow(QMainWindow):
 
         spinner = ButtonSpinner(self.btn_analyze_selected, "Analisando...")
         spinner.start()
+        self._batch_spinner = spinner
 
         for fname in checked_files:
             w = self._get_item_widget_by_name(fname)
@@ -1313,21 +1353,31 @@ class MainWindow(QMainWindow):
         def _task():
             success_count = 0
             errors = []
-            results = {}
-            for fname in checked_files:
-                # Verifica cancelamento cooperativo entre arquivos
+            
+            for i, fname in enumerate(checked_files):
                 if worker.abort_requested:
                     break
+                
                 if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
                     continue
+                
                 try:
                     fpath = self.loaded_files[fname]
+                    # Analysis runs sequentially. It takes ~1s per file, leaving GIL frequently.
                     res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=self.pulse_learner)
-                    results[fname] = res
-                    success_count += 1
+                    
+                    # Emitir resultado imediatamente para a UI thread processar
+                    if not worker.abort_requested:
+                        worker.result_ready_signal.emit(fname, res)
+                        success_count += 1
+                        
                 except Exception as exc:
                     errors.append(f"{fname}: {exc}")
-            return success_count, errors, results
+                    
+                if not worker.abort_requested:
+                    worker.progress_signal.emit(i + 1, len(checked_files))
+
+            return success_count, errors
 
         worker = GenericWorker(_task)
         self._batch_worker = worker
@@ -1345,19 +1395,26 @@ class MainWindow(QMainWindow):
                 w = self._get_item_widget_by_name(fname)
                 if w and hasattr(w, "set_loading"):
                     w.set_loading(False)
+                    
+        def _on_single_result(fname, res):
+            # Chamado no fluxo da main thread, processa as arrays um arquivo por vez
+            self._apply_analysis_results(fname, res, render=(fname == curr_name))
+            
+            # Atualiza o estado da UI para este item especifico
+            w = self._get_item_widget_by_name(fname)
+            if w and hasattr(w, "set_loading"):
+                w.set_loading(False)
 
         def _on_finished(payload):
             _cleanup_batch()
-            success_count, errors, results = payload
-            for fname, res in results.items():
-                self._apply_analysis_results(fname, res, render=(fname == curr_name))
+            success_count, errors = payload
 
             if curr_name in self.analysis_cache:
                 self.btn_reanalisar_main.setText("Reanalisar")
                 self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
                 self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
 
-            if curr_name not in checked_files and checked_files and checked_files[0] in results:
+            if curr_name not in checked_files and checked_files and checked_files[0] in self.analysis_cache:
                 self.select_file_by_name(checked_files[0])
 
             spinner.stop(None, "⚡ Analisar Selecionados")
@@ -1374,7 +1431,13 @@ class MainWindow(QMainWindow):
             spinner.stop(None, "⚡ Analisar Selecionados")
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
+        def _on_progress(current, total):
+            if hasattr(self, "_batch_spinner") and getattr(self._batch_spinner, "button", None) is not None:
+                self._batch_spinner.button.setText(f"Analisando... ({current}/{total})")
+
         worker.finished_signal.connect(_on_finished)
+        worker.result_ready_signal.connect(_on_single_result)
+        worker.progress_signal.connect(_on_progress)
         worker.error_signal.connect(_on_error)
         worker.start()
 
@@ -1645,6 +1708,40 @@ class MainWindow(QMainWindow):
                 f"Falha ao carregar arquivo de treinamento:\n{exc}"
             )
 
+    def reset_learning(self):
+        """Reseta completamente o modelo de IA e os dados de treinamento."""
+        reply = QMessageBox.question(
+            self,
+            "Resetar Aprendizado da IA?",
+            "Isso apagará todo o histórico de treinamento manual da IA e restaurará o modelo não-supervisionado base (DSP).\n\nDeseja continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if hasattr(self, 'pulse_learner') and self.pulse_learner:
+                    self.pulse_learner.reset()
+                
+                # Desativa a IA após o reset para forçar o usuário a trabalhar com DSP puro
+                self.use_machine_learning = False
+                self.save_settings(silent=True)
+                self._update_ml_toggle_ui()
+                
+                
+                QMessageBox.information(
+                    self, 
+                    "Reset Concluído", 
+                    "O aprendizado de máquina foi completamente zerado. O algoritmo retornou ao estado original DSP."
+                )
+                
+                # Se houver áudio carregado, força reanálise para aplicar o DSP limpo
+                curr = self.list_widget.currentItem()
+                curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+                if curr_name and curr_name in self.loaded_files:
+                    self.run_analysis(curr_name, self.algo_params, render=True)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao resetar a IA:\n{e}")
+
     def reset_to_defaults(self):
         """Restaura todos os parâmetros para os valores padrão de fábrica,
         apaga o modelo de aprendizado treinado e limpa todas as correções manuais.
@@ -1694,10 +1791,8 @@ class MainWindow(QMainWindow):
         else:
             self.analysis_cache.clear()
 
-        # 6. Atualiza label de status do modelo se existir
         if hasattr(self, 'lbl_model_status'):
-            self.lbl_model_status.setText("🧠 Modelo: não treinado")
-            self.lbl_model_status.setStyleSheet("color: #F97316;")
+            self._update_ml_toggle_ui()
 
         QMessageBox.information(
             self,
@@ -1763,15 +1858,23 @@ class MainWindow(QMainWindow):
                     self.theme_mode = theme
                 corrections = data.get("corrections_by_file")
                 if isinstance(corrections, dict):
-                    self.corrections_by_file = {
-                        str(name): [int(p) for p in peaks]
-                        for name, peaks in corrections.items()
-                        if isinstance(peaks, list)
-                    }
+                    self.corrections_by_file = {}
+                    for name, data_val in corrections.items():
+                        if isinstance(data_val, list):
+                            # Old format: just a list of peak indices
+                            # Or new format if it's a list of dicts
+                            parsed = []
+                            for p in data_val:
+                                if isinstance(p, dict) and "idx" in p:
+                                    parsed.append(p)
+                                else:
+                                    try:
+                                        parsed.append(int(p))
+                                    except (TypeError, ValueError):
+                                        pass
+                            self.corrections_by_file[str(name)] = parsed
                 if "pulse_learner" in data:
                     self.pulse_learner.load_from_config()
-                if "use_machine_learning" in data:
-                    self.use_machine_learning = bool(data["use_machine_learning"])
                 if "last_audio_dir" in data and isinstance(data["last_audio_dir"], str) and os.path.isdir(data["last_audio_dir"]):
                     self.last_audio_dir = data["last_audio_dir"]
         except Exception as e:
@@ -1790,7 +1893,6 @@ class MainWindow(QMainWindow):
             config["report_params"] = self.report_params
             config["theme"] = self.theme_mode
             config["corrections_by_file"] = self.corrections_by_file
-            config["use_machine_learning"] = getattr(self, "use_machine_learning", True)
             config["last_audio_dir"] = getattr(self, "last_audio_dir", "")
             if not "pulse_learner" in config:
                 config["pulse_learner"] = None
@@ -1807,7 +1909,16 @@ class MainWindow(QMainWindow):
 
     def toggle_machine_learning(self):
         """Ativa ou desativa a filtragem e classificação por Inteligência Artificial sem forçar reanálise imediata."""
-        self.use_machine_learning = not getattr(self, "use_machine_learning", True)
+        is_active = not getattr(self, "use_machine_learning", False)
+        if is_active:
+            QMessageBox.warning(
+                self, 
+                "Aviso de IA", 
+                "A Inteligência Artificial pode cometer erros!\n\n"
+                "Lembre-se de que correções mal feitas pelo usuário podem 'quebrar' as análises da IA e piorar os resultados.\n\n"
+                "Recomendação: Se a IA começar a apresentar resultados quebrados ou irregulares, utilize o botão 'Resetar Aprendizado' no menu Opções (Configurações) para restaurar os valores originais do DSP."
+            )
+        self.use_machine_learning = is_active
         self.save_settings(silent=True)
         self._update_ml_toggle_ui()
 
@@ -1850,6 +1961,18 @@ class MainWindow(QMainWindow):
         loading_text = "Analisando..." if is_first_time else "Reanalisando..."
         spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
         spinner.start()
+        self._reanalyze_spinner = spinner
+        
+        self._saved_viewport = None
+        if not is_first_time and getattr(self, "panel_spec", None):
+            self._saved_viewport = {
+                "wave_xlim": self.panel_wave.ax.get_xlim(),
+                "wave_ylim": self.panel_wave.ax.get_ylim(),
+                "freq_xlim": self.panel_freq.ax.get_xlim(),
+                "freq_ylim": self.panel_freq.ax.get_ylim(),
+                "spec_xlim": self.panel_spec.ax.get_xlim(),
+                "spec_ylim": self.panel_spec.ax.get_ylim(),
+            }
 
         item_widget = self._get_item_widget_by_name(filename)
         if item_widget and hasattr(item_widget, "set_loading"):
@@ -1875,7 +1998,17 @@ class MainWindow(QMainWindow):
             effective_params = {**self.algo_params, **self._adaptive_overrides}
             file_path = self.loaded_files[filename]
             learner = self.pulse_learner if getattr(self, "use_machine_learning", True) else None
-            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner)
+            
+            cached_spec = None
+            if self.active_heavy_data and self.active_filename == filename:
+                cached_spec = {
+                    "f_spec": self.active_heavy_data.get("f_spec"),
+                    "t_spec": self.active_heavy_data.get("t_spec"),
+                    "Sxx_db": self.active_heavy_data.get("Sxx_db"),
+                    "dom_freqs": self.active_heavy_data.get("dom_freqs"),
+                }
+                
+            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner, cached_spec=cached_spec)
             return res
 
         worker = GenericWorker(_task)
@@ -1926,15 +2059,40 @@ class MainWindow(QMainWindow):
             if worker is not None and worker.isRunning():
                 worker.abort()
                 aborted = True
+        
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_abort_batch"):
             self.btn_abort_batch.setVisible(False)
+            
+        if getattr(self, "_reanalyze_spinner", None) is not None:
+            is_first_time = (getattr(self, "active_filename", None) not in self.analysis_cache)
+            restore_text = "Analisar" if is_first_time else "Reanalisar"
+            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
+            self._reanalyze_spinner.stop(restore_icon, restore_text)
+            self._reanalyze_spinner = None
+            
+        if getattr(self, "_batch_spinner", None) is not None:
+            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner = None
+
         if aborted:
             if hasattr(self, "btn_reanalisar_main"):
                 self.btn_reanalisar_main.setEnabled(True)
             if hasattr(self, "btn_analyze_selected"):
                 self.btn_analyze_selected.setEnabled(True)
+                
+            curr_name = getattr(self, 'active_filename', None)
+            if curr_name:
+                item_widget = self._get_item_widget_by_name(curr_name)
+                if item_widget and hasattr(item_widget, "set_loading"):
+                    item_widget.set_loading(False)
+            
+            checked_files = self.get_checked_files() if hasattr(self, "get_checked_files") else []
+            for fname in checked_files:
+                w = self._get_item_widget_by_name(fname)
+                if w and hasattr(w, "set_loading"):
+                    w.set_loading(False)
 
     def _apply_analysis_results(self, filename, results, render=True, validate_all=False, params=None):
         if params is None:
@@ -1945,6 +2103,8 @@ class MainWindow(QMainWindow):
         discarded_peaks_reasons = results[16] if len(results) > 16 else {}
         valid_peaks_stage2 = results[17] if len(results) > 17 else list(peaks)
         peak_dur_dict = results[18] if len(results) > 18 else {}
+        f_psd = results[19] if len(results) > 19 else np.array([])
+        Pxx_db = results[20] if len(results) > 20 else np.array([])
 
         # Converte dados volumosos de ponto flutuante para float32 (reduz 50% do consumo de RAM)
         if isinstance(data, np.ndarray) and data.dtype != np.float32:
@@ -1961,12 +2121,29 @@ class MainWindow(QMainWindow):
 
         stored_corrections = self.corrections_by_file.get(filename)
         effective_params = {**params, **self._adaptive_overrides}
+        
+        self.pulse_metadata = {}
 
         # Aplica estritamente correções específicas deste arquivo
         if stored_corrections is not None:
-            self.peaks_user_verified = list(stored_corrections)
-            peaks_added = sorted(set(stored_corrections) - set(self.peaks_detected))
-            peaks_removed = sorted(set(self.peaks_detected) - set(stored_corrections))
+            extracted_peaks = []
+            for item in stored_corrections:
+                if isinstance(item, dict):
+                    extracted_peaks.append(item["idx"])
+                    self.pulse_metadata[item["idx"]] = item
+                else:
+                    extracted_peaks.append(int(item))
+            self.peaks_user_verified = extracted_peaks
+            peaks_added = sorted(set(extracted_peaks) - set(self.peaks_detected))
+            peaks_removed = sorted(set(self.peaks_detected) - set(extracted_peaks))
+            
+            if peaks_removed:
+                # Se o algoritmo ou modelo ML ainda achou que o pulso era válido, 
+                # mas o usuário removeu explicitamente, force-o a ser exibido como ruído (distant_peak)
+                distant_peaks = sorted(list(set(distant_peaks) | set(peaks_removed)))
+                for pk in peaks_removed:
+                    discarded_peaks_reasons[int(pk)] = "Removido manualmente pelo usuário"
+            
             if peaks_added or peaks_removed:
                 effective_peaks = np.asarray(
                     sorted(set(self.peaks_detected) | set(peaks_added) - set(peaks_removed)),
@@ -1979,10 +2156,6 @@ class MainWindow(QMainWindow):
                         )
                     except Exception:
                         pass
-        elif validate_all:
-            # Primeiro processamento ou validação deste arquivo: picos detectados tornam-se verificados
-            self.peaks_user_verified = list(self.peaks_detected)
-            self.corrections_by_file[filename] = list(self.peaks_user_verified)
         else:
             self.peaks_user_verified = list(self.peaks_detected)
 
@@ -1998,20 +2171,65 @@ class MainWindow(QMainWindow):
             "discarded_peaks_reasons": discarded_peaks_reasons,
             "valid_peaks_stage2": list(valid_peaks_stage2),
             "peak_dur_dict": peak_dur_dict,
+            "f_psd": f_psd,
+            "Pxx_db": Pxx_db,
         }
         self.analysis_cache[filename] = heavy_data
-        self.active_heavy_data = heavy_data
-        self.active_filename = filename
-
-        # Sincroniza informações da frequência portadora e tolerância nos painéis
-        tol_val = float(params.get("freq_tolerance_hz", 300.0))
-        if hasattr(self, "panel_spec"):
-            self.panel_spec.set_carrier_info(carrier_freq, tol_val)
-        if hasattr(self, "panel_freq"):
-            self.panel_freq.set_carrier_info(carrier_freq, tol_val)
-
+        
         if render:
+            # Captura o zoom atual antes que o render_dashboard o destrua
+            has_active = hasattr(self, "active_filename") and self.active_filename == filename
+            if has_active and hasattr(self, "panel_wave") and hasattr(self, "panel_spec"):
+                current_vp = {
+                    "wave_xlim": self.panel_wave.ax.get_xlim(),
+                    "wave_ylim": self.panel_wave.ax.get_ylim(),
+                    "freq_xlim": self.panel_freq.ax.get_xlim(),
+                    "freq_ylim": self.panel_freq.ax.get_ylim(),
+                    "spec_xlim": self.panel_spec.ax.get_xlim(),
+                    "spec_ylim": self.panel_spec.ax.get_ylim(),
+                }
+            else:
+                current_vp = None
+
+            self.active_heavy_data = heavy_data
+            self.active_filename = filename
+
+            # Sincroniza informações da frequência portadora e tolerância nos painéis
+            tol_val = float(params.get("freq_tolerance_hz", 300.0))
+            if hasattr(self, "panel_spec"):
+                self.panel_spec.set_carrier_info(carrier_freq, tol_val)
+            if hasattr(self, "panel_freq"):
+                self.panel_freq.set_carrier_info(carrier_freq, tol_val)
+
             self.render_dashboard(filename)
+            
+            # Restaurar a viewport anterior
+            vp = current_vp or getattr(self, "_saved_viewport", None)
+            if vp is not None and has_active:
+                dur = heavy_data.get("duration", 0.0)
+                
+                # wave
+                x0, x1 = vp.get("wave_xlim", (0, dur))
+                if x1 <= x0: x1 = x0 + 1.0
+                self.panel_wave.ax.set_xlim(x0, x1)
+                
+                # freq não precisa restaurar limites X, pois agora é um espectro estático (PSD)
+                
+                # spec
+                sx0, sx1 = vp.get("spec_xlim", (x0, x1))
+                if sx1 <= sx0: sx1 = sx0 + 1.0
+                self.panel_spec.ax.set_xlim(sx0, sx1)
+                if not getattr(self.panel_spec, "_y_locked", False):
+                    self.panel_spec.ax.set_ylim(vp.get("spec_ylim", (0, 10)))
+                    
+                # redraw
+                for p in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                    p.canvas.draw()  # Must be synchronous draw() before capturing backgrounds
+                # É crucial recapturar o background porque o render_dashboard capturou o fundo no zoom 0-dur
+                # O usuário precisa do background com o zoom exato para poder fazer pan suavemente
+                self.capture_backgrounds()
+                
+            self._saved_viewport = None
 
 
 
@@ -2040,10 +2258,7 @@ class MainWindow(QMainWindow):
         self.lbl_summary_meta.setToolTip(f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}")
         self.lbl_total.setText(str(len(chirps)))
         self.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
-        model_status_text = "🧠 Modelo: ✓ treinado" if self.pulse_learner.is_trained() else "🧠 Modelo: não treinado"
-        model_status_color = "#10B981" if self.pulse_learner.is_trained() else "#F97316"
-        self.lbl_model_status.setText(model_status_text)
-        self.lbl_model_status.setStyleSheet(f"color: {model_status_color};")
+        self._update_ml_toggle_ui()
 
         paleta_cores = ['#03A9F4', '#4CAF50', '#FF5252', '#E040FB', '#FFAB40', '#00E676', '#FF4081', '#FFEA00']
         # Visual solicitado: verde/orange/magenta como categorias dominantes.
@@ -2076,77 +2291,56 @@ class MainWindow(QMainWindow):
         self.line_engine.render_high_detail()
         decimation = max(1, len(env) // 5000)
         ax1.plot(time_sec[::decimation], env[::decimation], color='#6E747C', alpha=0.55, linewidth=0.8, zorder=2)
-        for qnt, pks in sorted(picos_por_contagem.items()):
-            pks_t = np.array(pks) / rate
-            ax1.plot(pks_t, env[pks], 'x', color=marker_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=7)
-        distant_pks = d.get("distant_peaks", [])
-        if distant_pks:
-            valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
-            if valid_d:
-                ax1.plot(np.array(valid_d) / rate, env[valid_d], 'x', color='#64748B', markersize=5.5, markeredgewidth=1.1, alpha=0.55, zorder=5)
 
-        self._refresh_user_peak_markers()
         ax1.set_xlabel("seconds")
         ax1.set_ylabel("Amplitude")
         ax1.set_ylim(-1.05, 1.05)
 
         # HIST — fixo, sem drag/zoom, com índice de cores/pulsos no rodapé
-        ax2 = self.panel_hist.ax
-        ax2.clear()
-        unique_pulses, counts = np.unique(chirps, return_counts=True)
-        hist_palette = pulse_colors
-        bars = ax2.bar(
-            unique_pulses, counts,
-            color=[hist_palette.get(int(x), extra_pulse_color) for x in unique_pulses],
-            edgecolor='none', linewidth=0, width=0.68, zorder=3
-        )
-        ax2.grid(axis='y', color='#292D32' if self.theme_mode == 'dark' else '#DDE2E7', linewidth=0.6, alpha=0.8, zorder=0)
-        max_count = int(max(counts)) if len(counts) else 1
-        for bar in bars:
-            ax2.text(bar.get_x()+bar.get_width()/2, bar.get_height()+max_count*0.025, str(int(bar.get_height())),
-                     ha='center', va='bottom', color='#DDE1E5' if self.theme_mode == 'dark' else '#4E5660', fontsize=8.5)
-        ax2.set_xticks(unique_pulses)
-        ax2.set_xlabel("")
-        ax2.set_ylabel("")
-        ax2.tick_params(axis='x', labelsize=8.5, colors='#A9ADB5' if self.theme_mode == 'dark' else '#59616B', length=0)
-        ax2.tick_params(axis='y', labelsize=8, colors='#A9ADB5' if self.theme_mode == 'dark' else '#59616B')
-        ax2.set_ylim(0, max_count * 1.20)
-        legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
-                          for x in unique_pulses]
-        if legend_handles:
-            hist_w = self.panel_hist.width()
-            leg_ncol = min(3 if hist_w < 340 else 4, len(legend_handles))
-            leg_fs = 7.0 if hist_w < 280 else (7.5 if hist_w < 340 else 8.0)
-            leg = ax2.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.11),
-                             ncol=leg_ncol, frameon=False, fontsize=leg_fs, handlelength=0.9,
-                             columnspacing=0.5, borderaxespad=0.0)
-            leg.get_frame().set_facecolor((0, 0, 0, 0))
-            leg.get_frame().set_alpha(0.0)
-            leg.get_frame().set_edgecolor((0, 0, 0, 0))
-            leg.get_frame().set_linewidth(0)
-            for text in leg.get_texts():
-                text.set_color('#A9ADB5' if self.theme_mode == 'dark' else '#59616B')
+        self._refresh_histogram()
 
-        # FREQ
+        # FREQ (PSD)
         ax3 = self.panel_freq.ax
         ax3.clear()
-        ax3.set_ylabel("Hz")
-        ax3.set_xlabel("seconds")
-        ax3.set_xlim(t_spec[0], t_spec[-1])
-        p_freq = p or {}
-        ax3.set_ylim(float(p_freq.get("b1_min", 3200)), float(p_freq.get("b1_max", 6000)))
-        self.freq_engine = HighPerfFreqEngine(ax3, t_spec, dom_freqs, update_bg_callback=self.capture_backgrounds)
-        self.freq_engine.render_high_detail()
-        for qnt, pks in sorted(picos_por_contagem.items()):
-            pks_t = np.array(pks) / rate
-            freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
-            ax3.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4, zorder=7)
-        if distant_pks:
-            valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
-            if valid_d:
-                d_times = np.array(valid_d) / rate
-                d_freqs = np.interp(d_times, t_spec, dom_freqs)
-                ax3.plot(d_times, d_freqs, 'x', color='#64748B', markersize=5, markeredgewidth=1.1, alpha=0.55, zorder=5)
+        
+        f_psd = self.active_heavy_data.get("f_psd", [])
+        Pxx_db = self.active_heavy_data.get("Pxx_db", [])
+        unit = getattr(self.panel_spec, "spec_unit", "kHz")
+        scale = 1000.0 if unit == "kHz" else 1.0
+        
+        ax3.set_ylabel("Power (dB/Hz)")
+        ax3.set_xlabel(f"Frequency ({unit})")
+        
+        if len(f_psd) > 0 and len(Pxx_db) > 0:
+            ax3.plot(f_psd / scale, Pxx_db, color='#8B5CF6', linewidth=1.5, zorder=2)
+            
+            # Highlight carrier peak
+            carrier_freq_hz = self.active_heavy_data.get("carrier_freq", 0.0)
+            if carrier_freq_hz > 0:
+                # Encontra o índice no PSD mais próximo à portadora
+                idx_c = np.argmin(np.abs(f_psd - carrier_freq_hz))
+                carrier_x = f_psd[idx_c] / scale
+                carrier_y = Pxx_db[idx_c]
+            else:
+                idx_max = np.argmax(Pxx_db)
+                carrier_x = f_psd[idx_max] / scale
+                carrier_y = Pxx_db[idx_max]
+                
+            ax3.plot(carrier_x, carrier_y, 'ro', markersize=6, zorder=3)
+            ax3.annotate(f"{carrier_x:.2f} {unit}", 
+                         xy=(carrier_x, carrier_y), xytext=(5, 5),
+                         textcoords='offset points', color='white',
+                         fontsize=9, zorder=4)
+                         
+            # Limite superior para focar na banda acústica relevante de insetos (ou Nyquist)
+            rate = self.active_heavy_data.get("rate", 44100)
+            max_khz = min(15.0, rate / 2000.0)
+            ax3.set_xlim(0.0, max_khz if unit == "kHz" else max_khz * 1000.0)
+            
+            y_range = np.ptp(Pxx_db) if len(Pxx_db) > 0 else 10
+            ax3.set_ylim(np.min(Pxx_db) - y_range*0.1, np.max(Pxx_db) + y_range*0.1)
+
+        self.freq_engine = None
 
         # SPEC
         ax4 = self.panel_spec.ax
@@ -2161,20 +2355,10 @@ class MainWindow(QMainWindow):
         ax4.set_ylim(ymin, ymax)
         self.spectro_engine = HighPerfSpectrogramEngine(ax4, Sxx_db, t_spec, f_spec, update_bg_callback=self.capture_backgrounds, unit=unit)
         self.spectro_engine.render_high_detail()
-        for qnt, pks in sorted(picos_por_contagem.items()):
-            pks_t = np.array(pks) / rate
-            freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs) / scale
-            ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
-        if distant_pks:
-            valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
-            if valid_d:
-                d_times = np.array(valid_d) / rate
-                d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
-                ax4.plot(d_times, d_freqs, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
 
         # Atualiza mapa de eixos independente da posição atual.
         self.cursor_lines = []
-        for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+        for panel in [self.panel_wave, self.panel_spec]:
             self.cursor_lines.append(panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9))
 
         for panel in self.all_panels:
@@ -2198,6 +2382,7 @@ class MainWindow(QMainWindow):
             markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
         self.timeline.set_data(d["duration"], markers)
         self.timeline.set_position(self.player.position() / 1000.0)
+        self._refresh_user_peak_markers()
         self._update_pulse_hover_data()
         self.capture_backgrounds()
         if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
@@ -2300,6 +2485,10 @@ class MainWindow(QMainWindow):
         raw_peaks = d.get("peaks_detected", None)
         peak_dur_dict = d.get("peak_dur_dict", None)
 
+        peaks_detected_set = set(int(p) for p in d.get("peaks_detected", []))
+        peaks_verified_set = set(int(p) for p in d.get("peaks_user_verified", []))
+        peaks_added = sorted(peaks_verified_set - peaks_detected_set)
+        
         peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons = (
             CricketAnalyzer.reevaluate_carrier_tolerance(
                 valid_peaks_stage2, carrier_freq, new_tol,
@@ -2318,6 +2507,12 @@ class MainWindow(QMainWindow):
         d["discarded_peaks_reasons"] = discarded_reasons
         if "params" in d:
             d["params"]["freq_tolerance_hz"] = new_tol
+            
+        cf = d.get("carrier_freq", 0.0)
+        if hasattr(self, "panel_spec"):
+            self.panel_spec.set_carrier_info(cf, new_tol)
+        if hasattr(self, "panel_freq"):
+            self.panel_freq.set_carrier_info(cf, new_tol)
 
         # Preserva o enquadramento (zoom e pan X) atual dos gráficos
         cur_xlim = self.panel_wave.ax.get_xlim() if hasattr(self, "panel_wave") else None
@@ -2326,7 +2521,7 @@ class MainWindow(QMainWindow):
             self.render_dashboard(self.active_filename)
 
         if cur_xlim is not None and cur_xlim[0] is not None and cur_xlim[1] is not None:
-            for panel in (self.panel_wave, self.panel_freq, self.panel_spec):
+            for panel in (self.panel_wave, self.panel_spec):
                 if hasattr(panel, "ax"):
                     panel.ax.set_xlim(cur_xlim)
             for panel in self.all_panels:
@@ -2414,6 +2609,10 @@ class MainWindow(QMainWindow):
         self.lbl_metric_sub.setText("Moda: —   |   Média: —")
         if hasattr(self, 'lbl_elapsed'):
             self.lbl_elapsed.setText("00:00.00 / 00:00.00")
+        if hasattr(self, 'btn_reanalisar_main'):
+            self.btn_reanalisar_main.setText("Analisar")
+            self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
+            self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
         self.timeline.set_data(0, [])
         self.timeline.set_position(0)
 
@@ -2704,7 +2903,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            active_panels = [self.panel_wave, self.panel_freq, self.panel_spec]
+            active_panels = [self.panel_wave, self.panel_spec]
             for panel, bg, line in zip(active_panels, self.backgrounds, self.cursor_lines):
                 if bg is not None and hasattr(panel, 'ax') and panel.ax.bbox.width > 0 and panel.ax.bbox.height > 0:
                     panel.canvas.restore_region(bg)
@@ -2717,6 +2916,141 @@ class MainWindow(QMainWindow):
                     panel.canvas.draw_idle()
                 except Exception:
                     pass
+
+    def _refresh_histogram(self):
+        """Redesenha o histograma bivariado: barras de contagem (eixo Y esquerdo)
+        e linha de tendência de duração média do chilreio em ms (eixo Y direito)."""
+        if not hasattr(self, 'panel_hist') or not getattr(self, 'active_heavy_data', None):
+            return
+        chirps = self.active_heavy_data.get('chirps', [])
+        chirp_peaks_list = self.active_heavy_data.get('chirp_peaks_list', [])
+        rate = float(self.active_heavy_data.get('rate', 1.0))
+        pulse_colors = {
+            2: '#2563EB',   # Azul Royal
+            3: '#8B5CF6',   # Roxo / Violeta
+            4: '#F97316',   # Laranja
+            5: '#10B981',   # Verde Esmeralda
+            6: '#EC4899',   # Rosa Magenta
+            7: '#06B6D4',   # Ciano Turquesa
+            8: '#EAB308',   # Amarelo Ouro
+            9: '#84CC16',   # Verde Lima
+            10: '#A855F7',  # Púrpura Forte
+            1: '#94A3B8'    # Cinza ardósia
+        }
+        extra_pulse_color = '#F43F5E'
+        hist_palette = pulse_colors
+        
+        ax_hist = self.panel_hist.ax
+        ax_hist.clear()
+        
+        # Remove eixos secundários antigos para evitar acúmulo
+        for child_ax in self.panel_hist.figure.get_axes():
+            if child_ax is not ax_hist:
+                self.panel_hist.figure.delaxes(child_ax)
+        
+        if len(chirps) == 0:
+            self.panel_hist.canvas.draw_idle()
+            return
+        
+        unique_pulses, counts = np.unique(chirps, return_counts=True)
+        bars = ax_hist.bar(
+            unique_pulses, counts,
+            color=[hist_palette.get(int(x), extra_pulse_color) for x in unique_pulses],
+            edgecolor='none', linewidth=0, width=0.68, zorder=3
+        )
+        
+        is_dark = self.theme_mode == 'dark'
+        ax_hist.grid(axis='y', color='#292D32' if is_dark else '#E2E8F0', linewidth=0.6, alpha=0.8, zorder=0)
+        max_count = int(max(counts)) if len(counts) else 1
+        hist_text_color = '#DDE1E5' if is_dark else '#1F2937'
+        hist_tick_color = '#A9ADB5' if is_dark else '#1F2937'
+        for bar in bars:
+            ax_hist.text(bar.get_x()+bar.get_width()/2, bar.get_height()+max_count*0.025, str(int(bar.get_height())),
+                     ha='center', va='bottom', color=hist_text_color, fontsize=8.5, fontweight='bold')
+        ax_hist.set_xticks(unique_pulses)
+        ax_hist.set_xlabel("")
+        ax_hist.set_ylabel("")
+        ax_hist.tick_params(axis='x', labelsize=8.5, colors=hist_tick_color, length=0)
+        ax_hist.tick_params(axis='y', labelsize=8, colors=hist_tick_color)
+        ax_hist.set_ylim(0, max_count * 1.20)
+        
+        # ——— Eixo Y secundário: Duração média do chilreio (ms) ———
+        dur_color = '#FF6B6B' if is_dark else '#DC2626'
+        
+        # Calcular duração média por classe de pulsos
+        duration_by_class = {}
+        for cp in chirp_peaks_list:
+            n_pulses = len(cp)
+            if n_pulses >= 1 and rate > 0:
+                dur_ms = (cp[-1] - cp[0]) / rate * 1000.0
+                duration_by_class.setdefault(n_pulses, []).append(dur_ms)
+        
+        avg_durations = {}
+        for n_p, durs in duration_by_class.items():
+            avg_durations[n_p] = float(np.mean(durs))
+        
+        if len(avg_durations) >= 2:
+            ax2 = ax_hist.twinx()
+            # Armazenar referência para o tema poder estilizar
+            self.panel_hist._ax2 = ax2
+            
+            sorted_classes = sorted(avg_durations.keys())
+            x_pts = np.array(sorted_classes, dtype=float)
+            y_pts = np.array([avg_durations[k] for k in sorted_classes], dtype=float)
+            
+            ax2.plot(x_pts, y_pts, color=dur_color, linewidth=1.5, linestyle='--',
+                     marker='o', markersize=5, markerfacecolor=dur_color,
+                     markeredgecolor='white' if is_dark else '#1F2937',
+                     markeredgewidth=0.8, zorder=5, alpha=0.9)
+            
+            # Anotações discretas de duração sobre cada marcador
+            for xv, yv in zip(x_pts, y_pts):
+                ax2.annotate(f'{yv:.0f}', (xv, yv), textcoords='offset points',
+                             xytext=(0, 7), ha='center', fontsize=6.5,
+                             color=dur_color, fontweight='bold')
+            
+            dur_label_color = dur_color
+            ax2.set_ylabel("Duração (ms)", fontsize=7.5, color=dur_label_color)
+            ax2.tick_params(axis='y', labelsize=7, colors=dur_label_color, length=2)
+            for sp in ax2.spines.values():
+                sp.set_visible(False)
+            ax2.spines['right'].set_visible(True)
+            ax2.spines['right'].set_color(dur_color)
+            ax2.spines['right'].set_linewidth(0.8)
+            ax2.spines['right'].set_alpha(0.5)
+            ax2.grid(False)
+            
+            # Margem vertical para não colar nos limites
+            y_min_d = min(y_pts) * 0.85 if min(y_pts) > 0 else 0
+            y_max_d = max(y_pts) * 1.20
+            ax2.set_ylim(y_min_d, y_max_d)
+            ax2.set_facecolor('none')
+        else:
+            self.panel_hist._ax2 = None
+        
+        # ——— Legenda unificada ———
+        from matplotlib.patches import Patch
+        from matplotlib.lines import Line2D
+        legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
+                          for x in unique_pulses]
+        if len(avg_durations) >= 2:
+            legend_handles.append(Line2D([0], [0], color=dur_color, linewidth=1.5, linestyle='--',
+                                         marker='o', markersize=4, label='Duração (ms)'))
+        if legend_handles:
+            hist_w = self.panel_hist.width()
+            leg_ncol = min(3 if hist_w < 340 else 4, len(legend_handles))
+            leg_fs = 7.0 if hist_w < 280 else (7.5 if hist_w < 340 else 8.0)
+            leg = ax_hist.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.11),
+                             ncol=leg_ncol, frameon=False, fontsize=leg_fs, handlelength=0.9,
+                             columnspacing=0.5, borderaxespad=0.0)
+            leg.get_frame().set_facecolor((0, 0, 0, 0))
+            leg.get_frame().set_alpha(0.0)
+            leg.get_frame().set_edgecolor((0, 0, 0, 0))
+            leg.get_frame().set_linewidth(0)
+            for text in leg.get_texts():
+                text.set_color(hist_tick_color)
+        
+        self.panel_hist.canvas.draw_idle()
 
     def _refresh_user_peak_markers(self):
         """Renderiza marcadores de picos do usuário em todos os gráficos relevantes (onda, freq, spec)."""
@@ -2731,69 +3065,148 @@ class MainWindow(QMainWindow):
                 pass
         self._wave_user_markers = []
 
-        if not self.active_heavy_data or not self.peaks_user_verified:
+        if not self.active_heavy_data:
             return
 
         rate = float(self.active_heavy_data.get('rate', 1.0))
         t_spec = self.active_heavy_data.get('t_spec', [])
         dom_freqs = self.active_heavy_data.get('dom_freqs', [])
+        env = self.active_heavy_data.get('env')
         
-        peaks_detected_set = set(int(p) for p in self.peaks_detected)
-        peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
-
-        peaks_confirmed = sorted(peaks_verified_set & peaks_detected_set)
-        peaks_added = sorted(peaks_verified_set - peaks_detected_set)
-        peaks_removed = sorted(peaks_detected_set - peaks_verified_set)
-
-        # Renderiza na onda acústica (ax1)
-        ax1 = self.panel_wave.ax
-        if peaks_confirmed:
-            xdata = np.asarray(peaks_confirmed, dtype=float) / rate
-            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='o', 
-                                 color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=4)
-            self._wave_user_markers.append(scatter)
-
-        if peaks_added:
-            xdata = np.asarray(peaks_added, dtype=float) / rate
-            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='^', 
-                                 color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=4)
-            self._wave_user_markers.append(scatter)
-
-        if peaks_removed:
-            xdata = np.asarray(peaks_removed, dtype=float) / rate
-            scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=80, marker='x', 
-                                 color='#EF4444', linewidths=2.0, zorder=4)
-            self._wave_user_markers.append(scatter)
-
-        # Renderiza no espectrograma (ax4) e gráfico de frequência (ax3) se dados disponíveis
-        if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
-            ax3 = self.panel_freq.ax
-            ax4 = self.panel_spec.ax
+        # 1. Desenhar marcadores de chirps classificados
+        chirp_peaks_list = self.active_heavy_data.get('chirp_peaks_list', [])
+        picos_por_contagem = {}
+        for cp in chirp_peaks_list:
+            qnt = len(cp)
+            picos_por_contagem.setdefault(qnt, []).extend(cp)
             
-            for peaks, color, marker in [
-                (peaks_confirmed, '#10B981', 'o'),
-                (peaks_added, '#3B82F6', '^'),
-                (peaks_removed, '#EF4444', 'x'),
-            ]:
-                if peaks:
-                    pks_t = np.asarray(peaks, dtype=float) / rate
-                    freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
-                    
-                    # Frequência
-                    line_freq = ax3.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
-                                        color=color, markersize=8, markeredgewidth=1.2, zorder=4)
-                    self._wave_user_markers.extend(line_freq)
-                    
-                    # Espectrograma
-                    unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                    scale = 1000.0 if unit == "kHz" else 1.0
-                    freqs_at_pks_spec = freqs_at_pks / scale
-                    line_spec = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
-                                        color=color, markersize=8, markeredgewidth=1.2, zorder=4)
-                    self._wave_user_markers.extend(line_spec)
+        pulse_colors = {
+            2: '#2563EB',   # Azul Royal
+            3: '#8B5CF6',   # Roxo / Violeta
+            4: '#F97316',   # Laranja
+            5: '#10B981',   # Verde Esmeralda
+            6: '#EC4899',   # Rosa Magenta
+            7: '#06B6D4',   # Ciano Turquesa
+            8: '#EAB308',   # Amarelo Ouro
+            9: '#84CC16',   # Verde Lima
+            10: '#A855F7',  # Púrpura Forte
+            1: '#94A3B8'    # Cinza ardósia
+        }
+        extra_pulse_color = '#F43F5E'
+        
+        # 2. Distant Peaks
+        distant_pks = self.active_heavy_data.get('distant_peaks', [])
+        
+        ax1 = getattr(self.panel_wave, 'ax', None)
+        ax3 = getattr(self.panel_freq, 'ax', None)
+        ax4 = getattr(self.panel_spec, 'ax', None)
+        
+        if ax1 and env is not None:
+            for qnt, pks in sorted(picos_por_contagem.items()):
+                pks_t = np.array(pks) / rate
+                lines = ax1.plot(pks_t, env[pks], 'x', color=pulse_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=7)
+                self._wave_user_markers.extend(lines)
+            if distant_pks:
+                valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
+                if valid_d:
+                    lines = ax1.plot(np.array(valid_d) / rate, env[valid_d], 'x', color='#64748B', markersize=5.5, markeredgewidth=1.1, alpha=0.55, zorder=5)
+                    self._wave_user_markers.extend(lines)
+
+        if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
+            pulse_meta = getattr(self, "pulse_metadata", {})
+            
+            def get_freqs_for_peaks(pks):
+                pks_t = np.array(pks) / rate
+                f = np.interp(pks_t, t_spec, dom_freqs)
+                for i, p in enumerate(pks):
+                    if p in pulse_meta and "freq" in pulse_meta[p]:
+                        f[i] = pulse_meta[p]["freq"]
+                return pks_t, f
+
+            if ax3:
+                for qnt, pks in sorted(picos_por_contagem.items()):
+                    pks_t, freqs_at_pks = get_freqs_for_peaks(pks)
+                    lines = ax3.plot(pks_t, freqs_at_pks, 'x', color=pulse_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4, zorder=7)
+                    self._wave_user_markers.extend(lines)
+                if distant_pks:
+                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
+                    if valid_d:
+                        d_times, d_freqs = get_freqs_for_peaks(valid_d)
+                        lines = ax3.plot(d_times, d_freqs, 'x', color='#64748B', markersize=5, markeredgewidth=1.1, alpha=0.55, zorder=5)
+                        self._wave_user_markers.extend(lines)
+
+            if ax4:
+                unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                scale = 1000.0 if unit == "kHz" else 1.0
+                for qnt, pks in sorted(picos_por_contagem.items()):
+                    pks_t, freqs_at_pks = get_freqs_for_peaks(pks)
+                    lines = ax4.plot(pks_t, freqs_at_pks / scale, 'x', color=pulse_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
+                    self._wave_user_markers.extend(lines)
+                if distant_pks:
+                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
+                    if valid_d:
+                        d_times, d_freqs = get_freqs_for_peaks(valid_d)
+                        lines = ax4.plot(d_times, d_freqs / scale, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
+                        self._wave_user_markers.extend(lines)
+
+        # 3. Marcadores do Usuário (Adicionados, Confirmados, Removidos)
+        if self.peaks_user_verified and self.peaks_detected:
+            peaks_detected_set = set(int(p) for p in self.peaks_detected)
+            peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
+
+            peaks_confirmed = sorted(peaks_verified_set & peaks_detected_set)
+            peaks_added = sorted(peaks_verified_set - peaks_detected_set)
+            peaks_removed = sorted(peaks_detected_set - peaks_verified_set)
+
+            if ax1:
+                if peaks_confirmed:
+                    xdata = np.asarray(peaks_confirmed, dtype=float) / rate
+                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='o', 
+                                         color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=4)
+                    self._wave_user_markers.append(scatter)
+
+                if peaks_added:
+                    xdata = np.asarray(peaks_added, dtype=float) / rate
+                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='^', 
+                                         color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=4)
+                    self._wave_user_markers.append(scatter)
+
+                if peaks_removed:
+                    xdata = np.asarray(peaks_removed, dtype=float) / rate
+                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=80, marker='x', 
+                                         color='#EF4444', linewidths=2.0, zorder=4)
+                    self._wave_user_markers.append(scatter)
+
+            if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
+                for peaks, color, marker in [
+                    (peaks_confirmed, '#10B981', 'o'),
+                    (peaks_added, '#3B82F6', '^'),
+                    (peaks_removed, '#EF4444', 'x'),
+                ]:
+                    if peaks:
+                        pks_t = np.asarray(peaks, dtype=float) / rate
+                        freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
+                        
+                        # Usa a frequência manual exata caso o usuário tenha clicado no espectrograma
+                        pulse_meta = getattr(self, "pulse_metadata", {})
+                        for i, p in enumerate(peaks):
+                            if p in pulse_meta and "freq" in pulse_meta[p]:
+                                freqs_at_pks[i] = pulse_meta[p]["freq"]
+                        
+                        if ax3:
+                            lines = ax3.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
+                                            color=color, markersize=8, markeredgewidth=1.2, zorder=4)
+                            self._wave_user_markers.extend(lines)
+                            
+                        if ax4:
+                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                            scale = 1000.0 if unit == "kHz" else 1.0
+                            freqs_at_pks_spec = freqs_at_pks / scale
+                            lines = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
+                                            color=color, markersize=8, markeredgewidth=1.2, zorder=4)
+                            self._wave_user_markers.extend(lines)
 
         self._update_pulse_hover_data()
-        # Redesenha todos os painéis
         for panel in self.all_panels:
             try:
                 panel.canvas.draw_idle()
@@ -2816,7 +3229,7 @@ class MainWindow(QMainWindow):
             return int(peak_samples[nearest_idx])
         return None
 
-    def _toggle_peak_marker(self, time_sec, panel=None, event=None):
+    def _toggle_peak_marker(self, time_sec, panel=None, event=None, f_click=None, amp_click=None):
         """Alterna a classificação do pico mais próximo com snapping inteligente em pixels ou adiciona um novo pico."""
         if not self.active_heavy_data:
             return
@@ -2858,16 +3271,31 @@ class MainWindow(QMainWindow):
         if len(self._pulse_edit_history) > 50:
             self._pulse_edit_history = self._pulse_edit_history[-50:]
 
+        self.pulse_metadata = getattr(self, "pulse_metadata", {})
+
         if nearest is not None and nearest in self.peaks_user_verified:
             self.peaks_user_verified = [int(p) for p in self.peaks_user_verified if int(p) != nearest]
         elif nearest is not None:
-            # Clicar no X vermelho desfaz a desclassificação e restaura a bolinha verde.
             self.peaks_user_verified = sorted(set(self.peaks_user_verified + [nearest]))
+            if f_click is not None or amp_click is not None:
+                self.pulse_metadata[nearest] = {"idx": nearest}
+                if f_click is not None: self.pulse_metadata[nearest]["freq"] = f_click
+                if amp_click is not None: self.pulse_metadata[nearest]["amp"] = amp_click
         else:
             self.peaks_user_verified = sorted(set(self.peaks_user_verified + [target]))
+            if f_click is not None or amp_click is not None:
+                self.pulse_metadata[target] = {"idx": target}
+                if f_click is not None: self.pulse_metadata[target]["freq"] = f_click
+                if amp_click is not None: self.pulse_metadata[target]["amp"] = amp_click
         self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
         if self.active_filename:
-            self.corrections_by_file[self.active_filename] = list(self.peaks_user_verified)
+            combined = []
+            for p in self.peaks_user_verified:
+                if getattr(self, "pulse_metadata", None) and p in self.pulse_metadata:
+                    combined.append(self.pulse_metadata[p])
+                else:
+                    combined.append(int(p))
+            self.corrections_by_file[self.active_filename] = combined
             self._save_corrections_state()
 
         for panel in self.all_panels:
@@ -2877,6 +3305,10 @@ class MainWindow(QMainWindow):
         # Recalcula chilreios e métricas imediatamente após a alteração do usuário de forma ultra rápida
         if self.peaks_user_verified and len(self.peaks_user_verified) >= 2:
             try:
+                peaks_detected_set = set(int(p) for p in self.peaks_detected)
+                peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
+                peaks_added = sorted(peaks_verified_set - peaks_detected_set)
+                
                 effective_params = {**self.algo_params, **self._adaptive_overrides}
                 chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
                     self.peaks_user_verified,
@@ -2900,6 +3332,8 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        # Atualiza a contagem dos chilreios e as marcações de forma ultra-rápida!
+        self._refresh_histogram()
         self._refresh_user_peak_markers()
 
     def _adapt_advanced_params(self):
@@ -2954,7 +3388,13 @@ class MainWindow(QMainWindow):
         self.peaks_user_verified = self._pulse_edit_history.pop()
         self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
         if self.active_filename:
-            self.corrections_by_file[self.active_filename] = list(self.peaks_user_verified)
+            combined = []
+            for p in self.peaks_user_verified:
+                if getattr(self, "pulse_metadata", None) and p in self.pulse_metadata:
+                    combined.append(self.pulse_metadata[p])
+                else:
+                    combined.append(int(p))
+            self.corrections_by_file[self.active_filename] = combined
             self._save_corrections_state()
         enabled = bool(self._pulse_edit_history)
         for panel in self.all_panels:
@@ -2987,6 +3427,7 @@ class MainWindow(QMainWindow):
                     self.analysis_cache[self.active_filename]["moda"] = moda
             except Exception:
                 pass
+        self._refresh_histogram()
         self._refresh_user_peak_markers()
 
     def _save_corrections_state(self):
@@ -3022,9 +3463,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Dados insuficientes", "Você precisa ter tanto pulsos detectados quanto verificados para treinar.")
             return
 
-        if detected_set == verified_set:
-            QMessageBox.information(self, "Sem mudanças", "Nenhuma correção manual foi feita no arquivo atual.")
-            return
+        # O usuário confirmou que o estado atual é o correto, então salvamos no cache
+        self.corrections_by_file[filename] = list(verified)
+        self._save_corrections_state()
 
         spinner = ButtonSpinner(self.btn_learn_corrections, "Treinando...")
         spinner.start()
@@ -3047,10 +3488,7 @@ class MainWindow(QMainWindow):
         def _on_finished(num_corrections):
             spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
             if hasattr(self, 'lbl_model_status'):
-                model_status_text = "🧠 Modelo: ✓ treinado" if self.pulse_learner.is_trained() else "🧠 Modelo: não treinado"
-                model_status_color = "#10B981" if self.pulse_learner.is_trained() else "#F97316"
-                self.lbl_model_status.setText(model_status_text)
-                self.lbl_model_status.setStyleSheet(f"color: {model_status_color};")
+                self._update_ml_toggle_ui()
             QMessageBox.information(
                 self, 
                 I18N[self.lang]['success'], 
@@ -3168,7 +3606,7 @@ class MainWindow(QMainWindow):
         for line in self.cursor_lines:
             line.set_animated(False)
             line.set_visible(False)
-        active_panels = [self.panel_wave, self.panel_freq, self.panel_spec]
+        active_panels = [self.panel_wave, self.panel_spec]
         self.backgrounds = []
         for panel in active_panels:
             panel.canvas.draw()
@@ -3193,11 +3631,18 @@ class MainWindow(QMainWindow):
 
         # Se modo de edição está ativo e clicou com o botão esquerdo em um painel que suporta edição
         if event.button == 1 and clicked_panel and getattr(clicked_panel, 'pulse_edit_mode', False) and event.xdata is not None:
-            # Converte coordenada X (tempo) para amostras
             if self.active_heavy_data:
                 rate = float(self.active_heavy_data.get('rate', 1.0))
                 time_sec = float(event.xdata)
-                self._toggle_peak_marker(time_sec, panel=clicked_panel, event=event)
+                kwargs = {"panel": clicked_panel, "event": event}
+                if event.ydata is not None:
+                    if clicked_panel == self.panel_spec:
+                        # ydata is in the displayed unit (Hz or kHz). Normalizing to Hz.
+                        unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                        kwargs["f_click"] = float(event.ydata) * (1000.0 if unit == "kHz" else 1.0)
+                    elif clicked_panel == self.panel_wave:
+                        kwargs["amp_click"] = float(event.ydata)
+                self._toggle_peak_marker(time_sec, **kwargs)
                 return
 
         # Arrastar / Pan dos gráficos com o BOTÃO DIREITO do mouse (button == 3)
@@ -3241,7 +3686,10 @@ class MainWindow(QMainWindow):
             self.panning, self.active_ax = False, None
             for panel in self.all_panels:
                 panel.canvas.draw_idle()
-            QTimer.singleShot(150, self.capture_backgrounds)
+            
+            # Deixamos o recálculo do render_high_detail a encargo do debounce_timer das engines (250ms),
+            # para não travar a UI ao soltar o mouse. Agendamos o background cache para logo após.
+            QTimer.singleShot(350, self.capture_backgrounds)
 
     def on_sync_toggled(self, enabled):
         """Reestabelece uma geometria consistente nos três eixos temporais ao ativar a sincronização."""
@@ -3257,7 +3705,7 @@ class MainWindow(QMainWindow):
         if duration <= 0:
             return
 
-        axes = [self.panel_wave.ax, self.panel_freq.ax, self.panel_spec.ax]
+        axes = [self.panel_wave.ax, self.panel_spec.ax]
         for ax in axes:
             ax.set_xlim(0.0, duration)
         self.panel_wave.ax.set_ylim(-1.05, 1.05)
@@ -3265,7 +3713,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
             self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
         elif p:
-            self.panel_spec.ax.set_ylim(p.get("b1_min", 3200), p.get("b1_max", 6000))
+            rate = float(self.active_heavy_data.get("rate", 44100.0))
+            nyq = rate / 2.0
+            unit = getattr(self.panel_spec, "spec_unit", "kHz") if hasattr(self, "panel_spec") else "kHz"
+            if unit == "kHz":
+                self.panel_spec.ax.set_ylim(0.0, nyq / 1000.0)
+            else:
+                self.panel_spec.ax.set_ylim(0.0, nyq)
 
         # Conclui a geometria do Qt e renderiza imediatamente, sem esperar timers.
         QApplication.processEvents()
@@ -3286,13 +3740,18 @@ class MainWindow(QMainWindow):
         duration = float(self.active_heavy_data.get("duration", 0.0))
         p = self.active_heavy_data.get("params", {})
         self.panel_wave.ax.set_xlim(0.0, duration)
-        self.panel_freq.ax.set_xlim(0.0, duration)
         self.panel_spec.ax.set_xlim(float(self.active_heavy_data["t_spec"][0]) if len(self.active_heavy_data.get("t_spec", [])) else 0.0, float(self.active_heavy_data["t_spec"][-1]) if len(self.active_heavy_data.get("t_spec", [])) else duration)
         self.panel_wave.ax.set_ylim(-1.05, 1.05)
         if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
             self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
         elif p:
-            self.panel_spec.ax.set_ylim(float(p.get("b1_min", 3200)), float(p.get("b1_max", 6000)))
+            rate = float(self.active_heavy_data.get("rate", 44100.0))
+            nyq = rate / 2.0
+            unit = getattr(self.panel_spec, "spec_unit", "kHz") if hasattr(self, "panel_spec") else "kHz"
+            if unit == "kHz":
+                self.panel_spec.ax.set_ylim(0.0, nyq / 1000.0)
+            else:
+                self.panel_spec.ax.set_ylim(0.0, nyq)
 
         if self.spectro_engine:
             self.spectro_engine.render_high_detail()
@@ -3328,6 +3787,71 @@ class MainWindow(QMainWindow):
                 panel.canvas.draw_idle()
         self.sync_throttle_time = current_time
 
+    def _clamp_bounds(self, ax, xmin, xmax, ymin, ymax):
+        if not self.active_heavy_data: return xmin, xmax, ymin, ymax
+        d = self.active_heavy_data
+        dur = float(d.get("duration", 0.0))
+        rate = float(d.get("rate", 44100))
+        nyq = rate / 2.0
+        
+        c_xmin, c_xmax, c_ymin, c_ymax = None, None, None, None
+
+        if ax == self.panel_wave.ax:
+            c_xmin, c_xmax = 0.0, dur
+            c_ymin, c_ymax = -1.05, 1.05
+        elif getattr(self, "panel_freq", None) and ax == self.panel_freq.ax:
+            unit = getattr(self.panel_spec, "spec_unit", "kHz")
+            max_x = nyq / 1000.0
+            if unit != "kHz": max_x = nyq
+            c_xmin, c_xmax = 0.0, max_x
+            
+            Pxx_db = d.get("Pxx_db", [])
+            if len(Pxx_db) > 0:
+                yr = np.ptp(Pxx_db)
+                c_ymin, c_ymax = np.min(Pxx_db) - yr*0.1, np.max(Pxx_db) + yr*0.1
+        elif ax == self.panel_spec.ax:
+            c_xmin, c_xmax = 0.0, dur
+            unit = getattr(self.panel_spec, "spec_unit", "kHz")
+            c_ymin, c_ymax = 0.0, nyq / 1000.0 if unit == "kHz" else nyq
+        elif getattr(self, "panel_hist", None) and ax == self.panel_hist.ax:
+            chirps = np.asarray(d.get("chirps", []))
+            if chirps.size > 0:
+                c_xmin, c_xmax = float(chirps.min()) - 0.65, float(chirps.min()) + 0.65
+                ym = max(1, int(np.bincount(chirps.astype(int)).max()))
+                c_ymin, c_ymax = 0, ym * 1.20
+
+        # Clamping
+        # Se a largura desejada for maior que o limite, centralizamos.
+        if c_xmin is not None and c_xmax is not None:
+            if (xmax - xmin) > (c_xmax - c_xmin):
+                xmin, xmax = c_xmin, c_xmax
+            else:
+                if xmin < c_xmin:
+                    xmax += (c_xmin - xmin)
+                    xmin = c_xmin
+                if xmax > c_xmax:
+                    xmin -= (xmax - c_xmax)
+                    xmax = c_xmax
+                    
+        if c_ymin is not None and c_ymax is not None:
+            if (ymax - ymin) > (c_ymax - c_ymin):
+                ymin, ymax = c_ymin, c_ymax
+            else:
+                if ymin < c_ymin:
+                    ymax += (c_ymin - ymin)
+                    ymin = c_ymin
+                if ymax > c_ymax:
+                    ymin -= (ymax - c_ymax)
+                    ymax = c_ymax
+                    
+        return xmin, xmax, ymin, ymax
+
+    def on_axes_leave(self, event):
+        """Oculta o label de coordenadas quando o cursor sai do eixo."""
+        for panel in self.all_panels:
+            if hasattr(panel, "coord_label") and event.inaxes == panel.ax:
+                panel.coord_label.setVisible(False)
+
     def on_motion(self, event):
         if self.panning and self.active_ax is not None and event.inaxes == self.active_ax:
             now_t = time.time()
@@ -3344,27 +3868,56 @@ class MainWindow(QMainWindow):
             new_xmax = x1 - dx * (x1-x0) / bbox.width
             new_ymin = y0 - dy * (y1-y0) / bbox.height
             new_ymax = y1 - dy * (y1-y0) / bbox.height
-            time_axes = [self.panel_wave.ax, self.panel_freq.ax, self.panel_spec.ax]
+            
+            new_xmin, new_xmax, new_ymin, new_ymax = self._clamp_bounds(self.active_ax, new_xmin, new_xmax, new_ymin, new_ymax)
+            
+            time_axes = [self.panel_wave.ax, self.panel_spec.ax]
             if self.btn_sync.isChecked() and self.active_ax in time_axes:
-                for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                for panel in [self.panel_wave, self.panel_spec]:
                     panel.ax.set_xlim(new_xmin, new_xmax)
                     if panel.ax == self.active_ax:
-                        panel.ax.set_ylim(new_ymin, new_ymax)
-                self._sync_render([self.panel_wave, self.panel_freq, self.panel_spec], new_xmin, new_xmax)
+                        if not (panel == self.panel_spec and getattr(self.panel_spec, "_y_locked", False)):
+                            panel.ax.set_ylim(new_ymin, new_ymax)
+                self._sync_render([self.panel_wave, self.panel_spec], new_xmin, new_xmax)
             else:
                 self.active_ax.set_xlim(new_xmin, new_xmax)
-                self.active_ax.set_ylim(new_ymin, new_ymax)
+                if not (self.active_ax == self.panel_spec.ax and getattr(self.panel_spec, "_y_locked", False)):
+                    self.active_ax.set_ylim(new_ymin, new_ymax)
                 mapping = {p.ax: p for p in self.all_panels}
                 self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
 
             if self.active_ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
-                self.panel_spec.spin_spec_ymin.blockSignals(True)
-                self.panel_spec.spin_spec_ymax.blockSignals(True)
-                self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
-                self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
-                self.panel_spec.spin_spec_ymin.blockSignals(False)
-                self.panel_spec.spin_spec_ymax.blockSignals(False)
+                if not getattr(self.panel_spec, "_y_locked", False):
+                    self.panel_spec.spin_spec_ymin.blockSignals(True)
+                    self.panel_spec.spin_spec_ymax.blockSignals(True)
+                    self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
+                    self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
+                    self.panel_spec.spin_spec_ymin.blockSignals(False)
+                    self.panel_spec.spin_spec_ymax.blockSignals(False)
             return
+
+        # Tooltip de coordenadas em tempo real (Bloco 3.3)
+        if not self.panning:
+            for panel in self.all_panels:
+                if hasattr(panel, "coord_label"):
+                    if event.inaxes == panel.ax and event.xdata is not None and event.ydata is not None:
+                        if panel == self.panel_spec:
+                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                            f_val = event.ydata if unit == "kHz" else event.ydata / 1000.0
+                            panel.coord_label.setText(f"[ t: {event.xdata:.3f} s | f: {f_val:.2f} kHz ]")
+                        elif panel == self.panel_wave:
+                            panel.coord_label.setText(f"[ t: {event.xdata:.3f} s | amp: {event.ydata:+.4f} ]")
+                        elif panel == getattr(self, "panel_freq", None):
+                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                            panel.coord_label.setText(f"[ f: {event.xdata:.2f} {unit} | pot: {event.ydata:.1f} dB ]")
+                        elif panel == getattr(self, "panel_hist", None):
+                            panel.coord_label.setText(f"[ pulsos: {int(event.xdata)} | contagem: {int(event.ydata)} ]")
+                        else:
+                            panel.coord_label.setText(f"[ x: {event.xdata:.3f} | y: {event.ydata:.3f} ]")
+                        panel.coord_label.adjustSize()
+                        panel.coord_label.setVisible(True)
+                    else:
+                        panel.coord_label.setVisible(False)
 
         # Hover interativo em cima dos marcadores de pulsos (X)
         if not self.panning and event.inaxes and event.xdata is not None and getattr(self, "pulse_hover_data", None):
@@ -3492,24 +4045,30 @@ class MainWindow(QMainWindow):
         rel_y = (event.ydata-ymin)/(ymax-ymin)
         new_ymin = event.ydata-new_yw*rel_y
         new_ymax = event.ydata+new_yw*(1-rel_y)
-        time_axes = [self.panel_wave.ax, self.panel_freq.ax, self.panel_spec.ax]
+        
+        new_xmin, new_xmax, new_ymin, new_ymax = self._clamp_bounds(ax, new_xmin, new_xmax, new_ymin, new_ymax)
+        
+        time_axes = [self.panel_wave.ax, self.panel_spec.ax]
         if self.btn_sync.isChecked() and ax in time_axes:
-            for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+            for panel in [self.panel_wave, self.panel_spec]:
                 panel.ax.set_xlim(new_xmin, new_xmax)
                 if panel.ax == ax:
-                    panel.ax.set_ylim(new_ymin, new_ymax)
-            self._sync_render([self.panel_wave, self.panel_freq, self.panel_spec], new_xmin, new_xmax)
+                    if not (panel == self.panel_spec and getattr(self.panel_spec, "_y_locked", False)):
+                        panel.ax.set_ylim(new_ymin, new_ymax)
+            self._sync_render([self.panel_wave, self.panel_spec], new_xmin, new_xmax)
         else:
             ax.set_xlim(new_xmin, new_xmax)
-            ax.set_ylim(new_ymin, new_ymax)
+            if not (ax == self.panel_spec.ax and getattr(self.panel_spec, "_y_locked", False)):
+                ax.set_ylim(new_ymin, new_ymax)
             mapping = {p.ax: p for p in self.all_panels}
             self._sync_render([mapping[ax]], new_xmin, new_xmax)
 
         if ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
-            self.panel_spec.spin_spec_ymin.blockSignals(True)
-            self.panel_spec.spin_spec_ymax.blockSignals(True)
-            self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
-            self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
-            self.panel_spec.spin_spec_ymin.blockSignals(False)
-            self.panel_spec.spin_spec_ymax.blockSignals(False)
+            if not getattr(self.panel_spec, "_y_locked", False):
+                self.panel_spec.spin_spec_ymin.blockSignals(True)
+                self.panel_spec.spin_spec_ymax.blockSignals(True)
+                self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
+                self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
+                self.panel_spec.spin_spec_ymin.blockSignals(False)
+                self.panel_spec.spin_spec_ymax.blockSignals(False)
 

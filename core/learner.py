@@ -133,10 +133,12 @@ class PulseLearner:
         peak_amp_rel = float(peak_amp / (median_amp + 1e-6))
 
         # 2 & 3. Largura temporal a 50% e 75%
+        # Usamos o segmento local para evitar passar o envelope inteiro de milhões de amostras para o scipy
+        local_peak_idx = peak_idx - start
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            w50, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.5)
-            w75, _, _, _ = peak_widths(env_signal, [peak_idx], rel_height=0.75)
+            w50, _, _, _ = peak_widths(segment, [local_peak_idx], rel_height=0.5)
+            w75, _, _, _ = peak_widths(segment, [local_peak_idx], rel_height=0.75)
         peak_width_s = float(w50[0] / rate) if w50.size else 0.0
         peak_width_75_s = float(w75[0] / rate) if w75.size else 0.0
 
@@ -204,10 +206,15 @@ class PulseLearner:
             s_spec = max(0, peak_idx - w_spec)
             e_spec = min(len(raw_signal), peak_idx + w_spec + 1)
             raw_seg = raw_signal[s_spec:e_spec]
-            if len(raw_seg) >= 8:
-                h_win = np.hanning(len(raw_seg))
+            seg_len = len(raw_seg)
+            if seg_len >= 8:
+                # Utiliza cache rudimentar global (simples e muito rápido)
+                if not hasattr(PulseLearner, "_hanning_cache") or PulseLearner._hanning_cache.get("len") != seg_len:
+                    PulseLearner._hanning_cache = {"len": seg_len, "win": np.hanning(seg_len)}
+                h_win = PulseLearner._hanning_cache["win"]
+                
                 fft_mag = np.abs(np.fft.rfft(raw_seg * h_win))
-                freqs = np.fft.rfftfreq(len(raw_seg), 1.0 / rate)
+                freqs = np.fft.rfftfreq(seg_len, 1.0 / rate)
                 sum_mag = np.sum(fft_mag)
                 if sum_mag > 1e-9:
                     # 15. Centroide espectral
@@ -314,9 +321,14 @@ class PulseLearner:
                 s = max(0, p_int - w_spec)
                 e = min(len(raw_signal), p_int + w_spec + 1)
                 seg = raw_signal[s:e]
-                if len(seg) >= 8:
-                    fft_mag = np.abs(np.fft.rfft(seg * np.hanning(len(seg))))
-                    freqs = np.fft.rfftfreq(len(seg), 1.0 / rate)
+                seg_len = len(seg)
+                if seg_len >= 8:
+                    if not hasattr(PulseLearner, "_hanning_cache") or PulseLearner._hanning_cache.get("len") != seg_len:
+                        PulseLearner._hanning_cache = {"len": seg_len, "win": np.hanning(seg_len)}
+                    h_win = PulseLearner._hanning_cache["win"]
+                    
+                    fft_mag = np.abs(np.fft.rfft(seg * h_win))
+                    freqs = np.fft.rfftfreq(seg_len, 1.0 / rate)
                     s_mag = np.sum(fft_mag)
                     if s_mag > 1e-9:
                         centroid = float(np.sum(freqs * fft_mag) / s_mag)
@@ -389,9 +401,20 @@ class PulseLearner:
             # A) Hard Negatives: outros picos detectados no envelope que não pertencem ao grilo focal
             raw_ambient_pks, _ = find_peaks(env_signal, height=0.03, distance=int(rate * 0.020))
             hard_negatives = []
-            for hpk in raw_ambient_pks:
-                if v_array.size == 0 or np.min(np.abs(v_array - hpk)) > exclusion_samples:
-                    hard_negatives.append(hpk)
+            if v_array.size == 0:
+                hard_negatives = list(raw_ambient_pks)
+            else:
+                # Busca binária O(M log N) ao invés de O(M * N)
+                idx = np.searchsorted(v_array, raw_ambient_pks)
+                idx = np.clip(idx, 0, len(v_array) - 1)
+                
+                # Distância para o vizinho mais próximo da direita e da esquerda
+                dist_right = np.abs(v_array[idx] - raw_ambient_pks)
+                idx_left = np.clip(idx - 1, 0, len(v_array) - 1)
+                dist_left = np.abs(v_array[idx_left] - raw_ambient_pks)
+                min_dists = np.minimum(dist_right, dist_left)
+                
+                hard_negatives = raw_ambient_pks[min_dists > exclusion_samples].tolist()
 
             # B) Amostras de ruído nas pausas inter-chilreios
             candidate_silence = []

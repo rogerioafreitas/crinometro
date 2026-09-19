@@ -137,13 +137,14 @@ class PlotPanel(QFrame):
         self.title_key = title_key
         self.expand_callback = expand_callback
         self.pulse_edit_mode = False
+        self._y_locked = False
 
         self.setObjectName("plotCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(1, 1, 1, 4)
+        self.layout.setContentsMargins(2, 2, 2, 6)
         self.layout.setSpacing(0)
 
         self.title_bar = PlotTitleBar(self)
@@ -162,13 +163,14 @@ class PlotPanel(QFrame):
         # Botão de edição de pulsos (ativa/desativa modo de seleção)
         self.btn_pulse_edit = self._tool_button("", "Ativar modo de edição de pulsos (clique para adicionar/remover)")
         self.btn_pulse_edit.setObjectName("plotTool")
-        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color="#D7DCE2", size=15))
-        self.btn_pulse_edit.setIconSize(QSize(14, 14))
+        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color="#D7DCE2", size=14))
+        self.btn_pulse_edit.setIconSize(QSize(13, 13))
         self.btn_pulse_edit.setCheckable(True)
         self.btn_pulse_edit.toggled.connect(self._toggle_pulse_edit_mode)
         bar.addWidget(self.btn_pulse_edit)
 
         self.btn_pulse_undo = self._tool_button("↶", "Desfazer última edição de pulso")
+        self.btn_pulse_undo.setObjectName("plotTool")
         self.btn_pulse_undo.setEnabled(False)
         self.btn_pulse_undo.clicked.connect(
             lambda: self.window()._undo_pulse_edit()
@@ -179,8 +181,8 @@ class PlotPanel(QFrame):
         # Ações do gráfico: somente maximizar/restaurar, que possui comportamento real.
         self.btn_expand = self._tool_button("", "Colocar este gráfico na posição principal")
         self.btn_expand.setObjectName("plotMaximize")
-        self.btn_expand.setIcon(make_ui_icon("maximize", color="#D7DCE2", size=15))
-        self.btn_expand.setIconSize(QSize(14, 14))
+        self.btn_expand.setIcon(make_ui_icon("maximize", color="#D7DCE2", size=14))
+        self.btn_expand.setIconSize(QSize(13, 13))
         self.btn_expand.clicked.connect(lambda: self.expand_callback(self))
         bar.addWidget(self.btn_expand)
 
@@ -219,12 +221,13 @@ class PlotPanel(QFrame):
             ctrl_layout.setContentsMargins(4, 2, 4, 3)
             ctrl_layout.setSpacing(4)
 
-            # 1. Bloco de Escala Y Compacto e Unificado (#14171A)
+            # 1. Bloco de Escala Y Compacto e Unificado
             self.y_scale_box = QFrame()
             self.y_scale_box.setObjectName("yScaleBox")
+            self.y_scale_box.setFixedWidth(168)
             y_layout = QHBoxLayout(self.y_scale_box)
-            y_layout.setContentsMargins(4, 1, 4, 1)
-            y_layout.setSpacing(2)
+            y_layout.setContentsMargins(6, 1, 4, 1)
+            y_layout.setSpacing(3)
 
             lbl_y = QLabel("Y:")
             lbl_y.setProperty("class", "specCtrlMuted")
@@ -232,12 +235,13 @@ class PlotPanel(QFrame):
 
             self.spin_spec_ymin = QDoubleSpinBox()
             self.spin_spec_ymin.setProperty("class", "specScaleSpin")
+            self.spin_spec_ymin.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
             self.spin_spec_ymin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             self.spin_spec_ymin.setRange(0.0, 30.0)
             self.spin_spec_ymin.setSingleStep(0.5)
             self.spin_spec_ymin.setDecimals(1)
             self.spin_spec_ymin.setValue(0.0)
-            self.spin_spec_ymin.setFixedWidth(40)
+            self.spin_spec_ymin.setFixedWidth(34)
             self.spin_spec_ymin.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.spin_spec_ymin.setToolTip("Limite inferior do eixo Y (frequência)")
             self.spin_spec_ymin.valueChanged.connect(self._on_spec_limits_changed)
@@ -249,12 +253,13 @@ class PlotPanel(QFrame):
 
             self.spin_spec_ymax = QDoubleSpinBox()
             self.spin_spec_ymax.setProperty("class", "specScaleSpin")
+            self.spin_spec_ymax.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
             self.spin_spec_ymax.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             self.spin_spec_ymax.setRange(0.5, 50.0)
             self.spin_spec_ymax.setSingleStep(0.5)
             self.spin_spec_ymax.setDecimals(1)
             self.spin_spec_ymax.setValue(10.0)
-            self.spin_spec_ymax.setFixedWidth(40)
+            self.spin_spec_ymax.setFixedWidth(44)
             self.spin_spec_ymax.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.spin_spec_ymax.setToolTip("Limite superior do eixo Y (frequência)")
             self.spin_spec_ymax.valueChanged.connect(self._on_spec_limits_changed)
@@ -263,6 +268,9 @@ class PlotPanel(QFrame):
             self.combo_spec_unit = QComboBox()
             self.combo_spec_unit.setObjectName("specUnitCombo")
             self.combo_spec_unit.setProperty("class", "specUnitCombo")
+            self.combo_spec_unit.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+            self.combo_spec_unit.setFixedWidth(46)
+            self.combo_spec_unit.setFixedHeight(20)
             self.combo_spec_unit.addItems(["kHz", "Hz"])
             self.combo_spec_unit.setCurrentText("kHz")
             self.combo_spec_unit.setToolTip("Alternar unidade da escala de frequência (kHz / Hz)")
@@ -321,8 +329,9 @@ class PlotPanel(QFrame):
 
         if self.title_key == "spec":
             self.canvas_container = QWidget()
+            self.canvas_container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             canvas_layout = QHBoxLayout(self.canvas_container)
-            canvas_layout.setContentsMargins(0, 0, 0, 0)
+            canvas_layout.setContentsMargins(4, 0, 4, 4)
             canvas_layout.setSpacing(2)
 
             self.slider_spec_y = QSlider(Qt.Orientation.Vertical)
@@ -346,16 +355,20 @@ class PlotPanel(QFrame):
         self.canvas.setMinimumSize(0, 0)
         if hasattr(self, "spec_ctrl_bar"):
             self.spec_ctrl_bar.setMinimumWidth(0)
+            
+        self.coord_label = QLabel("", self.canvas)
+        self.coord_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.coord_label.setStyleSheet("background-color: rgba(16, 18, 20, 180); color: #4ADE80; font-family: 'Consolas', 'Courier New', monospace; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(74, 222, 128, 50);")
+        self.coord_label.setVisible(False)
 
         self.set_main(main)
         self.apply_dark_theme()
 
     def _tool_button(self, glyph, tooltip):
         b = QPushButton(glyph)
-        b.setFlat(True)
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         b.setToolTip(tooltip)
-        b.setFixedSize(28, 26)
+        b.setFixedSize(26, 26)
         b.setObjectName("plotTool")
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         return b
@@ -387,6 +400,9 @@ class PlotPanel(QFrame):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_responsive_controls()
+        if hasattr(self, "coord_label") and hasattr(self, "canvas"):
+            cw, ch = self.canvas.width(), self.canvas.height()
+            self.coord_label.setGeometry(10, ch - 26, 250, 18)
 
     def _update_responsive_controls(self):
         if self.title_key == "spec":
@@ -405,6 +421,11 @@ class PlotPanel(QFrame):
             if hasattr(self, "sep_presets") and self.sep_presets.isVisible() != show_scale_and_presets:
                 self.sep_presets.setVisible(show_scale_and_presets)
 
+            # Os chips rápidos de tolerância (±150, ±300, ±500) aparecem quando houver largura suficiente (>= 720px no main)
+            show_chips = (not is_main and self.width() >= 360) or (is_main and self.width() >= 720)
+            if hasattr(self, "chip_box") and self.chip_box.isVisible() != show_chips:
+                self.chip_box.setVisible(show_chips)
+
     def set_main(self, main):
         self._set_main_visual(main)
         self.btn_expand.setToolTip(
@@ -417,9 +438,9 @@ class PlotPanel(QFrame):
 
     def apply_dark_theme(self):
         dark = getattr(self.window(), "theme_mode", "dark") == "dark"
-        fg = "#A9ADB5" if dark else "#59616B"
-        spine = "#2A2D32" if dark else "#D7DDE3"
-        grid = "#25282D" if dark else "#DDE2E7"
+        fg = "#A9ADB5" if dark else "#1F2937"
+        spine = "#2A2D32" if dark else "#CBD5E1"
+        grid = "#25282D" if dark else "#E2E8F0"
         face = "#101214" if dark else "#FFFFFF"
         # Fundo da figura transparente para que as bordas arredondadas da mini janela nunca sejam cortadas
         self.figure.set_facecolor("none")
@@ -436,10 +457,26 @@ class PlotPanel(QFrame):
         
         # Atualiza cor dos ícones das ferramentas para alto contraste em ambos os temas
         icon_color = "#D7DCE2" if dark else "#334155"
-        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=15))
-        self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=15))
+        self.btn_pulse_edit.setIcon(make_ui_icon("pencil", color=icon_color, size=14))
+        self.btn_expand.setIcon(make_ui_icon("maximize", color=icon_color, size=14))
         if hasattr(self, "btn_close"):
-            self.btn_close.setStyleSheet(f"QPushButton#plotClose {{ color: {icon_color}; background: transparent; border: 0; font-size: 11px; font-weight: bold; padding: 0; }} QPushButton#plotClose:hover {{ background: rgba(239, 68, 68, 0.25); color: #EF4444; border-radius: 4px; }}")
+            self.btn_close.setStyleSheet("")
+        if hasattr(self, "canvas"):
+            self.canvas.draw_idle()
+        
+        # Estilização do eixo secundário do histograma (twinx - duração média)
+        ax2 = getattr(self, "_ax2", None)
+        if ax2 is not None:
+            dur_color = '#FF6B6B' if dark else '#DC2626'
+            ax2.tick_params(axis='y', labelsize=7, colors=dur_color, length=2)
+            ax2.yaxis.label.set_color(dur_color)
+            for sp in ax2.spines.values():
+                sp.set_visible(False)
+            ax2.spines['right'].set_visible(True)
+            ax2.spines['right'].set_color(dur_color)
+            ax2.spines['right'].set_linewidth(0.8)
+            ax2.spines['right'].set_alpha(0.5)
+            ax2.set_facecolor('none')
 
         if hasattr(self, "spec_ctrl_bar"):
             self.spec_ctrl_bar.setStyleSheet(self._ctrl_bar_style(dark))
@@ -459,7 +496,7 @@ class PlotPanel(QFrame):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.NoFrame)
         sep.setFixedWidth(1)
-        sep.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); border: none; margin: 3px 5px;")
+        sep.setStyleSheet("background-color: rgba(150, 150, 150, 0.2); border: none; margin: 3px 2px;")
         return sep
 
     def _set_active_preset(self, active_btn):
@@ -473,8 +510,24 @@ class PlotPanel(QFrame):
                 btn.style().polish(btn)
 
     def _apply_preset(self, preset_name):
+        btn_map = {
+            "10k": getattr(self, "btn_spec_preset_10k", None),
+            "focal": getattr(self, "btn_spec_preset_focal", None),
+            "full": getattr(self, "btn_spec_preset_full", None),
+        }
+        btn = btn_map.get(preset_name)
+        if btn is not None and btn.property("active") == "true":
+            self._set_active_preset(None)
+            self._y_locked = False
+            return
+
         self._is_applying_preset = True
         try:
+            if preset_name in ("10k", "focal", "full"):
+                self._y_locked = True
+            else:
+                self._y_locked = False
+
             if preset_name == "10k":
                 self._set_active_preset(self.btn_spec_preset_10k)
                 self.set_spec_limits(0.0, 10.0, unit="kHz")
@@ -520,6 +573,7 @@ class PlotPanel(QFrame):
             return
         if not getattr(self, "_is_applying_preset", False):
             self._set_active_preset(None)
+            self._y_locked = False
         ymin = self.spin_spec_ymin.value()
         ymax = self.spin_spec_ymax.value()
         step = self.spin_spec_ymin.singleStep()
@@ -615,14 +669,26 @@ class PlotPanel(QFrame):
         self._sync_y_slider_from_ymax(ymax)
 
     def _preset_focal_band(self):
-        win = self.window()
-        p = getattr(win, "active_heavy_data", {}).get("params", {})
-        b1_min = float(p.get("b1_min", 3200))
-        b1_max = float(p.get("b1_max", 6000))
-        if getattr(self, "spec_unit", "kHz") == "kHz":
-            self.set_spec_limits(round(b1_min / 1000.0, 2), round(b1_max / 1000.0, 2), unit="kHz")
+        carrier = getattr(self, "_carrier_freq", 0.0)
+        tol = getattr(self, "spin_carrier_tol", None)
+        tol_val = tol.value() if tol else 300.0
+        
+        if carrier > 0:
+            y_min = max(0.0, carrier - tol_val)
+            y_max = carrier + tol_val
+            if getattr(self, "spec_unit", "kHz") == "kHz":
+                self.set_spec_limits(round(y_min / 1000.0, 2), round(y_max / 1000.0, 2), unit="kHz")
+            else:
+                self.set_spec_limits(y_min, y_max, unit="Hz")
         else:
-            self.set_spec_limits(b1_min, b1_max, unit="Hz")
+            win = self.window()
+            p = getattr(win, "active_heavy_data", {}).get("params", {})
+            b1_min = float(p.get("b1_min", 3200))
+            b1_max = float(p.get("b1_max", 6000))
+            if getattr(self, "spec_unit", "kHz") == "kHz":
+                self.set_spec_limits(round(b1_min / 1000.0, 2), round(b1_max / 1000.0, 2), unit="kHz")
+            else:
+                self.set_spec_limits(b1_min, b1_max, unit="Hz")
 
     def _preset_full_nyquist(self):
         win = self.window()
@@ -647,15 +713,21 @@ class PlotPanel(QFrame):
                     color: #8E949D;
                     font-size: 11px;
                     font-weight: 600;
+                    background: transparent;
+                    border: none;
                 }
                 QLabel.specCtrlMuted {
                     color: #7A828E;
                     font-size: 11px;
                     font-weight: 600;
+                    background: transparent;
+                    border: none;
                 }
                 QLabel.specCtrlSep {
                     color: #555E6B;
                     font-size: 11px;
+                    background: transparent;
+                    border: none;
                 }
 
                 /* Bloco de Escala Y Unificado */
@@ -663,45 +735,57 @@ class PlotPanel(QFrame):
                     background-color: #14171A;
                     border: 1px solid #23272F;
                     border-radius: 5px;
-                    padding: 1px 3px;
                 }
-                QDoubleSpinBox.specScaleSpin {
+                QFrame#yScaleBox:hover {
+                    border-color: #38BDF8;
+                }
+                QFrame#yScaleBox QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                QFrame#yScaleBox QDoubleSpinBox, QFrame#yScaleBox QLineEdit {
                     background: transparent;
                     border: none;
                     color: #F0F2F5;
                     font-size: 11px;
                     font-weight: 600;
-                    padding: 1px 0px;
+                    padding: 0px;
+                    selection-background-color: #2563EB;
+                    selection-color: #FFFFFF;
                 }
-                QDoubleSpinBox.specScaleSpin:hover, QDoubleSpinBox.specScaleSpin:focus {
+                QFrame#yScaleBox QDoubleSpinBox:hover, QFrame#yScaleBox QDoubleSpinBox:focus,
+                QFrame#yScaleBox QLineEdit:hover, QFrame#yScaleBox QLineEdit:focus {
                     color: #FFFFFF;
                 }
-                QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
+                QFrame#yScaleBox QDoubleSpinBox::up-button, QFrame#yScaleBox QDoubleSpinBox::down-button {
                     width: 0px;
                     height: 0px;
                     background: transparent;
                     border: none;
                 }
-                QComboBox.specUnitCombo {
+                QComboBox#specUnitCombo, QComboBox.specUnitCombo {
                     background-color: #1C2026;
                     color: #38BDF8;
-                    font-size: 10.5px;
+                    font-size: 10px;
                     font-weight: 700;
                     border: 1px solid #2B323C;
                     border-radius: 3px;
-                    padding: 1px 2px 1px 5px;
-                    min-width: 38px;
-                    height: 18px;
+                    padding: 1px 11px 1px 4px;
+                    margin: 0px;
                 }
-                QComboBox.specUnitCombo:hover {
+                QComboBox#specUnitCombo:hover, QComboBox.specUnitCombo:hover {
                     border-color: #38BDF8;
                     background-color: #232933;
                 }
-                QComboBox.specUnitCombo::drop-down {
+                QComboBox#specUnitCombo::drop-down, QComboBox.specUnitCombo::drop-down {
+                    subcontrol-origin: padding;
+                    subcontrol-position: center right;
                     border: none;
                     width: 10px;
                 }
-                QComboBox.specUnitCombo::down-arrow {
+                QComboBox#specUnitCombo::down-arrow, QComboBox.specUnitCombo::down-arrow {
+                    subcontrol-origin: padding;
+                    subcontrol-position: center;
                     image: none;
                     border-left: 3px solid transparent;
                     border-right: 3px solid transparent;
@@ -710,7 +794,7 @@ class PlotPanel(QFrame):
                     height: 0;
                     margin-right: 2px;
                 }
-                QComboBox.specUnitCombo QAbstractItemView {
+                QComboBox#specUnitCombo QAbstractItemView, QComboBox.specUnitCombo QAbstractItemView {
                     background-color: #16181B;
                     border: 1px solid #282D35;
                     selection-background-color: #2563EB;
@@ -729,11 +813,11 @@ class PlotPanel(QFrame):
                 QPushButton.segBtn {
                     background-color: #1E232A;
                     color: #CBD5E1;
-                    font-size: 11px;
+                    font-size: 10.5px;
                     font-weight: 600;
                     border: 1px solid #333B47;
                     border-radius: 4px;
-                    padding: 2px 8px;
+                    padding: 2px 5px;
                     height: 19px;
                 }
                 QPushButton.segBtn:hover {
@@ -823,13 +907,13 @@ class PlotPanel(QFrame):
                 QPushButton.ghostChip {
                     background-color: #1E232A;
                     color: #F1F5F9;
-                    font-size: 11px;
+                    font-size: 10px;
                     font-weight: 700;
                     border: 1px solid #384252;
                     border-radius: 4px;
-                    padding: 2px 7px;
-                    height: 20px;
-                    min-width: 36px;
+                    padding: 1px 4px;
+                    height: 19px;
+                    min-width: 28px;
                 }
                 QPushButton.ghostChip:hover {
                     background-color: #28303C;
@@ -888,15 +972,21 @@ class PlotPanel(QFrame):
                     color: #334155;
                     font-size: 11px;
                     font-weight: 600;
+                    background: transparent;
+                    border: none;
                 }
                 QLabel.specCtrlMuted {
                     color: #64748B;
                     font-size: 11px;
                     font-weight: 600;
+                    background: transparent;
+                    border: none;
                 }
                 QLabel.specCtrlSep {
                     color: #CBD5E1;
                     font-size: 11px;
+                    background: transparent;
+                    border: none;
                 }
 
                 /* Bloco de Escala Y Unificado */
@@ -904,45 +994,57 @@ class PlotPanel(QFrame):
                     background-color: #FFFFFF;
                     border: 1px solid #CBD5E1;
                     border-radius: 5px;
-                    padding: 1px 3px;
                 }
-                QDoubleSpinBox.specScaleSpin {
+                QFrame#yScaleBox:hover {
+                    border-color: #0284C7;
+                }
+                QFrame#yScaleBox QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                QFrame#yScaleBox QDoubleSpinBox, QFrame#yScaleBox QLineEdit {
                     background: transparent;
                     border: none;
                     color: #0F172A;
                     font-size: 11px;
                     font-weight: 600;
-                    padding: 1px 0px;
+                    padding: 0px;
+                    selection-background-color: #2563EB;
+                    selection-color: #FFFFFF;
                 }
-                QDoubleSpinBox.specScaleSpin:hover, QDoubleSpinBox.specScaleSpin:focus {
+                QFrame#yScaleBox QDoubleSpinBox:hover, QFrame#yScaleBox QDoubleSpinBox:focus,
+                QFrame#yScaleBox QLineEdit:hover, QFrame#yScaleBox QLineEdit:focus {
                     color: #0284C7;
                 }
-                QDoubleSpinBox.specScaleSpin::up-button, QDoubleSpinBox.specScaleSpin::down-button {
+                QFrame#yScaleBox QDoubleSpinBox::up-button, QFrame#yScaleBox QDoubleSpinBox::down-button {
                     width: 0px;
                     height: 0px;
                     background: transparent;
                     border: none;
                 }
-                QComboBox.specUnitCombo {
-                    background-color: #FFFFFF;
+                QComboBox#specUnitCombo, QComboBox.specUnitCombo {
+                    background-color: #F1F5F9;
                     color: #0284C7;
-                    font-size: 10.5px;
+                    font-size: 10px;
                     font-weight: 700;
                     border: 1px solid #CBD5E1;
                     border-radius: 3px;
-                    padding: 1px 2px 1px 5px;
-                    min-width: 38px;
-                    height: 18px;
+                    padding: 1px 11px 1px 4px;
+                    margin: 0px;
                 }
-                QComboBox.specUnitCombo:hover {
+                QComboBox#specUnitCombo:hover, QComboBox.specUnitCombo:hover {
                     border-color: #0284C7;
-                    background-color: #F1F5F9;
+                    background-color: #E2E8F0;
                 }
-                QComboBox.specUnitCombo::drop-down {
+                QComboBox#specUnitCombo::drop-down, QComboBox.specUnitCombo::drop-down {
+                    subcontrol-origin: padding;
+                    subcontrol-position: center right;
                     border: none;
                     width: 10px;
                 }
-                QComboBox.specUnitCombo::down-arrow {
+                QComboBox#specUnitCombo::down-arrow, QComboBox.specUnitCombo::down-arrow {
+                    subcontrol-origin: padding;
+                    subcontrol-position: center;
                     image: none;
                     border-left: 3px solid transparent;
                     border-right: 3px solid transparent;
@@ -951,7 +1053,7 @@ class PlotPanel(QFrame):
                     height: 0;
                     margin-right: 2px;
                 }
-                QComboBox.specUnitCombo QAbstractItemView {
+                QComboBox#specUnitCombo QAbstractItemView, QComboBox.specUnitCombo QAbstractItemView {
                     background-color: #FFFFFF;
                     border: 1px solid #CBD5E1;
                     selection-background-color: #2563EB;
@@ -970,11 +1072,11 @@ class PlotPanel(QFrame):
                 QPushButton.segBtn {
                     background-color: #FFFFFF;
                     color: #1E293B;
-                    font-size: 11px;
+                    font-size: 10.5px;
                     font-weight: 600;
                     border: 1px solid #CBD5E1;
                     border-radius: 4px;
-                    padding: 2px 8px;
+                    padding: 2px 5px;
                     height: 19px;
                 }
                 QPushButton.segBtn:hover {
@@ -1063,13 +1165,13 @@ class PlotPanel(QFrame):
                 QPushButton.ghostChip {
                     background-color: #FFFFFF;
                     color: #0F172A;
-                    font-size: 11px;
+                    font-size: 10px;
                     font-weight: 700;
                     border: 1px solid #94A3B8;
                     border-radius: 4px;
-                    padding: 2px 7px;
-                    height: 20px;
-                    min-width: 36px;
+                    padding: 1px 4px;
+                    height: 19px;
+                    min-width: 28px;
                 }
                 QPushButton.ghostChip:hover {
                     background-color: #F1F5F9;
@@ -1134,7 +1236,7 @@ class PlotPanel(QFrame):
         self.slider_carrier_tol.setRange(25, 1500)
         self.slider_carrier_tol.setSingleStep(25)
         self.slider_carrier_tol.setValue(300)
-        self.slider_carrier_tol.setFixedWidth(70)
+        self.slider_carrier_tol.setFixedWidth(50)
         self.slider_carrier_tol.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider_carrier_tol.setToolTip("Arraste para regular a tolerância espectral em tempo real")
         self.slider_carrier_tol.valueChanged.connect(self._on_carrier_tol_slider_changed)
@@ -1142,22 +1244,23 @@ class PlotPanel(QFrame):
 
         self.spin_carrier_tol = QSpinBox()
         self.spin_carrier_tol.setProperty("class", "specMonoSpin")
+        self.spin_carrier_tol.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.spin_carrier_tol.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.spin_carrier_tol.setRange(25, 2000)
         self.spin_carrier_tol.setSingleStep(25)
         self.spin_carrier_tol.setValue(300)
         self.spin_carrier_tol.setPrefix("±")
         self.spin_carrier_tol.setSuffix(" Hz")
-        self.spin_carrier_tol.setFixedWidth(64)
+        self.spin_carrier_tol.setFixedWidth(54)
         self.spin_carrier_tol.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.spin_carrier_tol.setToolTip("Tolerância espectral em torno da frequência portadora (tempo real)")
         self.spin_carrier_tol.valueChanged.connect(self._on_carrier_tol_spin_changed)
         layout.addWidget(self.spin_carrier_tol)
 
-        chip_box = QFrame()
-        chip_box.setObjectName("chipBox")
-        chip_box.setStyleSheet("background: transparent; border: none;")
-        chip_layout = QHBoxLayout(chip_box)
+        self.chip_box = QFrame()
+        self.chip_box.setObjectName("chipBox")
+        self.chip_box.setStyleSheet("background: transparent; border: none;")
+        chip_layout = QHBoxLayout(self.chip_box)
         chip_layout.setContentsMargins(0, 0, 0, 0)
         chip_layout.setSpacing(2)
 
@@ -1170,7 +1273,7 @@ class PlotPanel(QFrame):
             btn_chip.clicked.connect(lambda checked=False, v=tol_val: self.set_carrier_tolerance(v))
             chip_layout.addWidget(btn_chip)
 
-        layout.addWidget(chip_box)
+        layout.addWidget(self.chip_box)
 
     def _on_carrier_tol_spin_changed(self, val):
         if hasattr(self, "slider_carrier_tol") and self.slider_carrier_tol.value() != val:
@@ -1196,6 +1299,21 @@ class PlotPanel(QFrame):
         self._update_carrier_badge()
         if tol_hz is not None:
             self.set_carrier_tolerance(int(tol_hz), notify=False)
+            
+            if self._carrier_freq > 0.0 and hasattr(self, "spin_spec_ymin") and hasattr(self, "spin_spec_ymax"):
+                unit = getattr(self, "spec_unit", "kHz")
+                ymin = max(0.0, self._carrier_freq - tol_hz)
+                ymax = self._carrier_freq + tol_hz
+                if unit == "kHz":
+                    ymin /= 1000.0
+                    ymax /= 1000.0
+                
+                self.spin_spec_ymin.blockSignals(True)
+                self.spin_spec_ymax.blockSignals(True)
+                self.spin_spec_ymin.setValue(ymin)
+                self.spin_spec_ymax.setValue(ymax)
+                self.spin_spec_ymin.blockSignals(False)
+                self.spin_spec_ymax.blockSignals(False)
 
     def _update_carrier_badge(self):
         if not hasattr(self, "lbl_carrier_info"):

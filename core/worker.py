@@ -9,6 +9,7 @@ class GenericWorker(QThread):
     finished_signal = pyqtSignal(object)
     error_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int)   # (current, total) para lote
+    result_ready_signal = pyqtSignal(str, object) # (filename, result_payload)
 
     def __init__(self, target_fn, *args, **kwargs):
         super().__init__()

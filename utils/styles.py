@@ -17,8 +17,20 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 background: transparent;
                 border: 0;
             }
+            QSplitter {
+                background: transparent;
+                border: none;
+            }
             QSplitter::handle {
                 background: #181B1F;
+            }
+            QSplitter#mainSplitter::handle:horizontal {
+                background: #181B1F;
+                width: 4px;
+                margin: 0px;
+            }
+            QSplitter#mainSplitter::handle:horizontal:hover {
+                background: #2563EB;
             }
             QSplitter#dashboardSplitter::handle:horizontal {
                 background: #15181C;
@@ -219,7 +231,7 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
             QWidget#volumeCluster { background: transparent; border: 0; }
             QLabel#metricDivider { color: #363A40; }
             /* Ação Primária do Cabeçalho (Reanalisar) */
-            QPushButton#summaryPrimaryAction {
+            QPushButton#summaryPrimaryAction, QPushButton#analyzeBtn, QPushButton#reanalyzeBtn, QPushButton.summaryPrimaryAction {
                 background-color: #2563EB;
                 color: #FFFFFF;
                 border: 1px solid #3B82F6;
@@ -231,13 +243,18 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 font-weight: 600;
                 outline: none;
             }
-            QPushButton#summaryPrimaryAction:hover {
+            QPushButton#summaryPrimaryAction:hover, QPushButton#analyzeBtn:hover, QPushButton#reanalyzeBtn:hover, QPushButton.summaryPrimaryAction:hover {
                 background-color: #1D4ED8;
                 border-color: #60A5FA;
             }
-            QPushButton#summaryPrimaryAction:pressed {
+            QPushButton#summaryPrimaryAction:pressed, QPushButton#analyzeBtn:pressed, QPushButton#reanalyzeBtn:pressed, QPushButton.summaryPrimaryAction:pressed {
                 background-color: #1E40AF;
                 border-color: #1D4ED8;
+            }
+            QPushButton#summaryPrimaryAction:disabled, QPushButton#analyzeBtn:disabled, QPushButton#reanalyzeBtn:disabled, QPushButton.summaryPrimaryAction:disabled {
+                background-color: #1E3A8A;
+                border: 1px solid #1D4ED8;
+                color: #93C5FD;
             }
 
             /* Alternância de Inteligência Artificial (Pill Toggle) */
@@ -266,9 +283,9 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 color: #94A3B8;
             }
             QPushButton#summaryToggleMl[active="false"]:hover {
-                background-color: #283344;
-                border-color: #4A5568;
-                color: #CBD5E1;
+                background-color: #2D3748;
+                border-color: #60A5FA;
+                color: #F1F5F9;
             }
 
             /* Ações Secundárias do Cabeçalho */
@@ -285,9 +302,9 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 outline: none;
             }
             QPushButton#summaryAction:hover, QPushButton.summarySecondaryAction:hover {
-                background-color: #283344;
-                border-color: #4A5568;
-                color: #FFFFFF;
+                background-color: #2D3748;
+                border-color: #38BDF8;
+                color: #38BDF8;
             }
             QPushButton#summaryAction:pressed, QPushButton.summarySecondaryAction:pressed {
                 background-color: #171D26;
@@ -374,40 +391,40 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
                 font-size: 11.5px;
                 font-weight: 600;
             }
-            QPushButton#plotTool {
+            QPushButton#plotTool, QPushButton#plotMaximize, QPushButton#plotClose {
                 background: #1E232A;
                 border: 1px solid #2D333B;
                 color: #CBD5E1;
                 border-radius: 4px;
-                font-size: 14px;
-                padding: 2px 4px;
+                font-size: 13px;
+                min-width: 26px;
+                max-width: 26px;
+                min-height: 26px;
+                max-height: 26px;
+                padding: 0px;
                 outline: none;
             }
-            QPushButton#plotTool:hover { background: #2A3038; border-color: #38BDF8; color: #60A5FA; }
-            QPushButton#plotTool:pressed { background: #15181C; }
-            QPushButton#plotTool:disabled { color: #4B5563; background: transparent; border-color: transparent; }
-            QPushButton#plotMaximize {
-                background: #1E232A;
-                border: 1px solid #2D333B;
-                color: #CBD5E1;
-                font-size: 15px;
-                border-radius: 4px;
-                padding: 2px 4px;
-                outline: none;
+            QPushButton#plotTool:hover, QPushButton#plotMaximize:hover {
+                background: #2D3748;
+                border-color: #38BDF8;
+                color: #38BDF8;
             }
-            QPushButton#plotMaximize:hover { background: #2A3038; border-color: #38BDF8; color: #60A5FA; }
-            QFrame#chipBox { background: transparent; border: none; }
-            QPushButton#plotClose {
-                background: #1E232A;
-                border: 1px solid #2D333B;
-                color: #CBD5E1;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: bold;
-                padding: 2px 4px;
-                outline: none;
+            QPushButton#plotClose:hover {
+                background: #451A1A;
+                border-color: #EF4444;
+                color: #EF4444;
             }
-            QPushButton#plotClose:hover { background: #3B1818; border-color: #EF4444; color: #EF4444; }
+            QPushButton#plotTool:pressed, QPushButton#plotMaximize:pressed {
+                background: #15181C;
+            }
+            QPushButton#plotClose:pressed {
+                background: #2D1111;
+            }
+            QPushButton#plotTool:disabled, QPushButton#plotMaximize:disabled {
+                background: #14171A;
+                border: 1px solid #23272D;
+                color: #4B5563;
+            }
             QPushButton#navIcon, QPushButton#menuButton {
                 color: #AEB4BD; background: transparent; border: 0; border-radius: 6px;
             }
@@ -538,58 +555,86 @@ DARK_STYLESHEET = r"""            QMainWindow, QWidget {
 """
 
 LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { background: #F3F5F7; color: #20252B; }
+                QLabel { background: transparent; border: 0; }
                 QFrame#topNav { background: transparent; border-bottom: 1px solid #D9DEE4; }
                 QLabel#brand { color: #1D2329; }
                 QLabel#version { color: #7A838D; }
                 QLabel#themeLabel { color: #68737E; }
-                QPushButton#menuButton, QPushButton#navIcon, QPushButton#transport, QPushButton#speedButton {
-                    color: #475569; background: transparent; border: 0; border-radius: 6px;
+                QPushButton#menuButton, QPushButton#navIcon {
+                    color: #334155; background: transparent; border: 0; border-radius: 6px;
                 }
-                QPushButton#menuButton:hover, QPushButton#navIcon:hover, QPushButton#transport:hover, QPushButton#speedButton:hover {
+                QPushButton#menuButton:hover, QPushButton#navIcon:hover {
                     background: #E2E8F0; color: #2563EB;
                 }
-                QPushButton#plotTool, QPushButton#plotMaximize {
-                    background: #FFFFFF;
+                QPushButton#transport, QPushButton#speedButton {
+                    color: #334155; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 20px; padding: 0; outline: none;
+                }
+                QPushButton#transport:hover, QPushButton#speedButton:hover {
+                    background: #F1F5F9; border-color: #2563EB; color: #2563EB;
+                }
+                QPushButton#plotTool, QPushButton#plotMaximize, QPushButton#plotClose {
+                    background-color: #FFFFFF;
                     border: 1px solid #CBD5E1;
                     color: #334155;
                     border-radius: 4px;
-                    font-size: 14px;
-                    padding: 2px 4px;
+                    font-size: 13px;
+                    min-width: 26px;
+                    max-width: 26px;
+                    min-height: 26px;
+                    max-height: 26px;
+                    padding: 0px;
                     outline: none;
                 }
                 QPushButton#plotTool:hover, QPushButton#plotMaximize:hover {
-                    background: #F1F5F9;
+                    background-color: #EFF6FF;
                     border-color: #2563EB;
                     color: #2563EB;
                 }
-                QPushButton#plotClose {
-                    background: #FFFFFF;
-                    border: 1px solid #CBD5E1;
-                    color: #64748B;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: bold;
-                    padding: 2px 4px;
-                    outline: none;
-                }
                 QPushButton#plotClose:hover {
-                    background: #FEE2E2;
-                    border-color: #DC2626;
-                    color: #DC2626;
+                    background-color: #FEE2E2;
+                    border-color: #EF4444;
+                    color: #EF4444;
+                }
+                QPushButton#plotTool:pressed, QPushButton#plotMaximize:pressed {
+                    background-color: #E2E8F0;
+                }
+                QPushButton#plotClose:pressed {
+                    background-color: #FCA5A5;
+                }
+                QPushButton#plotTool:disabled, QPushButton#plotMaximize:disabled {
+                    background-color: #F8FAFC;
+                    border: 1px solid #E2E8F0;
+                    color: #94A3B8;
                 }
                 QFrame#chipBox { background: transparent; border: none; }
                 QWidget#actionsBox { background: transparent; border: none; }
                 QPushButton#summaryAbortAction {
-                    background-color: rgba(220, 38, 38, 0.10);
+                    background-color: #FEE2E2;
                     color: #DC2626;
-                    border: 1px solid rgba(220, 38, 38, 0.35);
+                    border: 1px solid #FCA5A5;
                     border-radius: 5px;
                     min-height: 18px; max-height: 18px;
                     padding: 4px 10px; font-size: 12px; font-weight: 600; outline: none;
                 }
                 QPushButton#summaryAbortAction:hover {
-                    background-color: rgba(220, 38, 38, 0.20);
+                    background-color: #FCA5A5;
                     border-color: #DC2626;
+                    color: #B91C1C;
+                }
+                QSplitter {
+                    background: #F3F5F7;
+                    border: none;
+                }
+                QSplitter::handle {
+                    background: #D9DEE4;
+                }
+                QSplitter#mainSplitter::handle:horizontal {
+                    background: #D9DEE4;
+                    width: 4px;
+                    margin: 0px;
+                }
+                QSplitter#mainSplitter::handle:horizontal:hover {
+                    background: #2563EB;
                 }
                 QSplitter#dashboardSplitter::handle:horizontal {
                     background: #E2E8F0; width: 6px; margin: 0px 1px; border-radius: 3px;
@@ -603,7 +648,6 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 QSplitter#stackSplitter::handle:vertical:hover {
                     background: #2563EB;
                 }
-                QPushButton#plotTool:disabled { color: #94A3B8; background: transparent; }
                 QPushButton#btn_sync {
                     background: #F1F5F9;
                     border: 1px solid #CBD5E1;
@@ -744,10 +788,10 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                 QLabel#summaryFile, QLabel#metricValue { color: #1D2329; }
                 QLabel#summaryMeta, QLabel#metricTitle, QLabel#metricSub, QLabel#volumeLabel, QLabel#elapsedLabel { color: #69737D; }
                 /* Ação Primária do Cabeçalho (Reanalisar) */
-                QPushButton#summaryPrimaryAction {
+                QPushButton#summaryPrimaryAction, QPushButton#analyzeBtn, QPushButton#reanalyzeBtn, QPushButton.summaryPrimaryAction {
                     background-color: #2563EB;
                     color: #FFFFFF;
-                    border: 1px solid #2563EB;
+                    border: 1px solid #1D4ED8;
                     border-radius: 5px;
                     min-height: 18px;
                     max-height: 18px;
@@ -756,13 +800,20 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     font-weight: 600;
                     outline: none;
                 }
-                QPushButton#summaryPrimaryAction:hover {
+                QPushButton#summaryPrimaryAction:hover, QPushButton#analyzeBtn:hover, QPushButton#reanalyzeBtn:hover, QPushButton.summaryPrimaryAction:hover {
                     background-color: #1D4ED8;
-                    border-color: #1D4ED8;
-                }
-                QPushButton#summaryPrimaryAction:pressed {
-                    background-color: #1E40AF;
                     border-color: #1E40AF;
+                    color: #FFFFFF;
+                }
+                QPushButton#summaryPrimaryAction:pressed, QPushButton#analyzeBtn:pressed, QPushButton#reanalyzeBtn:pressed, QPushButton.summaryPrimaryAction:pressed {
+                    background-color: #1E40AF;
+                    border-color: #1E3A8A;
+                    color: #FFFFFF;
+                }
+                QPushButton#summaryPrimaryAction:disabled, QPushButton#analyzeBtn:disabled, QPushButton#reanalyzeBtn:disabled, QPushButton.summaryPrimaryAction:disabled {
+                    background-color: #3B82F6;
+                    border: 1px solid #2563EB;
+                    color: #FFFFFF;
                 }
 
                 /* Alternância de Inteligência Artificial (Pill Toggle) */
@@ -786,20 +837,20 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     color: #064E3B;
                 }
                 QPushButton#summaryToggleMl[active="false"] {
-                    background-color: #F1F5F9;
+                    background-color: #FFFFFF;
                     border: 1px solid #CBD5E1;
-                    color: #64748B;
+                    color: #334155;
                 }
                 QPushButton#summaryToggleMl[active="false"]:hover {
-                    background-color: #E2E8F0;
+                    background-color: #F1F5F9;
                     border-color: #94A3B8;
-                    color: #334155;
+                    color: #0F172A;
                 }
 
                 /* Ações Secundárias do Cabeçalho */
                 QPushButton#summaryAction, QPushButton.summarySecondaryAction {
-                    background-color: #F1F5F9;
-                    color: #334155;
+                    background-color: #FFFFFF;
+                    color: #1E293B;
                     border: 1px solid #CBD5E1;
                     border-radius: 5px;
                     min-height: 18px;
@@ -810,13 +861,14 @@ LIGHT_STYLESHEET_OVERRIDES = r"""                QMainWindow, QWidget { backgrou
                     outline: none;
                 }
                 QPushButton#summaryAction:hover, QPushButton.summarySecondaryAction:hover {
-                    background-color: #E2E8F0;
-                    border-color: #94A3B8;
-                    color: #0F172A;
+                    background-color: #F1F5F9;
+                    border-color: #2563EB;
+                    color: #2563EB;
                 }
                 QPushButton#summaryAction:pressed, QPushButton.summarySecondaryAction:pressed {
-                    background-color: #CBD5E1;
-                    border-color: #64748B;
+                    background-color: #E2E8F0;
+                    border-color: #1D4ED8;
+                    color: #1D4ED8;
                 }
                 QPushButton#summaryAction:disabled, QPushButton.summarySecondaryAction:disabled {
                     background-color: #F8FAFC;

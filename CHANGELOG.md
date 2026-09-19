@@ -4,6 +4,24 @@ Histórico completo, técnico e detalhado de todas as atualizações, correçõe
 
 Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre** dentro do próprio aplicativo.
 
+## [4.4.0] - 2026-09-19
+
+### Visualização Científica & Novos Gráficos
+- **Histograma Bivariado com Eixo Duplo (`twinx`):** Renderização simultânea da contagem de chilreios por classe de pulsos no eixo Y primário (esquerdo) e da linha de tendência de duração média em milissegundos (ms) no eixo Y secundário (direito), com marcadores circulares discretos, anotações de valor e legenda unificada.
+- **Espectro de Potência Médio (PSD via Welch):** Substituição completa do gráfico de frequência instantânea pela Densidade Espectral de Potência em dB (`compute_psd`), calculada em tempo real com janela de 4096 amostras, foco inicial restrito à faixa acústica relevante (0–15 kHz), pan delimitado até Nyquist e anotação do pico da frequência portadora.
+- **Adaptação Cromática dos Eixos Secundários:** O eixo `twinx()` e o PSD contam com estilização dinâmica para alto contraste nos temas Claro (`#DC2626`) e Escuro (`#FF6B6B`).
+
+### Bioacústica, Cadência e Agrupamento
+- **Imposição Rigorosa de Mínimo de Pulsos (`min_p`):** Eliminação de exceções que permitiam que chilreios espúrios de 1 ou 2 pulsos ultrapassassem a esteira de validação. O critério fisiológico é agora estritamente respeitado em todo o agrupamento.
+- **Resolução de Conflitos de Auto-Cache de Correções:** Expurgo da rotina de auto-salvamento (`validate_all`) que populava o cache com centenas de falsas alterações, corrompendo o aprendizado de máquina ao alternar entre DSP e IA.
+- **Modo DSP Nativo como Padrão:** O software sempre inicia com a Inteligência Artificial desligada. Ao ativá-la manualmente, um diálogo instrutivo esclarece as salvaguardas e potenciais desvios de predição.
+- **Botão "Resetar Aprendizado da IA":** Novo comando no menu Configurações que restaura os valores originais do DSP, elimina arquivos de persistência (`.crntrain`) e reinicializa o classificador Random Forest.
+
+### Navegação & Viewport
+- **Delimitação de Pan e Zoom:** Aplicação de travas de conteúdo nos gráficos de Forma de Onda, Espectrograma e PSD, impedindo que o usuário navegue para áreas vazias fora da extensão temporal do áudio ou além da frequência de Nyquist.
+- **Zoom Inicial "Total" e Preset "Focal" Preciso:** Inicialização do espectrograma abrangendo a faixa completa de 0 a Nyquist, e redefinição do preset Focal para enquadrar estritamente a banda da frequência portadora ($FP \pm \text{tolerância}$).
+- **Status Unificado do Pipeline:** O rótulo inferior agora reflete fielmente o mecanismo ativo em tempo de execução: Modo DSP puro, IA Supervisionada ou IA Não-Supervisionada (GMM).
+
 ---
 
 ## [4.3.2] - 2026-09-17

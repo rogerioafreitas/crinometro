@@ -9,7 +9,7 @@ import numpy as np
 import statistics
 from scipy.io import wavfile
 from scipy.io.wavfile import WavFileWarning
-from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram
+from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram, welch
 
 class CricketAnalyzer:
     @staticmethod
@@ -21,7 +21,21 @@ class CricketAnalyzer:
             return min(modes) if modes else 0
 
     @staticmethod
-    def analyze(file_path, params, pulse_learner=None):
+    def compute_psd(data, sr):
+        """Calcula o Espectro de Potência Médio (PSD) usando o método de Welch com janela Hann."""
+        # Tamanho da janela e overlap ideais para resolução de frequência
+        nperseg = min(len(data), int(sr * 0.05)) # Janela de 50ms para boa resolução espectral
+        f, Pxx = welch(data, sr, window='hann', nperseg=nperseg, scaling='density')
+        # Conversão para dB (escala logarítmica de potência)
+        # Proteção contra log(0)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Pxx_db = 10 * np.log10(np.clip(Pxx, 1e-12, None))
+            
+        # Remove a lixeira DC (f=0) para evitar o artefato vertical no início do gráfico
+        return f[1:], Pxx_db[1:]
+
+    @staticmethod
+    def analyze(file_path, params, pulse_learner=None, cached_spec=None):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", WavFileWarning)
             rate, data = wavfile.read(file_path)
@@ -75,38 +89,44 @@ class CricketAnalyzer:
         kernel = hann_win / np.sum(hann_win)
         env1_smooth = np.convolve(env1, kernel, mode='same').astype(np.float32)
 
-        # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
-        f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
-        Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
-        f_spec = f_spec.astype(np.float32)
-        t_spec = t_spec.astype(np.float32)
-
-        freq_mask = (f_spec >= b1_min) & (f_spec <= b1_max)
-        if np.any(freq_mask):
-            Sxx_band = Sxx[freq_mask, :]
-            band_indices = np.where(freq_mask)[0]
-            dom_in_band = np.argmax(Sxx_band, axis=0)
-            dom_freq_idx = band_indices[dom_in_band]
+        if cached_spec is not None and all(k in cached_spec for k in ("f_spec", "t_spec", "Sxx_db", "dom_freqs")):
+            f_spec = cached_spec["f_spec"]
+            t_spec = cached_spec["t_spec"]
+            Sxx_db = cached_spec["Sxx_db"]
+            dom_freqs = cached_spec["dom_freqs"]
         else:
-            dom_freq_idx = np.argmax(Sxx, axis=0)
+            # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
+            f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
+            Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
+            f_spec = f_spec.astype(np.float32)
+            t_spec = t_spec.astype(np.float32)
 
-        dom_freqs = f_spec[dom_freq_idx].astype(np.float64)
-        # Refinamento parabólico sub-bin contínuo da frequência dominante (vetorizado)
-        df = float(f_spec[1] - f_spec[0]) if len(f_spec) > 1 else 1.0
-        valid_k = (dom_freq_idx > 0) & (dom_freq_idx < Sxx.shape[0] - 1)
-        valid_cols = np.where(valid_k)[0]
-        if len(valid_cols) > 0:
-            k = dom_freq_idx[valid_cols]
-            alpha = Sxx_db[k - 1, valid_cols]
-            beta = Sxx_db[k, valid_cols]
-            gamma = Sxx_db[k + 1, valid_cols]
-            denom = alpha - 2.0 * beta + gamma
-            non_zero = np.abs(denom) > 1e-6
-            p = np.zeros_like(denom, dtype=np.float32)
-            p[non_zero] = 0.5 * (alpha[non_zero] - gamma[non_zero]) / denom[non_zero]
-            p_valid = non_zero & (p >= -1.0) & (p <= 1.0)
-            dom_freqs[valid_cols[p_valid]] = f_spec[k[p_valid]] + p[p_valid] * df
-        dom_freqs = dom_freqs.astype(np.float32)
+            freq_mask = (f_spec >= b1_min) & (f_spec <= b1_max)
+            if np.any(freq_mask):
+                Sxx_band = Sxx[freq_mask, :]
+                band_indices = np.where(freq_mask)[0]
+                dom_in_band = np.argmax(Sxx_band, axis=0)
+                dom_freq_idx = band_indices[dom_in_band]
+            else:
+                dom_freq_idx = np.argmax(Sxx, axis=0)
+
+            dom_freqs = f_spec[dom_freq_idx].astype(np.float64)
+            # Refinamento parabólico sub-bin contínuo da frequência dominante (vetorizado)
+            df = float(f_spec[1] - f_spec[0]) if len(f_spec) > 1 else 1.0
+            valid_k = (dom_freq_idx > 0) & (dom_freq_idx < Sxx.shape[0] - 1)
+            valid_cols = np.where(valid_k)[0]
+            if len(valid_cols) > 0:
+                k = dom_freq_idx[valid_cols]
+                alpha = Sxx_db[k - 1, valid_cols]
+                beta = Sxx_db[k, valid_cols]
+                gamma = Sxx_db[k + 1, valid_cols]
+                denom = alpha - 2.0 * beta + gamma
+                non_zero = np.abs(denom) > 1e-6
+                p = np.zeros_like(denom, dtype=np.float32)
+                p[non_zero] = 0.5 * (alpha[non_zero] - gamma[non_zero]) / denom[non_zero]
+                p_valid = non_zero & (p >= -1.0) & (p <= 1.0)
+                dom_freqs[valid_cols[p_valid]] = f_spec[k[p_valid]] + p[p_valid] * df
+            dom_freqs = dom_freqs.astype(np.float32)
         dist_samples = max(1, int(rate * (params.get("gap_min", 25.0) / 1000.0 * 0.75)))
 
         # Limiar adaptativo restritivo de alta especificidade (prioriza precisão e elimina falsos positivos)
@@ -252,9 +272,12 @@ class CricketAnalyzer:
 
         all_distant = sorted(list(set(distant_peaks) | set(discarded_peaks_reasons.keys())))
 
+        # Task 2.2: Calcula o PSD (Power Spectral Density) do áudio bruto (data) para ver o espectro real
+        f_psd, Pxx_db = CricketAnalyzer.compute_psd(data, rate)
+
         return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
                 media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, all_distant, carrier_freq,
-                discarded_peaks_reasons, valid_peaks_stage2, peak_dur_dict)
+                discarded_peaks_reasons, valid_peaks_stage2, peak_dur_dict, f_psd.astype(np.float32), Pxx_db.astype(np.float32))
 
     @staticmethod
     def reevaluate_carrier_tolerance(
@@ -302,17 +325,9 @@ class CricketAnalyzer:
         else:
             candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
 
-        # 3. Classificação ML se ativa
-        if pulse_learner is not None and len(candidate_peaks) > 0:
-            gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
-            gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
-            focal_sens = float(params.get("focal_sensitivity", 0.60))
-            candidate_peaks, ml_distant_peaks = pulse_learner.filter_peaks(
-                candidate_peaks, rate, env, raw_signal=data_b1,
-                gap_min_s=gap_min_s, gap_max_s=gap_max_s, focal_sensitivity=focal_sens
-            )
-            for p in ml_distant_peaks:
-                discarded_reasons[int(p)] = "Classificado pelo modelo ML como ruído / canto distante"
+        # 3. Classificação ML (Removido daqui pois já foi processado na análise principal e não depende da tolerância)
+        # O array candidate_peaks já reflete o estágio 2 (pós-ML)
+        pass
 
         # 4. Agrupamento em chilreios
         peaks = np.asarray(sorted(candidate_peaks), dtype=int)
@@ -339,6 +354,7 @@ class CricketAnalyzer:
 
         Preserva a contagem fisiológica do grilo focal, expurgando intrusos rítmicos ou
         pulsos com amplitudes/centroides discrepantes sem penalizar chilreios legítimos.
+        Picos forçados (user_added_peaks) são sempre preservados se respeitarem o intervalo temporal.
         """
         if len(peaks) < 2:
             return [], [], 0.0, 0
@@ -347,26 +363,31 @@ class CricketAnalyzer:
         # Tolerância fisiológica rigorosa no intervalo inter-pulso (gap)
         gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
         gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
+        min_p = int(params.get("min_p", 2))
 
         # 1. Agrupamento preliminar por intervalos temporais (O(N))
         chirp_peaks_list = []
         current_chirp = [peaks[0]]
+        
+        def _keep_chirp(c):
+            return len(c) >= min_p
+
         for i in range(1, len(pulse_times_s)):
             gap_s = pulse_times_s[i] - pulse_times_s[i - 1]
             if gap_min_s <= gap_s <= gap_max_s:
                 current_chirp.append(peaks[i])
             else:
-                if len(current_chirp) >= 2:
+                if _keep_chirp(current_chirp):
                     chirp_peaks_list.append(current_chirp)
                 current_chirp = [peaks[i]]
-        if len(current_chirp) >= 2:
+        if _keep_chirp(current_chirp):
             chirp_peaks_list.append(current_chirp)
 
         # 2. Refinamento e Track Coherence em tempo linear O(N)
         refined_chirps = []
-        min_p = int(params.get("min_p", 2))
 
         for chirp in chirp_peaks_list:
+            
             if len(chirp) < min_p:
                 continue
             valid_idx = [p for p in chirp if 0 <= p < len(env)]
@@ -393,8 +414,7 @@ class CricketAnalyzer:
             for k in range(1, len(coherent_pulses)):
                 dt = c_times[k] - (clean_track[-1] / float(rate))
                 if dt < gap_min_s * 0.80:
-                    # Colisão temporal: dois pulsos sobrepostos (grilo distante intrudindo)
-                    # Mantém o pulso com maior amplitude
+                    # Colisão temporal
                     if env[coherent_pulses[k]] > env[clean_track[-1]]:
                         clean_track[-1] = coherent_pulses[k]
                 else:
@@ -412,6 +432,7 @@ class CricketAnalyzer:
                         if len(sub) >= min_p:
                             sub_chirps.append(sub)
                         sub = [clean_track[k]]
+                
                 if len(sub) >= min_p:
                     sub_chirps.append(sub)
 
@@ -463,6 +484,13 @@ class CricketAnalyzer:
                     else:
                         gated_chirps.append(cand)
                 refined_chirps = gated_chirps
+
+        # Assegura de forma infalível que NENHUM chilreio sem a quantidade mínima de pulsos passe.
+        final_chirps = []
+        for cp in refined_chirps:
+            if len(cp) >= min_p:
+                final_chirps.append(cp)
+        refined_chirps = final_chirps
 
         chirps = [len(cp) for cp in refined_chirps]
         media = float(statistics.mean(chirps)) if len(chirps) > 0 else 0.0

@@ -1,4 +1,4 @@
-# 🦗 Crinômetro v4.3.2
+# 🦗 Crinômetro v4.4.0
 
 > **Software Especializado em Bioacústica, Processamento Digital de Sinais (DSP) e Aprendizado Ativo em Grylloidea**
 
@@ -10,7 +10,7 @@ O instalador oficial com assistente de instalação e atualizador automático in
 
 🔗 **[Baixar Instalador Oficial no Google Drive](https://drive.google.com/drive/folders/1CSjbYE-mql_Sg9qmV-argU05RjpwnmpT?usp=sharing)**
 
-- **Nome do Instalador:** Crinometro_setup__v4.3.2.exe
+- **Nome do Instalador:** Crinometro_setup__v4.4.0.exe
 - **Tipo:** Instalador moderno (Inno Setup) com suporte a escolha de diretório de instalação, atalhos na Área de Trabalho e inicialização do aplicativo.
 - **Atualização Automática:** Notifica diretamente no Launcher sobre novas versões e realiza o download e a instalação de forma integrada e silenciosa.
 
