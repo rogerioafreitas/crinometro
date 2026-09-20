@@ -215,7 +215,7 @@ class CricketAnalyzer:
             carrier_freq = float(np.median(dom_freqs))
 
         # Filtragem por desvio de frequência em relação à portadora
-        freq_tol = float(params.get("freq_tolerance_hz", 300.0))
+        freq_tol = float(params.get("freq_tolerance_hz", 700.0))
         valid_peaks_stage3 = []
         freq_outliers = []
         if len(valid_peaks_stage2) > 0:

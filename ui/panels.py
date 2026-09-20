@@ -528,7 +528,7 @@ class PlotPanel(QFrame):
             if hasattr(self, "sep_presets") and self.sep_presets.isVisible() != show_scale_and_presets:
                 self.sep_presets.setVisible(show_scale_and_presets)
 
-            # Os chips rápidos de tolerância (±300, ±500, ±1000) aparecem quando houver largura suficiente (>= 720px no main)
+            # Os chips rápidos de tolerância (±300, ±500, ±700, ±1000) aparecem quando houver largura suficiente (>= 720px no main)
             show_chips = (not is_main and self.width() >= 360) or (is_main and self.width() >= 720)
             if hasattr(self, "chip_box") and self.chip_box.isVisible() != show_chips:
                 self.chip_box.setVisible(show_chips)
@@ -783,7 +783,7 @@ class PlotPanel(QFrame):
     def _preset_focal_band(self):
         carrier = getattr(self, "_carrier_freq", 0.0)
         tol = getattr(self, "spin_carrier_tol", None)
-        tol_val = tol.value() if tol else 300.0
+        tol_val = tol.value() if tol else 700.0
         
         if carrier > 0:
             y_min = max(0.0, carrier - tol_val)
@@ -1347,7 +1347,7 @@ class PlotPanel(QFrame):
         self.slider_carrier_tol.setProperty("class", "specSlider")
         self.slider_carrier_tol.setRange(25, 1500)
         self.slider_carrier_tol.setSingleStep(25)
-        self.slider_carrier_tol.setValue(300)
+        self.slider_carrier_tol.setValue(700)
         self.slider_carrier_tol.setFixedWidth(50)
         self.slider_carrier_tol.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider_carrier_tol.setToolTip("Arraste para regular a tolerância espectral em tempo real")
@@ -1360,7 +1360,7 @@ class PlotPanel(QFrame):
         self.spin_carrier_tol.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.spin_carrier_tol.setRange(25, 2000)
         self.spin_carrier_tol.setSingleStep(25)
-        self.spin_carrier_tol.setValue(300)
+        self.spin_carrier_tol.setValue(700)
         self.spin_carrier_tol.setPrefix("±")
         self.spin_carrier_tol.setSuffix(" Hz")
         self.spin_carrier_tol.setFixedWidth(54)
@@ -1376,7 +1376,7 @@ class PlotPanel(QFrame):
         chip_layout.setContentsMargins(0, 0, 0, 0)
         chip_layout.setSpacing(2)
 
-        for tol_val in (300, 500, 1000):
+        for tol_val in (300, 500, 700, 1000):
             btn_chip = QPushButton(f"±{tol_val}")
             btn_chip.setProperty("class", "ghostChip")
             btn_chip.setFixedHeight(20)

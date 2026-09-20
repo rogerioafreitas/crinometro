@@ -2215,7 +2215,7 @@ class MainWindow(QMainWindow):
             self.active_filename = filename
 
             # Sincroniza informações da frequência portadora e tolerância nos painéis
-            tol_val = float(params.get("freq_tolerance_hz", 300.0))
+            tol_val = float(params.get("freq_tolerance_hz", 700.0))
             if hasattr(self, "panel_spec"):
                 self.panel_spec.set_carrier_info(carrier_freq, tol_val)
             if hasattr(self, "panel_freq"):
@@ -2550,7 +2550,7 @@ class MainWindow(QMainWindow):
         d = getattr(self, "active_heavy_data", None)
         if not d:
             return
-        new_tol = getattr(self, "_pending_carrier_tol", float(self.algo_params.get("freq_tolerance_hz", 300.0)))
+        new_tol = getattr(self, "_pending_carrier_tol", float(self.algo_params.get("freq_tolerance_hz", 700.0)))
 
         valid_peaks_stage2 = d.get("valid_peaks_stage2", d.get("peaks_detected", []))
         carrier_freq = float(d.get("carrier_freq", 5000.0))
@@ -2618,7 +2618,7 @@ class MainWindow(QMainWindow):
         dom_freqs = d.get("dom_freqs", np.array([]))
         t_spec = d.get("t_spec", np.array([]))
         carrier_freq = float(d.get("carrier_freq", 0.0))
-        freq_tol = float(d.get("params", {}).get("freq_tolerance_hz", 300.0))
+        freq_tol = float(d.get("params", {}).get("freq_tolerance_hz", 700.0))
 
         # 1. Pulsos válidos agrupados em chilreios
         seen_samples = set()

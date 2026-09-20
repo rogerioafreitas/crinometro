@@ -14,7 +14,7 @@ DEFAULT_ALGO_PARAMS = {
     "smooth_window_ms": 15.0, "noise_floor": 1.00,
     "adaptation_rate": 0.10,
     "focal_sensitivity": 0.60,
-    "freq_tolerance_hz": 300.0,
+    "freq_tolerance_hz": 700.0,
 }
 
 # Resumo simplificado e objetivo para exibição interna no diálogo Sobre / Notas de Atualização
