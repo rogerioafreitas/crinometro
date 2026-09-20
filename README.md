@@ -38,15 +38,17 @@ Documentações completas e diagramadas estão disponíveis na pasta [docs/](doc
 
 ## ✨ Funcionalidades em Destaque
 
-- 📊 **Espectrograma Interativo até 10+ kHz:** Controles dedicados de escala Y vertical com limites editáveis, alternância dinâmica de unidade (Hz ⇋ kHz), presets rápidos ("10k" e "Focal") e renderização de banda ampla.
-- ⚡ **Navegação Ultra-Fluida (Zero Lag no Pan/Zoom):** Redução de 50% no uso de RAM via `float32`, aceleração temporal de hover e renderização reativa sem congelamentos.
-- 🦗 **Agrupamento por Espécime e Frequência Portadora:** Síntese bioacústica comparativa consolidada por espécime com frequência dominante intrínseca e diagnóstico rítmico com filtragem robusta de pausas no Relatório PDF.
-- 🔄 **Auto-Updater Integrado no Launcher:** Checagem assíncrona no GitHub Releases, download direto no Launcher com barra de progresso em tempo real e substituição automática via Inno Setup.
-- 🎧 **Análise Bioacústica Avançada (DSP):** Envoltória de Hilbert, filtro Butterworth passa-faixa IIR de fase zero e identificação automática de picos, pulsos e chilreios.
-- 🎨 **Paleta Canônica de Cores:** Identificação visual unificada de pulsos por chilreio em todos os gráficos (Onda, Histograma, Frequência e Espectrograma).
-- 🪟 **Interface Modular e Fluida:** Mini painéis arredondados com suporte a arrastar e soltar (Drag & Drop), previsão de encaixe e troca rápida com o gráfico principal.
-- 🧠 **Aprendizado Ativo (PulseLearner):** Mineração de regras rígidas a partir de correções manuais do usuário (*Hard Negative Rule Induction*) e filtro temporal fisiológico (*ICI Gate*).
-- 📑 **Exportação Científica:** Relatório Completo detalhado e Relatório Simplificado multiáudio em PDF (ReportLab), além de tabelas em TXT para exportação direta ao R/Python.
+- 📊 **Histograma Bivariado de Pulsos (twinx):** Visualização integrada com contagem de chilreios no eixo Y primário e curva de duração média em milissegundos (ms) no eixo Y secundário com legenda sincronizada.
+- 🔊 **Densidade Espectral de Potência (PSD Welch):** Assinatura espectral média de 0 a 15 kHz calculada com 4096 amostras, anotação automática da Frequência Portadora ($f_p$) e delimitação até Nyquist.
+- ⚡ **Modo DSP Nativo como Padrão e Reset de IA:** Inicialização segura e determinística com Inteligência Artificial desligada por padrão e botão de redefinição de fábrica do classificador.
+- 📊 **Espectrograma Interativo com Presets:** Presets rápidos "Total" e "Focal", travas de pan/zoom limitadas à extensão temporal do áudio e alternância instantânea de unidade (Hz ⇋ kHz).
+- 🔄 **Auto-Updater Robusto em PowerShell (v4.4.1):** Atualização transparente com script nativo PowerShell UTF-8-BOM, normalização de diretório desacentuado (`Crinometro`) e migração de configurações sem conflitos de concorrência.
+- ⚡ **Navegação Ultra-Fluida e Cancelamento Seguro:** Redução de 50% de RAM em `float32`, redesenho assíncrono via `canvas.draw_idle()` e botão dinâmico "✕ Abortar" para interromper análises em tempo real.
+- 🦗 **Agrupamento por Espécime e Frequência Portadora:** Síntese comparativa por espécime com frequência dominante intrínseca e diagnóstico rítmico de cadência com filtragem robusta de pausas no Relatório PDF.
+- 🎧 **Cadeia Bioacústica Avançada (DSP):** Envoltória de Hilbert, filtro Butterworth passa-faixa IIR de fase zero e critério rigoroso de mínimo de 3 pulsos por chilreio ($min\_p \ge 3$).
+- 🎨 **Paleta Canônica de Cores:** Identificação visual unificada de pulsos por chamado em todos os gráficos (Onda, Histograma e Espectrograma).
+- 🧠 **Aprendizado Ativo (PulseLearner):** Mineração de regras rígidas (*Hard Negative Rule Induction*), filtro fisiológico *ICI Gate* e segregação focal vs. coro via Mistura de Gaussianas (GMM).
+- 📑 **Exportação Científica Completa:** Relatórios diagramados em PDF (Completo e Simplificado) e tabelas estruturadas em TXT para exportação direta ao R, Python, PAST e JASP.
 
 ---
 
