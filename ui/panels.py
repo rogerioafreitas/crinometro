@@ -421,7 +421,7 @@ class PlotPanel(QFrame):
             if hasattr(self, "sep_presets") and self.sep_presets.isVisible() != show_scale_and_presets:
                 self.sep_presets.setVisible(show_scale_and_presets)
 
-            # Os chips rápidos de tolerância (±150, ±300, ±500) aparecem quando houver largura suficiente (>= 720px no main)
+            # Os chips rápidos de tolerância (±300, ±500, ±1000) aparecem quando houver largura suficiente (>= 720px no main)
             show_chips = (not is_main and self.width() >= 360) or (is_main and self.width() >= 720)
             if hasattr(self, "chip_box") and self.chip_box.isVisible() != show_chips:
                 self.chip_box.setVisible(show_chips)
@@ -1264,7 +1264,7 @@ class PlotPanel(QFrame):
         chip_layout.setContentsMargins(0, 0, 0, 0)
         chip_layout.setSpacing(2)
 
-        for tol_val in (150, 300, 500):
+        for tol_val in (300, 500, 1000):
             btn_chip = QPushButton(f"±{tol_val}")
             btn_chip.setProperty("class", "ghostChip")
             btn_chip.setFixedHeight(20)
