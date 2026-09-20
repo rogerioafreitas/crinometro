@@ -3,6 +3,16 @@ import numpy as np
 from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine, HighPerfFreqEngine
 
 class PlotRenderers:
+    def update_wave_visibility(self, show_raw, show_env, show_lod):
+        if not hasattr(self, 'wave_lines'): return
+        if 'raw' in self.wave_lines: self.wave_lines['raw'].set_visible(show_raw)
+        if 'env' in self.wave_lines: self.wave_lines['env'].set_visible(show_env)
+        if 'lod' in self.wave_lines: self.wave_lines['lod'].set_visible(show_lod)
+        if getattr(self, 'line_engine', None) and self.line_engine.line:
+            self.line_engine.line.set_visible(show_lod)
+        
+        self.panel_wave.canvas.draw_idle()
+
     def __init__(self, session_context, main_window=None, panel_wave=None, panel_spec=None, panel_hist=None, panel_psd=None, panel_freq=None):
         self.main_window = weakref.ref(main_window) if main_window else lambda: None
         self.session_context = session_context

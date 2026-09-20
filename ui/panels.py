@@ -3,7 +3,7 @@ Crinômetro - Painéis Gráficos e Timeline Interativa.
 """
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QDoubleSpinBox, QSpinBox, QSlider, QComboBox, QAbstractSpinBox
+    QDoubleSpinBox, QSpinBox, QSlider, QComboBox, QAbstractSpinBox, QCheckBox
 )
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
@@ -201,6 +201,43 @@ class PlotPanel(QFrame):
 
         self.layout.addWidget(self.title_bar)
 
+        if self.title_key == "wave":
+            self.wave_ctrl_bar = CompactCtrlBar()
+            self.wave_ctrl_bar.setObjectName("waveCtrlBar")
+            self.wave_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
+            wctrl_layout = QHBoxLayout(self.wave_ctrl_bar)
+            wctrl_layout.setContentsMargins(6, 2, 6, 3)
+            wctrl_layout.setSpacing(12)
+            
+            # Default States
+            self.show_raw = True
+            self.show_env = True
+            self.show_lod = False
+            
+            self.chk_raw = QCheckBox("Sinal Bruto")
+            self.chk_raw.setChecked(self.show_raw)
+            self.chk_raw.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.chk_raw.setStyleSheet("QCheckBox { color: #94A3B8; font-size: 11px; font-weight: bold; }")
+            self.chk_raw.toggled.connect(self._on_wave_toggles_changed)
+            wctrl_layout.addWidget(self.chk_raw)
+            
+            self.chk_env = QCheckBox("Envoltória (Hilbert)")
+            self.chk_env.setChecked(self.show_env)
+            self.chk_env.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.chk_env.setStyleSheet("QCheckBox { color: #3B82F6; font-size: 11px; font-weight: bold; }")
+            self.chk_env.toggled.connect(self._on_wave_toggles_changed)
+            wctrl_layout.addWidget(self.chk_env)
+            
+            self.chk_lod = QCheckBox("LOD (Min-Max)")
+            self.chk_lod.setChecked(self.show_lod)
+            self.chk_lod.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.chk_lod.setStyleSheet("QCheckBox { color: #F97316; font-size: 11px; font-weight: bold; }")
+            self.chk_lod.toggled.connect(self._on_wave_toggles_changed)
+            wctrl_layout.addWidget(self.chk_lod)
+            
+            wctrl_layout.addStretch()
+            self.layout.addWidget(self.wave_ctrl_bar)
+
         if self.title_key == "freq":
             self.freq_ctrl_bar = CompactCtrlBar()
             self.freq_ctrl_bar.setObjectName("freqCtrlBar")
@@ -372,6 +409,13 @@ class PlotPanel(QFrame):
         b.setObjectName("plotTool")
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         return b
+
+    def _on_wave_toggles_changed(self, checked):
+        self.show_raw = self.chk_raw.isChecked()
+        self.show_env = self.chk_env.isChecked()
+        self.show_lod = self.chk_lod.isChecked()
+        if hasattr(self.window(), "plot_renderers") and self.window().plot_renderers:
+            self.window().plot_renderers.update_wave_visibility(self.show_raw, self.show_env, self.show_lod)
 
     def _toggle_pulse_edit_mode(self, checked):
         """Ativa/desativa o modo de edição de pulsos para este painel."""
