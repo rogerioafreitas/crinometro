@@ -196,99 +196,167 @@ class UpdateDownloaderThread(QThread):
             self.error.emit(f"Erro durante o download da atualização: {str(e)}")
 
 
-def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
+def launch_windows_updater(downloaded_file: str, target_dir: str = "", execute: bool = True):
     """
-    Gera um script batch desacoplado (.bat) que:
-    1. Aguarda o término do processo Crinômetro atual;
-    2. Se for instalador Inno Setup (.exe), executa-o com parâmetros silenciosos para atualizar a instalação;
-    3. Se for .zip ou binário, extrai e substitui diretamente;
-    4. Reinicia o executável do Crinômetro atualizado e limpa temporários.
+    Orquestra a substituição limpa e atualização do Crinômetro no Windows de forma assíncrona.
+    Utiliza script PowerShell (.ps1) codificado em UTF-8 com BOM para suporte total e nativo
+    a caracteres especiais (como acentos em 'Crinômetro'), normaliza diretórios legados,
+    aguarda a liberação das travas de arquivo do processo pai e executa o instalador.
     """
     if not target_dir:
-        target_dir = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+        if getattr(sys, "frozen", False):
+            target_dir = os.path.dirname(sys.executable)
+        else:
+            default_pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+            target_dir = os.path.join(default_pf, "Crinometro")
 
+    # Normalização rigorosa: padroniza a pasta de instalação como 'Crinometro' (sem acento)
+    # eliminando de vez incompatibilidades históricas de codepages e caminhos no Windows
     target_dir = os.path.abspath(target_dir)
+    parent_dir = os.path.dirname(target_dir)
+    base_name = os.path.basename(target_dir)
+    if base_name in ("Crinômetro", "Crin\ufffdmetro", "Crin?metro") or base_name.lower().startswith("crin"):
+        target_dir = os.path.join(parent_dir, "Crinometro")
+
     downloaded_file = os.path.abspath(downloaded_file)
     pid = os.getpid()
 
-    bat_dir = os.path.join(tempfile.gettempdir(), "crinometro_updater")
-    os.makedirs(bat_dir, exist_ok=True)
-    bat_file = os.path.join(bat_dir, "apply_update.bat")
+    updater_dir = os.path.join(tempfile.gettempdir(), "crinometro_updater")
+    os.makedirs(updater_dir, exist_ok=True)
+    ps1_file = os.path.join(updater_dir, "apply_update.ps1")
+    bat_file = os.path.join(updater_dir, "apply_update.bat")
 
     is_zip = downloaded_file.lower().endswith(".zip")
     is_installer = downloaded_file.lower().endswith(".exe") and any(
         kw in os.path.basename(downloaded_file).lower() for kw in ("setup", "install")
     )
     exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "Crinometro.exe"
+    exe_name = exe_name.replace("ô", "o").replace("\ufffd", "o").replace("?", "o")
     exe_target = os.path.join(target_dir, exe_name)
-    if not os.path.exists(exe_target):
-        cands = [f for f in os.listdir(target_dir) if f.lower().startswith("crinometro") and f.lower().endswith(".exe")]
-        if cands:
-            exe_target = os.path.join(target_dir, cands[0])
+
+    if not os.path.exists(exe_target) and os.path.isdir(target_dir):
+        try:
+            cands = [f for f in os.listdir(target_dir) if f.lower().startswith("crinometro") and f.lower().endswith(".exe")]
+            if cands:
+                exe_target = os.path.join(target_dir, cands[0])
+        except Exception:
+            pass
 
     if is_installer:
-        # Execução do instalador Inno Setup silencioso /SP- /VERYSILENT /SUPPRESSMSGBOXES
-        update_commands = f"""
-echo Executando instalador Inno Setup da nova versão...
-"{downloaded_file}" /SP- /VERYSILENT /SUPPRESSMSGBOXES /DIR="{target_dir}"
+        update_cmd_ps1 = f"""
+# Executa instalador Inno Setup silenciosamente e aguarda conclusao
+$installArgs = "/SP- /VERYSILENT /SUPPRESSMSGBOXES /DIR=`"{target_dir}`""
+Start-Process -FilePath "{downloaded_file}" -ArgumentList $installArgs -Wait
 """
     elif is_zip:
-        # Extração via PowerShell e cópia recursiva
-        update_commands = f"""
-powershell -Command "Expand-Archive -Path '{downloaded_file}' -DestinationPath '{bat_dir}\\extracted' -Force"
-xcopy /E /Y /Q "{bat_dir}\\extracted\\*" "{target_dir}\\"
+        update_cmd_ps1 = f"""
+# Extrai arquivo zip e copia recursivamente para a pasta de destino
+$extractDir = Join-Path (Split-Path "{downloaded_file}") "extracted"
+if (Test-Path "$extractDir") {{ Remove-Item -Path "$extractDir" -Recurse -Force -ErrorAction SilentlyContinue }}
+Expand-Archive -Path "{downloaded_file}" -DestinationPath "$extractDir" -Force
+Copy-Item -Path "$extractDir\\*" -Destination "{target_dir}" -Recurse -Force
+Remove-Item -Path "$extractDir" -Recurse -Force -ErrorAction SilentlyContinue
 """
     else:
-        update_commands = f"""
-copy /Y "{downloaded_file}" "{exe_target}"
+        update_cmd_ps1 = f"""
+# Substituicao direta de executavel
+Copy-Item -Path "{downloaded_file}" -Destination "{exe_target}" -Force
 """
 
+    ps1_content = f"""# Crinometro Auto-Updater PowerShell Script
+$ErrorActionPreference = 'SilentlyContinue'
+
+$TargetDir = "{target_dir}"
+$DownloadedFile = "{downloaded_file}"
+$ExeTarget = "{exe_target}"
+$ProcessPid = {pid}
+
+# 1. Aguarda o encerramento do processo Crinometro atual para liberacao das travas de arquivo
+$parentProc = Get-Process -Id $ProcessPid -ErrorAction SilentlyContinue
+if ($parentProc) {{
+    $parentProc.WaitForExit(10000)
+}}
+Stop-Process -Id $ProcessPid -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 600
+
+# 2. Executa a atualizacao
+{update_cmd_ps1}
+
+# 3. Migra configuracoes e limpa pastas legadas com acento ou corrompidas
+$parentDir = Split-Path "$TargetDir" -Parent
+$legacyDirs = @(
+    (Join-Path "$parentDir" "Crinômetro"),
+    (Join-Path "$parentDir" ("Crin" + [char]0xFFFD + "metro"))
+)
+foreach ($ld in $legacyDirs) {{
+    if (Test-Path "$ld") {{
+        # Preserva crinometro_config.json caso exista na pasta antiga
+        $oldCfg = Join-Path "$ld" "crinometro_config.json"
+        $newCfg = Join-Path "$TargetDir" "crinometro_config.json"
+        if ((Test-Path "$oldCfg") -and !(Test-Path "$newCfg")) {{
+            Copy-Item -Path "$oldCfg" -Destination "$newCfg" -Force -ErrorAction SilentlyContinue
+        }}
+        Remove-Item -Path "$ld" -Recurse -Force -ErrorAction SilentlyContinue
+    }}
+}}
+
+# 4. Localiza o executavel mais recente gerado pelo instalador
+$latestExe = Get-ChildItem -Path "$TargetDir" -Filter "Crinometro*.exe" -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+if ($latestExe) {{
+    # Remove executaveis legados duplicados para manter apenas o executavel atual
+    Get-ChildItem -Path "$TargetDir" -Filter "Crinometro*.exe" -File -ErrorAction SilentlyContinue |
+        Where-Object {{ $_.FullName -ne $latestExe.FullName }} |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+
+    Start-Process -FilePath $latestExe.FullName
+}} elseif (Test-Path "$ExeTarget") {{
+    Start-Process -FilePath "$ExeTarget"
+}}
+
+# 5. Limpeza de arquivos temporarios
+Start-Sleep -Seconds 2
+Remove-Item -Path "$DownloadedFile" -Force -ErrorAction SilentlyContinue
+$batFile = Join-Path (Split-Path $PSCommandPath) "apply_update.bat"
+if (Test-Path "$batFile") {{ Remove-Item -Path "$batFile" -Force -ErrorAction SilentlyContinue }}
+Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue
+"""
+
+    # Gravacao do script em UTF-8 com BOM (essencial para Windows PowerShell 5.1 interpretar acentos)
+    with open(ps1_file, "w", encoding="utf-8-sig") as f:
+        f.write(ps1_content)
+
+    # Wrapper .bat para compatibilidade e fallback
     bat_content = f"""@echo off
-chcp 65001 > nul
-echo Aguardando encerramento do Crinômetro (PID {pid})...
-:WAIT_PID
-tasklist /FI "PID eq {pid}" 2>NUL | find /I /N "{pid}">NUL
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak > nul
-    goto WAIT_PID
-)
-
-echo Aplicando atualização...
-{update_commands}
-
-rem Localiza o executável mais recente gerado pelo instalador
-set "LAUNCH_EXE="
-for /f "delims=" %%F in ('dir /b /a-d /o-d "{target_dir}\\Crinometro*.exe" 2^>nul') do (
-    set "LAUNCH_EXE={target_dir}\\%%F"
-    goto :FOUND_EXE
-)
-:FOUND_EXE
-
-rem Remove executáveis legados para manter estritamente apenas 1 executável na pasta
-if defined LAUNCH_EXE (
-    for /f "delims=" %%F in ('dir /b /a-d "{target_dir}\\Crinometro*.exe" 2^>nul') do (
-        if /I not "{target_dir}\\%%F"=="%LAUNCH_EXE%" (
-            del /f /q "{target_dir}\\%%F" 2>nul
-        )
-    )
-)
-
-echo Reiniciando Crinômetro atualizado...
-if defined LAUNCH_EXE (
-    start "" "%LAUNCH_EXE%"
-) else (
-    start "" "{exe_target}"
-)
-
-rem Limpeza de arquivos temporários
-timeout /t 2 /nobreak > nul
-del /f /q "{downloaded_file}" 2>nul
-(goto) 2>nul & del "%~f0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps1_file}"
 """
-
-    with open(bat_file, "w", encoding="latin-1") as f:
+    with open(bat_file, "w", encoding="utf-8") as f:
         f.write(bat_content)
 
-    # Executa o batch em processo totalmente desacoplado
-    subprocess.Popen(["cmd.exe", "/c", bat_file], shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    # Disparo em processo totalmente desacoplado da arvore do aplicativo
+    if execute:
+        creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+        if hasattr(subprocess, "DETACHED_PROCESS"):
+            creation_flags |= subprocess.DETACHED_PROCESS
+
+        ps_cmd = [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-WindowStyle", "Hidden",
+            "-File", ps1_file
+        ]
+
+        subprocess.Popen(
+            ps_cmd,
+            creationflags=creation_flags,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True
+        )
+
+
 

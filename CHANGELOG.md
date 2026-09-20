@@ -4,6 +4,15 @@ Histórico completo, técnico e detalhado de todas as atualizações, correçõe
 
 Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre** dentro do próprio aplicativo.
 
+## [4.4.1] - 2026-09-20
+
+### Correções Críticas (Hotfix / Auto-Updater)
+- **Eliminação de Travamento em "Instalando...":** Correção do bug onde o Launcher baixava a atualização e permanecia travado indefinidamente com a mensagem "Instalando arquivos...".
+- **Migração do Script Atualizador para PowerShell:** Substituição do arquivo `.bat` frágil executado via `cmd.exe` por um script PowerShell (`.ps1`) codificado em `UTF-8 com BOM` (`utf-8-sig`), garantindo interpretação perfeita de acentos no caminho (`Crinômetro`).
+- **Resolução de Erro de Codificação (`UnicodeEncodeError`):** Eliminação de exceções não tratadas decorrentes de caminhos contendo o caractere de substituição `\ufffd` gerados por atualizações anteriores.
+- **Normalização e Limpeza Automática:** O atualizador agora normaliza o caminho para `C:\Program Files\Crinômetro` e expurga automaticamente qualquer diretório corrompido remanescente (`Crin?metro`).
+- **Encerramento Determinístico do Processo:** Finalização forçada via `os._exit(0)` após transição suave na interface, liberando imediatamente os descritores de arquivo e permitindo que o instalador Inno Setup substitua o executável e suas dependências sem conflitos de concorrência.
+
 ## [4.4.0] - 2026-09-19
 
 ### Visualização Científica & Novos Gráficos

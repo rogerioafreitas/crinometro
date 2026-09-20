@@ -153,7 +153,19 @@ class UpdateDialog(QDialog):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            launch_windows_updater(file_path)
+            try:
+                launch_windows_updater(file_path)
+                import os
+                app = QApplication.instance()
+                if app:
+                    app.quit()
+                os._exit(0)
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Falha ao Atualizar",
+                    f"Ocorreu um erro ao iniciar o instalador automático:\n\n{str(e)}"
+                )
         else:
             self.accept()
 
