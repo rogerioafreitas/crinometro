@@ -3,15 +3,31 @@ import numpy as np
 from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine, HighPerfFreqEngine
 
 class PlotRenderers:
-    def update_wave_visibility(self, show_raw, show_env, show_lod):
-        if not hasattr(self, 'wave_lines'): return
-        if 'raw' in self.wave_lines: self.wave_lines['raw'].set_visible(show_raw)
-        if 'env' in self.wave_lines: self.wave_lines['env'].set_visible(show_env)
-        if 'lod' in self.wave_lines: self.wave_lines['lod'].set_visible(show_lod)
-        if getattr(self, 'line_engine', None) and self.line_engine.line:
-            self.line_engine.line.set_visible(show_lod)
-        
-        self.panel_wave.canvas.draw_idle()
+    def update_wave_visibility(self, show_raw, show_env, show_lod, show_peaks):
+        if hasattr(self, 'wave_lines'):
+            if 'raw' in self.wave_lines and self.wave_lines['raw']:
+                self.wave_lines['raw'].set_visible(bool(show_raw))
+            if 'env' in self.wave_lines and self.wave_lines['env']:
+                self.wave_lines['env'].set_visible(bool(show_env))
+            if 'lod' in self.wave_lines and self.wave_lines['lod']:
+                self.wave_lines['lod'].set_visible(bool(show_lod))
+        if getattr(self, 'line_engine', None) and getattr(self.line_engine, 'line', None):
+            self.line_engine.line.set_visible(bool(show_lod))
+
+        if hasattr(self, '_wave_user_markers') and self._wave_user_markers:
+            for m in self._wave_user_markers:
+                try:
+                    m.set_visible(bool(show_peaks))
+                except Exception:
+                    pass
+
+        if self.panel_wave and hasattr(self.panel_wave, 'canvas'):
+            self.panel_wave.canvas.draw_idle()
+
+        win = self.main_window()
+        if win and hasattr(win, "capture_backgrounds"):
+            win.bg_cache_valid = False
+            win.capture_backgrounds()
 
     def __init__(self, session_context, main_window=None, panel_wave=None, panel_spec=None, panel_hist=None, panel_psd=None, panel_freq=None):
         self.main_window = weakref.ref(main_window) if main_window else lambda: None
@@ -21,6 +37,7 @@ class PlotRenderers:
         self._panel_hist = weakref.ref(panel_hist) if panel_hist else lambda: None
         self._panel_psd = weakref.ref(panel_psd) if panel_psd else lambda: None
         self._panel_freq = weakref.ref(panel_freq) if panel_freq else lambda: None
+        self.wave_lines = {}
         self._wave_user_markers = []
         self._pulse_hover_data = []
 
@@ -86,13 +103,47 @@ class PlotRenderers:
             # WAVE
             ax1 = self.panel_wave.ax
             ax1.clear()
-            self.line_engine = HighPerfLineEngine(ax1, time_sec, data, base_color='#21A8D8', update_bg_callback=None)
+            self._wave_user_markers = []
+            self.wave_lines = {}
+
+            # Lê o estado das camadas a partir do painel (mantém as escolhas do usuário)
+            show_raw = getattr(self.panel_wave, "show_raw", True)
+            show_env = getattr(self.panel_wave, "show_env", True)
+            show_lod = getattr(self.panel_wave, "show_lod", False)
+            show_peaks = getattr(self.panel_wave, "show_peaks", True)
+
+            # 1. Sinal Bruto Filtrado (Amostras Reais - Linha cinza em segundo plano)
+            dec_raw = max(1, len(data) // 20000)
+            line_raw, = ax1.plot(
+                time_sec[::dec_raw], data[::dec_raw],
+                color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
+                label="Sinal Bruto Filtrado"
+            )
+            line_raw.set_visible(bool(show_raw))
+            self.wave_lines['raw'] = line_raw
+
+            # 2. Envoltória de Hilbert Suavizada (Curva azul nítida em destaque)
+            dec_env = max(1, len(env) // 8000)
+            line_env, = ax1.plot(
+                time_sec[::dec_env], env[::dec_env],
+                color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
+                label="Envoltória de Hilbert Suavizada"
+            )
+            line_env.set_visible(bool(show_env))
+            self.wave_lines['env'] = line_env
+
+            # 3. Decimação Min-Max LOD (Linha Laranja dinâmica com preservação de picos)
+            self.line_engine = HighPerfLineEngine(ax1, time_sec, data, base_color='#F97316', update_bg_callback=None)
             self.line_engine.render_high_detail()
-            decimation = max(1, len(env) // 5000)
-            ax1.plot(time_sec[::decimation], env[::decimation], color='#6E747C', alpha=0.55, linewidth=0.8, zorder=2)
-    
+            if self.line_engine.line:
+                self.line_engine.line.set_zorder(2)
+                self.line_engine.line.set_linewidth(1.1)
+                self.line_engine.line.set_visible(bool(show_lod))
+                self.wave_lines['lod'] = self.line_engine.line
+
             ax1.set_xlabel("seconds")
             ax1.set_ylabel("Amplitude")
+            ax1.set_xlim(time_sec[0], time_sec[-1])
             ax1.set_ylim(-1.05, 1.05)
     
             # HIST — fixo, sem drag/zoom, com índice de cores/pulsos no rodapé
@@ -522,6 +573,16 @@ class PlotRenderers:
                                 lines = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
                                                 color=color, markersize=8, markeredgewidth=1.2, zorder=4)
                                 self._wave_user_markers.extend(lines)
+
+            # Aplica a visibilidade configurada pelo usuário nos marcadores de pulsos
+            show_peaks = getattr(self.panel_wave, "show_peaks", True)
+            if not show_peaks:
+                for m in self._wave_user_markers:
+                    try:
+                        m.set_visible(False)
+                    except Exception:
+                        pass
+
             for panel in self.all_panels:
                 try:
                     panel.canvas.draw_idle()

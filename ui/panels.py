@@ -160,6 +160,40 @@ class PlotPanel(QFrame):
         bar.addWidget(self.lbl_title)
         bar.addStretch()
 
+        if self.title_key == "wave":
+            self.show_raw = True
+            self.show_env = True
+            self.show_lod = False
+            self.show_peaks = True
+
+            self.btn_toggle_raw = self._chip_toggle(
+                "Sinal Bruto", "Exibir/Ocultar Sinal Bruto Filtrado (Amostras Reais)",
+                checked=True, accent_color="#94A3B8"
+            )
+            self.btn_toggle_env = self._chip_toggle(
+                "Envoltória", "Exibir/Ocultar Envoltória de Hilbert Suavizada",
+                checked=True, accent_color="#0284C7"
+            )
+            self.btn_toggle_lod = self._chip_toggle(
+                "Min-Max LOD", "Exibir/Ocultar Decimação Min-Max LOD",
+                checked=False, accent_color="#F97316"
+            )
+            self.btn_toggle_peaks = self._chip_toggle(
+                "Pulsos", "Exibir/Ocultar Marcadores de Pulsos Detectados",
+                checked=True, accent_color="#10B981"
+            )
+
+            bar.addWidget(self.btn_toggle_raw)
+            bar.addWidget(self.btn_toggle_env)
+            bar.addWidget(self.btn_toggle_lod)
+            bar.addWidget(self.btn_toggle_peaks)
+
+            sep_wave = QFrame()
+            sep_wave.setFrameShape(QFrame.Shape.VLine)
+            sep_wave.setFixedHeight(16)
+            sep_wave.setStyleSheet("background-color: rgba(150, 150, 150, 0.25); border: none; margin: 0 4px;")
+            bar.addWidget(sep_wave)
+
         # Botão de edição de pulsos (ativa/desativa modo de seleção)
         self.btn_pulse_edit = self._tool_button("", "Ativar modo de edição de pulsos (clique para adicionar/remover)")
         self.btn_pulse_edit.setObjectName("plotTool")
@@ -200,43 +234,6 @@ class PlotPanel(QFrame):
         self.apply_dark_theme()
 
         self.layout.addWidget(self.title_bar)
-
-        if self.title_key == "wave":
-            self.wave_ctrl_bar = CompactCtrlBar()
-            self.wave_ctrl_bar.setObjectName("waveCtrlBar")
-            self.wave_ctrl_bar.setStyleSheet(self._ctrl_bar_style())
-            wctrl_layout = QHBoxLayout(self.wave_ctrl_bar)
-            wctrl_layout.setContentsMargins(6, 2, 6, 3)
-            wctrl_layout.setSpacing(12)
-            
-            # Default States
-            self.show_raw = True
-            self.show_env = True
-            self.show_lod = False
-            
-            self.chk_raw = QCheckBox("Sinal Bruto")
-            self.chk_raw.setChecked(self.show_raw)
-            self.chk_raw.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.chk_raw.setStyleSheet("QCheckBox { color: #94A3B8; font-size: 11px; font-weight: bold; }")
-            self.chk_raw.toggled.connect(self._on_wave_toggles_changed)
-            wctrl_layout.addWidget(self.chk_raw)
-            
-            self.chk_env = QCheckBox("Envoltória (Hilbert)")
-            self.chk_env.setChecked(self.show_env)
-            self.chk_env.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.chk_env.setStyleSheet("QCheckBox { color: #3B82F6; font-size: 11px; font-weight: bold; }")
-            self.chk_env.toggled.connect(self._on_wave_toggles_changed)
-            wctrl_layout.addWidget(self.chk_env)
-            
-            self.chk_lod = QCheckBox("LOD (Min-Max)")
-            self.chk_lod.setChecked(self.show_lod)
-            self.chk_lod.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.chk_lod.setStyleSheet("QCheckBox { color: #F97316; font-size: 11px; font-weight: bold; }")
-            self.chk_lod.toggled.connect(self._on_wave_toggles_changed)
-            wctrl_layout.addWidget(self.chk_lod)
-            
-            wctrl_layout.addStretch()
-            self.layout.addWidget(self.wave_ctrl_bar)
 
         if self.title_key == "freq":
             self.freq_ctrl_bar = CompactCtrlBar()
@@ -410,12 +407,78 @@ class PlotPanel(QFrame):
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         return b
 
-    def _on_wave_toggles_changed(self, checked):
-        self.show_raw = self.chk_raw.isChecked()
-        self.show_env = self.chk_env.isChecked()
-        self.show_lod = self.chk_lod.isChecked()
-        if hasattr(self.window(), "plot_renderers") and self.window().plot_renderers:
-            self.window().plot_renderers.update_wave_visibility(self.show_raw, self.show_env, self.show_lod)
+    def _chip_toggle(self, text, tooltip, checked=True, accent_color="#3B82F6"):
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setChecked(checked)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(tooltip)
+        btn.setFixedHeight(22)
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._apply_chip_style(btn, accent_color, checked)
+        btn.toggled.connect(lambda c, b=btn, col=accent_color: self._on_chip_toggled(b, col, c))
+        return btn
+
+    def _on_chip_toggled(self, btn, accent_color, checked):
+        self._apply_chip_style(btn, accent_color, checked)
+        if hasattr(self, 'btn_toggle_raw'):
+            self.show_raw = self.btn_toggle_raw.isChecked()
+            self.show_env = self.btn_toggle_env.isChecked()
+            self.show_lod = self.btn_toggle_lod.isChecked()
+            self.show_peaks = self.btn_toggle_peaks.isChecked()
+            win = self.window()
+            if hasattr(win, "update_wave_visibility"):
+                win.update_wave_visibility(self.show_raw, self.show_env, self.show_lod, self.show_peaks)
+            elif hasattr(win, "plot_renderers") and win.plot_renderers:
+                win.plot_renderers.update_wave_visibility(self.show_raw, self.show_env, self.show_lod, self.show_peaks)
+
+    def _apply_chip_style(self, btn, accent_color, checked):
+        dark = True
+        win = self.window()
+        if win and hasattr(win, "theme_mode"):
+            dark = (win.theme_mode == "dark")
+        try:
+            r = int(accent_color[1:3], 16)
+            g = int(accent_color[3:5], 16)
+            b = int(accent_color[5:7], 16)
+        except Exception:
+            r, g, b = 59, 130, 246
+
+        if checked:
+            alpha = 0.22 if dark else 0.14
+            fg = accent_color if dark else ("#1E293B" if accent_color == "#94A3B8" else accent_color)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: rgba({r}, {g}, {b}, {alpha});
+                    border: 1.5px solid {accent_color};
+                    border-radius: 4px;
+                    padding: 0 7px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: {fg};
+                }}
+                QPushButton:hover {{
+                    background-color: rgba({r}, {g}, {b}, {alpha + 0.12});
+                }}
+            """)
+        else:
+            border_col = "#334155" if dark else "#CBD5E1"
+            fg_col = "#64748B" if dark else "#94A3B8"
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    border: 1px solid {border_col};
+                    border-radius: 4px;
+                    padding: 0 7px;
+                    font-size: 11px;
+                    font-weight: normal;
+                    color: {fg_col};
+                }}
+                QPushButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.05);
+                    border-color: #64748B;
+                }}
+            """)
 
     def _toggle_pulse_edit_mode(self, checked):
         """Ativa/desativa o modo de edição de pulsos para este painel."""
@@ -526,6 +589,11 @@ class PlotPanel(QFrame):
             self.spec_ctrl_bar.setStyleSheet(self._ctrl_bar_style(dark))
         if hasattr(self, "freq_ctrl_bar"):
             self.freq_ctrl_bar.setStyleSheet(self._ctrl_bar_style(dark))
+        if hasattr(self, "btn_toggle_raw"):
+            self._apply_chip_style(self.btn_toggle_raw, "#94A3B8", self.btn_toggle_raw.isChecked())
+            self._apply_chip_style(self.btn_toggle_env, "#0284C7", self.btn_toggle_env.isChecked())
+            self._apply_chip_style(self.btn_toggle_lod, "#F97316", self.btn_toggle_lod.isChecked())
+            self._apply_chip_style(self.btn_toggle_peaks, "#10B981", self.btn_toggle_peaks.isChecked())
 
     def _on_close_clicked(self):
         """Notifica a janela principal para fechar/ocultar este painel."""

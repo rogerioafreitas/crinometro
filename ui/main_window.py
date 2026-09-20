@@ -2253,6 +2253,31 @@ class MainWindow(QMainWindow):
 
 
 
+    def update_wave_visibility(self, show_raw, show_env, show_lod, show_peaks):
+        if hasattr(self, 'wave_lines'):
+            if 'raw' in self.wave_lines and self.wave_lines['raw']:
+                self.wave_lines['raw'].set_visible(bool(show_raw))
+            if 'env' in self.wave_lines and self.wave_lines['env']:
+                self.wave_lines['env'].set_visible(bool(show_env))
+            if 'lod' in self.wave_lines and self.wave_lines['lod']:
+                self.wave_lines['lod'].set_visible(bool(show_lod))
+        if getattr(self, 'line_engine', None) and getattr(self.line_engine, 'line', None):
+            self.line_engine.line.set_visible(bool(show_lod))
+
+        if hasattr(self, '_wave_user_markers') and self._wave_user_markers:
+            for m in self._wave_user_markers:
+                try:
+                    m.set_visible(bool(show_peaks))
+                except Exception:
+                    pass
+
+        if hasattr(self, 'panel_wave') and self.panel_wave and hasattr(self.panel_wave, 'canvas'):
+            self.panel_wave.canvas.draw_idle()
+
+        if hasattr(self, "capture_backgrounds"):
+            self.bg_cache_valid = False
+            self.capture_backgrounds()
+
     def render_dashboard(self, filename):
         cur_splitter_sizes = self.splitter.sizes() if hasattr(self, "splitter") else None
         # Limpa referências a linhas de alinhamento do clique em eixos que serão
@@ -2307,13 +2332,47 @@ class MainWindow(QMainWindow):
         # WAVE
         ax1 = self.panel_wave.ax
         ax1.clear()
-        self.line_engine = HighPerfLineEngine(ax1, time_sec, data, base_color='#21A8D8', update_bg_callback=self.capture_backgrounds)
+        self._wave_user_markers = []
+        self.wave_lines = {}
+
+        # Lê os seletores configurados nos chips do cabeçalho
+        show_raw = getattr(self.panel_wave, "show_raw", True)
+        show_env = getattr(self.panel_wave, "show_env", True)
+        show_lod = getattr(self.panel_wave, "show_lod", False)
+        show_peaks = getattr(self.panel_wave, "show_peaks", True)
+
+        # 1. Sinal Bruto Filtrado (Amostras Reais - Linha cinza em segundo plano)
+        dec_raw = max(1, len(data) // 20000)
+        line_raw, = ax1.plot(
+            time_sec[::dec_raw], data[::dec_raw],
+            color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
+            label="Sinal Bruto Filtrado"
+        )
+        line_raw.set_visible(bool(show_raw))
+        self.wave_lines['raw'] = line_raw
+
+        # 2. Envoltória de Hilbert Suavizada (Curva azul nítida em destaque)
+        dec_env = max(1, len(env) // 8000)
+        line_env, = ax1.plot(
+            time_sec[::dec_env], env[::dec_env],
+            color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
+            label="Envoltória de Hilbert Suavizada"
+        )
+        line_env.set_visible(bool(show_env))
+        self.wave_lines['env'] = line_env
+
+        # 3. Decimação Min-Max LOD (Linha Laranja dinâmica com preservação de picos)
+        self.line_engine = HighPerfLineEngine(ax1, time_sec, data, base_color='#F97316', update_bg_callback=self.capture_backgrounds)
         self.line_engine.render_high_detail()
-        decimation = max(1, len(env) // 5000)
-        ax1.plot(time_sec[::decimation], env[::decimation], color='#6E747C', alpha=0.55, linewidth=0.8, zorder=2)
+        if self.line_engine.line:
+            self.line_engine.line.set_zorder(2)
+            self.line_engine.line.set_linewidth(1.1)
+            self.line_engine.line.set_visible(bool(show_lod))
+            self.wave_lines['lod'] = self.line_engine.line
 
         ax1.set_xlabel("seconds")
         ax1.set_ylabel("Amplitude")
+        ax1.set_xlim(time_sec[0], time_sec[-1])
         ax1.set_ylim(-1.05, 1.05)
 
         # HIST — fixo, sem drag/zoom, com índice de cores/pulsos no rodapé
@@ -3218,13 +3277,22 @@ class MainWindow(QMainWindow):
                                             color=color, markersize=8, markeredgewidth=1.2, zorder=4)
                             self._wave_user_markers.extend(lines)
                             
-                        if ax4:
-                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                            scale = 1000.0 if unit == "kHz" else 1.0
-                            freqs_at_pks_spec = freqs_at_pks / scale
-                            lines = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
-                                            color=color, markersize=8, markeredgewidth=1.2, zorder=4)
-                            self._wave_user_markers.extend(lines)
+                            if ax4:
+                                unit = getattr(self.panel_spec, "spec_unit", "kHz")
+                                scale = 1000.0 if unit == "kHz" else 1.0
+                                freqs_at_pks_spec = freqs_at_pks / scale
+                                lines = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
+                                                color=color, markersize=8, markeredgewidth=1.2, zorder=4)
+                                self._wave_user_markers.extend(lines)
+
+        # Aplica a visibilidade configurada pelo usuário nos marcadores de pulsos
+        show_peaks = getattr(self.panel_wave, "show_peaks", True)
+        if not show_peaks:
+            for m in self._wave_user_markers:
+                try:
+                    m.set_visible(False)
+                except Exception:
+                    pass
 
         self._update_pulse_hover_data()
         for panel in self.all_panels:
