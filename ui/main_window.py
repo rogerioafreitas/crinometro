@@ -191,17 +191,22 @@ class MainWindow(QMainWindow):
         self.action_load = QAction(I18N[self.lang]["load"], self)
         self.action_load.triggered.connect(self.action_load_wav)
         self.file_menu.addAction(self.action_load)
+        
+        self.export_submenu = self.file_menu.addMenu("Exportar" if self.lang == "pt" else "Export")
+        self.export_submenu.setIcon(make_ui_icon("export", color="#FFFFFF", size=16))
+        
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.action_save_txt)
-        self.file_menu.addAction(self.action_export)
+        self.export_submenu.addAction(self.action_export)
         self.action_export_pdf_full = QAction("Exportar Relatório Completo (.pdf)", self)
         self.action_export_pdf_full.setIcon(make_ui_icon("export", color="#2563EB", size=16))
         self.action_export_pdf_full.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=True))
-        self.file_menu.addAction(self.action_export_pdf_full)
+        self.export_submenu.addAction(self.action_export_pdf_full)
         self.action_export_pdf_simple = QAction("Exportar Relatório Simplificado (.pdf)", self)
         self.action_export_pdf_simple.setIcon(make_ui_icon("export", color="#0284C7", size=16))
         self.action_export_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
-        self.file_menu.addAction(self.action_export_pdf_simple)
+        self.export_submenu.addAction(self.action_export_pdf_simple)
+        
         self.settings_menu = self.app_menu.addMenu(I18N[self.lang]["settings"])
         self.action_algo_config = QAction(I18N[self.lang]["algo_settings"], self)
         self.action_algo_config.triggered.connect(self.open_algo_settings)
@@ -209,21 +214,10 @@ class MainWindow(QMainWindow):
         self.action_report_config = QAction(I18N[self.lang]["gen_settings"], self)
         self.action_report_config.triggered.connect(self.open_report_settings)
         self.settings_menu.addAction(self.action_report_config)
-        self.action_export_training = QAction(I18N[self.lang]["export_training"], self)
-        self.action_export_training.triggered.connect(self.export_training_model)
-        self.settings_menu.addAction(self.action_export_training)
-        self.action_import_training = QAction(I18N[self.lang]["import_training"], self)
-        self.action_import_training.triggered.connect(self.import_training_model)
-        self.settings_menu.addAction(self.action_import_training)
-        self.action_save_settings = QAction(I18N[self.lang]["save_settings"], self)
-        self.action_save_settings.triggered.connect(self.save_settings)
-        self.settings_menu.addAction(self.action_save_settings)
-        self.action_reset_settings = QAction(I18N[self.lang]["reset_settings"], self)
-        self.action_reset_settings.triggered.connect(self.reset_to_defaults)
-        self.settings_menu.addAction(self.action_reset_settings)
-        self.action_reset_learning = QAction("Resetar Aprendizado da IA", self)
-        self.action_reset_learning.triggered.connect(self.reset_learning)
-        self.settings_menu.addAction(self.action_reset_learning)
+        
+        self.action_ai_params = QAction("Parâmetros de IA" if self.lang == "pt" else "AI Parameters", self)
+        self.action_ai_params.triggered.connect(self.open_ai_params)
+        self.settings_menu.addAction(self.action_ai_params)
         self.view_menu = self.app_menu.addMenu("Exibir" if self.lang == "pt" else "View")
         self.action_view_wave = QAction("Forma de Onda" if self.lang == "pt" else "Waveform", self, checkable=True)
         self.action_view_wave.setChecked(True)
@@ -259,6 +253,8 @@ class MainWindow(QMainWindow):
     def update_menu_text(self):
         l = self.lang
         self.file_menu.setTitle(I18N[l]["file"])
+        if hasattr(self, "export_submenu"):
+            self.export_submenu.setTitle("Exportar" if l == "pt" else "Export")
         self.action_load.setText(I18N[l]["load"])
         self.action_export.setText(I18N[l]["export"])
         if hasattr(self, "action_export_pdf_full"):
@@ -268,10 +264,10 @@ class MainWindow(QMainWindow):
         self.settings_menu.setTitle(I18N[l]["settings"])
         self.action_algo_config.setText(I18N[l]["algo_settings"])
         self.action_report_config.setText(I18N[l]["gen_settings"])
-        self.action_export_training.setText(I18N[l]["export_training"])
-        self.action_import_training.setText(I18N[l]["import_training"])
-        self.action_save_settings.setText(I18N[l]["save_settings"])
-        self.action_reset_settings.setText(I18N[l]["reset_settings"])
+        
+        
+        
+        
         if hasattr(self, "view_menu"):
             self.view_menu.setTitle("Exibir" if l == "pt" else "View")
         if hasattr(self, "action_view_wave"):
@@ -1619,6 +1615,12 @@ class MainWindow(QMainWindow):
             panel.canvas.draw_idle()
 
     # ---------- configurações ----------
+
+    def open_ai_params(self):
+        from ui.dialogs import AIParamsDialog
+        d = AIParamsDialog(self, self.lang, parent=self)
+        d.exec()
+
     def open_algo_settings(self):
         dialog = AlgoSettingsDialog(self.algo_params, self.lang, self)
         if dialog.exec():
@@ -1710,14 +1712,38 @@ class MainWindow(QMainWindow):
 
     def reset_learning(self):
         """Reseta completamente o modelo de IA e os dados de treinamento."""
-        reply = QMessageBox.question(
-            self,
-            "Resetar Aprendizado da IA?",
-            "Isso apagará todo o histórico de treinamento manual da IA e restaurará o modelo não-supervisionado base (DSP).\n\nDeseja continuar?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
+        from PyQt6.QtWidgets import QMessageBox
+        
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+        
+        if self.lang == "pt":
+            msg_box.setWindowTitle("Atenção: Reset de Aprendizado!")
+            msg_box.setText("<b>TODO O APRENDIZADO DA IA SERÁ PERDIDO!</b>")
+            msg_box.setInformativeText(
+                "Isso apagará definitivamente todo o histórico de correções manuais e as árvores de decisão geradas.\n\n"
+                "Recomendamos fortemente que você salve este treinamento em outro local da máquina usando a opção "
+                "<b>'Exportar .pkl'</b> antes de prosseguir, para não perdê-lo permanentemente.\n\n"
+                "Você tem certeza que deseja executar esta ação?"
+            )
+            btn_reset = msg_box.addButton("Resetar mesmo assim", QMessageBox.ButtonRole.DestructiveRole)
+            btn_abort = msg_box.addButton("Abortar", QMessageBox.ButtonRole.RejectRole)
+        else:
+            msg_box.setWindowTitle("Warning: Learning Reset!")
+            msg_box.setText("<b>ALL AI LEARNING WILL BE LOST!</b>")
+            msg_box.setInformativeText(
+                "This will permanently erase all manual correction history and the generated decision trees.\n\n"
+                "We strongly recommend saving this training somewhere else on your machine using the "
+                "<b>'Export .pkl'</b> option before proceeding, so you don't lose it permanently.\n\n"
+                "Are you absolutely sure you want to execute this action?"
+            )
+            btn_reset = msg_box.addButton("Reset anyway", QMessageBox.ButtonRole.DestructiveRole)
+            btn_abort = msg_box.addButton("Abort", QMessageBox.ButtonRole.RejectRole)
+            
+        msg_box.setDefaultButton(btn_abort)
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == btn_reset:
             try:
                 if hasattr(self, 'pulse_learner') and self.pulse_learner:
                     self.pulse_learner.reset()
@@ -1760,13 +1786,7 @@ class MainWindow(QMainWindow):
         self.algo_params = DEFAULT_ALGO_PARAMS.copy()
         self._adaptive_overrides = {}
 
-        # 2. Limpa histórico de edições e marcadores
-        self._pulse_edit_history = []
-        self.corrections_by_file = {}
-
-        # 3. Zera o modelo de aprendizado ativo
-        if hasattr(self, 'pulse_learner') and self.pulse_learner:
-            self.pulse_learner.reset()
+        # 2. IA e marcações não são resetadas aqui mais
 
         # 4. Limpa o arquivo de configuração persistido
         try:

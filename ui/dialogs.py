@@ -53,59 +53,55 @@ class AlgoSettingsDialog(QDialog):
         layout.addLayout(form)
 
         self.advanced_button = QPushButton("⚙️ Configurações Avançadas..." if lang == "pt" else "⚙️ Advanced Settings...")
+        self.advanced_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.advanced_button.clicked.connect(self.open_advanced)
         layout.addWidget(self.advanced_button)
 
-        # Seção de Aprendizado Ativo & Modelo de Treinamento
-        training_group = QGroupBox("🧠 Aprendizado Ativo & Treinamento" if lang == "pt" else "🧠 Active Learning & Training")
-        training_layout = QHBoxLayout(training_group)
-        training_layout.setContentsMargins(10, 10, 10, 10)
-        training_layout.setSpacing(8)
-
-        self.btn_export_training = QPushButton("💾 Exportar Treinamento (.pkl)..." if lang == "pt" else "💾 Export Training (.pkl)...")
-        self.btn_export_training.setObjectName("btn_secondary")
-        self.btn_export_training.setToolTip("Salvar o classificador treinado e dados de correção em arquivo")
-        self.btn_export_training.clicked.connect(self._on_export_training)
-        training_layout.addWidget(self.btn_export_training)
-
-        self.btn_import_training = QPushButton("📂 Carregar Treinamento (.pkl)..." if lang == "pt" else "📂 Load Training (.pkl)...")
-        self.btn_import_training.setObjectName("btn_secondary")
-        self.btn_import_training.setToolTip("Importar arquivo com modelo treinado previamente")
-        self.btn_import_training.clicked.connect(self._on_import_training)
-        training_layout.addWidget(self.btn_import_training)
-
-        layout.addWidget(training_group)
-
         self._advanced_params = dict(current_params)
 
+        # Action Buttons
         btn_box = QHBoxLayout()
-        self.btn_reset_defaults = QPushButton("Restaurar Padrões" if lang == "pt" else "Restore Defaults")
-        self.btn_reset_defaults.setObjectName("btn_secondary")
-        self.btn_reset_defaults.clicked.connect(self.reset_defaults)
-        btn_box.addWidget(self.btn_reset_defaults)
+        
+        self.btn_reset = QPushButton("Resetar" if lang == "pt" else "Reset")
+        self.btn_reset.setObjectName("btn_secondary")
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.clicked.connect(self.reset_defaults)
+        btn_box.addWidget(self.btn_reset)
+        
         btn_box.addStretch()
-
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        btn_box.addWidget(buttons)
+        
+        self.btn_save = QPushButton("Salvar configurações atuais" if lang == "pt" else "Save current settings")
+        self.btn_save.setObjectName("btn_primary")
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.clicked.connect(self.accept)
+        btn_box.addWidget(self.btn_save)
+        
+        self.btn_close = QPushButton("Fechar" if lang == "pt" else "Close")
+        self.btn_close.setObjectName("btn_secondary")
+        self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_close.clicked.connect(self.reject)
+        btn_box.addWidget(self.btn_close)
+        
         layout.addLayout(btn_box)
-
-    def _on_export_training(self):
-        parent = self.parent()
-        if parent and hasattr(parent, "export_training_model"):
-            parent.export_training_model()
-
-    def _on_import_training(self):
-        parent = self.parent()
-        if parent and hasattr(parent, "import_training_model"):
-            parent.import_training_model()
 
     def reset_defaults(self):
         for key, widget in self.inputs.items():
             if key in DEFAULT_ALGO_PARAMS:
                 widget.setValue(DEFAULT_ALGO_PARAMS[key])
         self._advanced_params = DEFAULT_ALGO_PARAMS.copy()
+        if self.parent() and hasattr(self.parent(), "reset_to_defaults"):
+            self.parent().reset_to_defaults()
+
+    def get_params(self):
+        p = self._advanced_params.copy()
+        for key, widget in self.inputs.items():
+            p[key] = widget.value()
+        return p
+
+    def open_advanced(self):
+        dialog = AdvancedAlgoSettingsDialog(self.get_params(), self)
+        if dialog.exec():
+            self._advanced_params.update(dialog.get_params())
 
     def apply_styles(self):
         dark = True
@@ -126,35 +122,24 @@ class AlgoSettingsDialog(QDialog):
                 QPushButton#btn_secondary { background-color: #2D333B; color: #E2E8F0; border: 1px solid #444C56; font-size: 11px; }
                 QPushButton#btn_secondary:hover { background-color: #373E47; }
                 QGroupBox { font-weight: bold; font-size: 12px; color: #94A3B8; border: 1px solid #334155; border-radius: 6px; margin-top: 10px; padding-top: 12px; }
-                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }
+                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #94A3B8; }
             """)
         else:
             self.setStyleSheet("""
-                QDialog { background-color: #FFFFFF; color: #1E293B; font-family: 'Segoe UI'; }
-                QLabel { font-weight: bold; font-size: 12px; color: #334155; background: transparent; background-color: transparent; border: none; }
+                QDialog { background-color: #F8FAFC; color: #334155; font-family: 'Segoe UI'; }
+                QLabel { font-weight: bold; font-size: 12px; color: #334155; background: transparent; border: none; }
                 QSpinBox, QDoubleSpinBox { 
-                    background-color: #F8FAFC; color: #15803D; font-weight: bold; font-size: 13px;
+                    background-color: #FFFFFF; color: #059669; font-weight: bold; font-size: 13px;
                     border: 1px solid #CBD5E1; border-radius: 5px; padding: 4px 8px;
                 }
-                QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563EB; background-color: #FFFFFF; }
+                QSpinBox:focus, QDoubleSpinBox:focus { border-color: #3B82F6; }
                 QPushButton { background-color: #2563EB; color: white; padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; }
                 QPushButton:hover { background-color: #1D4ED8; }
-                QPushButton#btn_secondary { background-color: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; font-size: 11px; }
+                QPushButton#btn_secondary { background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; font-size: 11px; }
                 QPushButton#btn_secondary:hover { background-color: #E2E8F0; }
-                QGroupBox { font-weight: bold; font-size: 12px; color: #64748B; border: 1px solid #E2E8F0; border-radius: 6px; margin-top: 10px; padding-top: 12px; }
-                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }
+                QGroupBox { font-weight: bold; font-size: 12px; color: #64748B; border: 1px solid #CBD5E1; border-radius: 6px; margin-top: 10px; padding-top: 12px; }
+                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #64748B; }
             """)
-
-    def get_params(self):
-        result = dict(self._advanced_params)
-        result.update({key: widget.value() for key, widget in self.inputs.items()})
-        return result
-
-    def open_advanced(self):
-        dialog = AdvancedAlgoSettingsDialog(self.get_params(), self)
-        if dialog.exec():
-            self._advanced_params.update(dialog.get_params())
-
 
 class AdvancedAlgoSettingsDialog(QDialog):
     def __init__(self, current_params, parent=None):
@@ -575,3 +560,124 @@ class AboutDialog(QDialog):
             """)
 
 
+
+class AIParamsDialog(QDialog):
+    def __init__(self, main_window, lang, parent=None):
+        super().__init__(parent)
+        self.main_window = main_window
+        self.lang = lang
+        self.setWindowTitle("Parâmetros de IA" if lang == "pt" else "AI Parameters")
+        self.setMinimumWidth(500)
+        self.apply_styles()
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        
+        # Status Label
+        status_lbl = QLabel()
+        status_lbl.setWordWrap(True)
+        status_lbl.setObjectName("lbl_status")
+        
+        learner = getattr(self.main_window, "pulse_learner", None)
+        has_model = learner and learner.is_trained()
+        
+        if has_model:
+            status_text = "<b>Status:</b> IA Treinada e Ativa<br><br>"
+            trees = getattr(learner.model, "max_iter", getattr(learner.model, "n_estimators", "N/A")) if getattr(learner, "model", None) else "N/A"
+            status_text += f"Iterações/Árvores de Decisão (Floresta): {trees}<br>"
+            n_samples = len(learner.training_labels) if hasattr(learner, "training_labels") else 0
+            status_text += f"Amostras de Correção (Ligações Cruzadas): {n_samples}<br>"
+        else:
+            status_text = "<b>Status:</b> IA Não Treinada<br>A IA passará a operar automaticamente após você fazer algumas correções manuais nos gráficos e clicar em 'Aprender Correções'."
+            
+        status_lbl.setText(status_text)
+        status_lbl.setStyleSheet("font-size: 13px; background: transparent; padding: 5px;")
+        layout.addWidget(status_lbl)
+        
+        # Difference from DSP
+        if has_model:
+            diff_group = QGroupBox("Divergência do DSP (Impacto da IA)")
+            diff_layout = QVBoxLayout(diff_group)
+            lbl_diff = QLabel("A IA está ajustando os parâmetros originais baseada nas suas correções.")
+            lbl_diff.setObjectName("lbl_desc")
+            lbl_diff.setStyleSheet("font-size: 12px; background: transparent;")
+            diff_layout.addWidget(lbl_diff)
+            layout.addWidget(diff_group)
+        
+        # Actions
+        actions_group = QGroupBox("Gerenciamento de Aprendizado")
+        actions_layout = QHBoxLayout(actions_group)
+        
+        self.btn_export = QPushButton("Exportar .pkl")
+        self.btn_export.setObjectName("btn_secondary")
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.clicked.connect(self._on_export)
+        actions_layout.addWidget(self.btn_export)
+        
+        self.btn_import = QPushButton("Importar .pkl")
+        self.btn_import.setObjectName("btn_secondary")
+        self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_import.clicked.connect(self._on_import)
+        actions_layout.addWidget(self.btn_import)
+        
+        self.btn_reset = QPushButton("Resetar Aprendizado")
+        self.btn_reset.setObjectName("btn_danger")
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.clicked.connect(self._on_reset_ai)
+        actions_layout.addWidget(self.btn_reset)
+        
+        layout.addWidget(actions_group)
+        
+        close_btn = QPushButton("Fechar")
+        close_btn.setObjectName("btn_secondary")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        
+    def apply_styles(self):
+        dark = True
+        if hasattr(self.main_window, "theme_mode"):
+            dark = (self.main_window.theme_mode == "dark")
+            
+        if dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #171A1E; color: #E7E9EC; font-family: 'Segoe UI'; }
+                QLabel#lbl_status { color: #E7E9EC; }
+                QLabel#lbl_desc { color: #94A3B8; }
+                QGroupBox { font-weight: bold; font-size: 12px; color: #94A3B8; border: 1px solid #334155; border-radius: 6px; margin-top: 10px; padding-top: 15px; background-color: #1C2128; }
+                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #94A3B8; }
+                QPushButton { padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; background-color: #2563EB; color: white; }
+                QPushButton:hover { background-color: #1D4ED8; }
+                QPushButton#btn_secondary { background-color: #2D333B; color: #E2E8F0; border: 1px solid #444C56; font-size: 12px; }
+                QPushButton#btn_secondary:hover { background-color: #373E47; }
+                QPushButton#btn_danger { background-color: #7F1D1D; color: #FECACA; border: 1px solid #991B1B; font-size: 12px; }
+                QPushButton#btn_danger:hover { background-color: #991B1B; color: white; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #F8FAFC; color: #334155; font-family: 'Segoe UI'; }
+                QLabel#lbl_status { color: #334155; }
+                QLabel#lbl_desc { color: #64748B; }
+                QGroupBox { font-weight: bold; font-size: 12px; color: #64748B; border: 1px solid #CBD5E1; border-radius: 6px; margin-top: 10px; padding-top: 15px; background-color: #FFFFFF; }
+                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #64748B; }
+                QPushButton { padding: 8px 14px; border-radius: 5px; font-weight: bold; border: 0; background-color: #2563EB; color: white; }
+                QPushButton:hover { background-color: #1D4ED8; }
+                QPushButton#btn_secondary { background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; font-size: 12px; }
+                QPushButton#btn_secondary:hover { background-color: #E2E8F0; }
+                QPushButton#btn_danger { background-color: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; font-size: 12px; }
+                QPushButton#btn_danger:hover { background-color: #FEE2E2; color: #DC2626; }
+            """)
+            
+    def _on_export(self):
+        if hasattr(self.main_window, "export_training_model"):
+            self.main_window.export_training_model()
+            
+    def _on_import(self):
+        if hasattr(self.main_window, "import_training_model"):
+            self.main_window.import_training_model()
+            self.accept()
+            
+    def _on_reset_ai(self):
+        if hasattr(self.main_window, "reset_learning"):
+            self.main_window.reset_learning()
+            self.accept()

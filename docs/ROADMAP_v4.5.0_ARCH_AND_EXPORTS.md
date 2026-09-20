@@ -1,4 +1,4 @@
-# Roadmap de Implementação — Arquitetura e Exportação Científica (Crinômetro)
+﻿# Roadmap de Implementação — Arquitetura e Exportação Científica (Crinômetro)
 
 **Documento de Planejamento Arquitetural e Execução Passo a Passo**
 **Versão Alvo:** v4.4.0 / v4.5.0 (Refatoração Estrutural e Ferramentas de Exportação)
@@ -107,6 +107,7 @@ O fluxo atual exporta o PDF estruturado, mas faltam exportações vetoriais/rast
 O relatório PDF atual carece de validação de metadados antes da geração e opções para ligar/desligar seções de análise, além do problema de contraste visual identificado (cores excessivamente claras para linhas e grades).
 
 ### 3.1. Novo Componente: `ui/dialogs/export_report_dialog.py`
+- **Unificação do Menu de Exportação PDF:** No menu 'Exportar' (show_export_menu e ações de menu), remova a divisão legada entre 'Relatório Completo em PDF' e 'Relatório Resumido em PDF'. Substitua-as por uma única ação: '📄 Relatório Científico em PDF...', que abrirá diretamente o novo ExportReportDialog (onde o usuário marcará o que deseja incluir via checkboxes e validará os metadados antes de gerar).
 - **Interface Gráfica (`QDialog` modal):**
   - **Aba Metadados:** Campos validados para Espécie (Input texto), Código do Espécime, Localidade, Temperatura (°C), Equipamento e Nome do Gravador. (Avisa/Marca em vermelho se campos essenciais estiverem vazios antes da emissão).
   - **Aba Seções Modulares (Checkboxes):** 
