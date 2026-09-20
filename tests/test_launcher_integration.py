@@ -14,6 +14,9 @@ from PyQt6.QtCore import QTimer
 import crinometro__laucher
 
 
+from unittest.mock import patch
+
+
 class TestLauncherUpdateTransitions(unittest.TestCase):
 
     def setUp(self):
@@ -35,11 +38,16 @@ class TestLauncherUpdateTransitions(unittest.TestCase):
         splash._on_download_finished("dummy_file_path.exe")
         self.assertEqual(splash.update_status_text, "Verificando arquivos...")
 
-        # Simula chamada a _step_install_files com arquivo inexistente para testar try/except
-        splash._step_install_files("caminho_inexistente_que_vai_dar_erro.bin")
-        # Se launch_windows_updater conseguir gerar script, status vai para 'Instalando arquivos...'
-        # E o timer de reinicialização é agendado sem travar
-        self.assertIn(splash.update_status_text, ["Instalando arquivos...", "Erro na instalação. Iniciando versão atual..."])
+        # Simula sucesso na instalação com mock
+        with patch("crinometro__laucher.launch_windows_updater") as mock_updater:
+            splash._step_install_files("dummy_file_path.exe")
+            mock_updater.assert_called_once_with("dummy_file_path.exe")
+            self.assertEqual(splash.update_status_text, "Instalando arquivos...")
+
+        # Simula exceção na chamada para validar resiliência do try/except
+        with patch("crinometro__laucher.launch_windows_updater", side_effect=RuntimeError("Falha de teste")):
+            splash._step_install_files("dummy_file_path.exe")
+            self.assertEqual(splash.update_status_text, "Erro na instalação. Iniciando versão atual...")
 
         splash.close()
 

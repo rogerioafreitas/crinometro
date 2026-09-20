@@ -196,7 +196,7 @@ class UpdateDownloaderThread(QThread):
             self.error.emit(f"Erro durante o download da atualização: {str(e)}")
 
 
-def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
+def launch_windows_updater(downloaded_file: str, target_dir: str = "", execute: bool = True):
     """
     Orquestra a substituição limpa e atualização do Crinômetro no Windows de forma assíncrona.
     Utiliza script PowerShell (.ps1) codificado em UTF-8 com BOM para suporte total e nativo
@@ -336,25 +336,27 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps
         f.write(bat_content)
 
     # Disparo em processo totalmente desacoplado da arvore do aplicativo
-    creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
-    if hasattr(subprocess, "DETACHED_PROCESS"):
-        creation_flags |= subprocess.DETACHED_PROCESS
+    if execute:
+        creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+        if hasattr(subprocess, "DETACHED_PROCESS"):
+            creation_flags |= subprocess.DETACHED_PROCESS
 
-    ps_cmd = [
-        "powershell.exe",
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-WindowStyle", "Hidden",
-        "-File", ps1_file
-    ]
+        ps_cmd = [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-WindowStyle", "Hidden",
+            "-File", ps1_file
+        ]
 
-    subprocess.Popen(
-        ps_cmd,
-        creationflags=creation_flags,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        close_fds=True
-    )
+        subprocess.Popen(
+            ps_cmd,
+            creationflags=creation_flags,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True
+        )
+
 
 
