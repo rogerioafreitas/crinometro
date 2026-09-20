@@ -4,7 +4,7 @@
 
 #define MyAppName "Crinômetro"
 #ifndef MyAppVersion
-#define MyAppVersion "4.4.0"
+#define MyAppVersion "4.4.1"
 #endif
 #define MyAppPublisher "rogerioafreitas"
 #define MyAppURL "https://github.com/rogerioafreitas/crinometro"
@@ -71,6 +71,8 @@ Type: files; Name: "{app}\*.dll"
 Type: files; Name: "{app}\*.pyd"
 Type: files; Name: "{app}\base_library.zip"
 Type: files; Name: "{app}\python*.zip"
+; Remove pasta legada corrompida por versões anteriores
+Type: filesandordirs; Name: "{autopf}\Crin?metro"
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]

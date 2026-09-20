@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.4.0"
+APP_VERSION = "4.4.1"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -19,6 +19,12 @@ DEFAULT_ALGO_PARAMS = {
 
 # Resumo simplificado e objetivo para exibição interna no diálogo Sobre / Notas de Atualização
 CHANGELOG_SUMMARY = {
+    "4.4.1": [
+        "Correção Crítica do Auto-Updater: eliminação definitiva de travamento na mensagem 'Instalando'.",
+        "Script em PowerShell Nativo: suporte completo a caminhos Unicode com acentuação e UTF-8 com BOM.",
+        "Limpeza de Diretórios Legados: remoção automática de pastas corrompidas por versões anteriores.",
+        "Fechamento Determinístico: liberação imediata de travas de arquivo para substituição limpa do executável."
+    ],
     "4.4.0": [
         "Histograma Bivariado com Eixo Duplo: contagem de chilreios e linha de tendência com duração média em ms no mesmo gráfico.",
         "Espectro de Potência (PSD): novo gráfico via método de Welch com anotação automática da portadora e foco acústico (0–15 kHz).",
@@ -70,6 +76,13 @@ CHANGELOG_SUMMARY = {
 
 # Histórico técnico completo preservado para exportação em CHANGELOG.md e CHANGELOG.pdf
 CHANGELOG_FULL = {
+    "4.4.1": [
+        "Correção Crítica de Emergência no Auto-Updater: eliminação definitiva do travamento da janela do Launcher na mensagem 'Instalando arquivos...'.",
+        "Migração Completa do Atualizador para PowerShell: substituição do lote legada em cmd.exe (.bat) por script PowerShell (.ps1) nativo em UTF-8 com BOM (utf-8-sig), resolvendo de ponta a ponta erros de codificação com o nome 'Crinômetro'.",
+        "Tratamento de Exceções e Resiliência na UI: inclusão de bloco try/except robusto no acionamento do instalador pelo launcher, impedindo que falhas silenciosas travem a interface gráfica.",
+        "Normalização e Limpeza Automática: identificação e correção de diretórios corrompidos com caractere \\ufffd criados por versões anteriores e expurgo automático da pasta legada após a instalação.",
+        "Encerramento Determinístico com os._exit(0): finalização do processo pai para liberação imediata de todas as travas de arquivo no Windows, garantindo que o Inno Setup substitua o executável sem conflitos."
+    ],
     "4.4.0": [
         "Implementação do Histograma Bivariado de Pulsos com Eixo Duplo (twinx): barras de contagem absoluta no eixo Y primário (esquerdo) e linha de tendência com marcadores discretos conectando a duração média dos chilreios em milissegundos (ms) no eixo Y secundário (direito).",
         "Substituição do gráfico de frequência instantânea pelo Espectro de Potência Médio (PSD) calculado via método de Welch no analyzer (janela de 4096 amostras), com faixa inicial focada em 0–15 kHz, pan delimitado até a frequência de Nyquist e anotação direta do pico da portadora.",
