@@ -47,15 +47,16 @@ class TestAutoUpdater(unittest.TestCase):
         self.assertFalse(is_remote_version_newer("4.4.1", "4.4.1"))
 
     def test_path_normalization_corrupted_char(self):
-        """Verifica se diretórios com caractere de substituição \\ufffd ou ? são normalizados para 'ô'."""
-        corrupted1 = "C:\\Program Files\\Crin\ufffdmetro"
-        self.assertEqual(corrupted1.replace("\ufffd", "ô").replace("?", "ô"), "C:\\Program Files\\Crinômetro")
-
-        corrupted2 = "C:\\Program Files\\Crin?metro"
-        self.assertEqual(corrupted2.replace("\ufffd", "ô").replace("?", "ô"), "C:\\Program Files\\Crinômetro")
+        """Verifica se diretórios com acento ou caractere de substituição são normalizados para 'Crinometro'."""
+        for corrupted in ("C:\\Program Files\\Crin\ufffdmetro", "C:\\Program Files\\Crin?metro", "C:\\Program Files\\Crinômetro"):
+            parent = os.path.dirname(corrupted)
+            base = os.path.basename(corrupted)
+            if base in ("Crinômetro", "Crin\ufffdmetro", "Crin?metro") or base.lower().startswith("crin"):
+                normalized = os.path.join(parent, "Crinometro")
+            self.assertEqual(normalized, "C:\\Program Files\\Crinometro")
 
     def test_script_generation_unicode_and_utf8_bom(self):
-        """Verifica se o gerador grava o script em utf-8-sig sem crash em caminhos com caracteres especiais."""
+        """Verifica se o gerador grava o script em utf-8-sig sem crash e normaliza o alvo para Crinometro."""
         corrupted_target = "C:\\Program Files\\Crin\ufffdmetro"
         
         # Dispara a geração
@@ -77,7 +78,7 @@ class TestAutoUpdater(unittest.TestCase):
         with open(self.ps1_file, "r", encoding="utf-8-sig") as f:
             content = f.read()
 
-        self.assertIn("Crinômetro", content, "O caminho normalizado com 'ô' deve estar presente no script!")
+        self.assertIn("Crinometro", content, "O caminho normalizado 'Crinometro' deve estar presente no script!")
         self.assertNotIn("\ufffd", content, "O script não deve conter o caractere corrompido \\ufffd no caminho alvo!")
         self.assertIn("WaitForExit", content, "O script deve aguardar liberação via WaitForExit!")
         self.assertIn("Stop-Process", content, "O script deve conter salvaguarda Stop-Process!")

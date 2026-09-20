@@ -3,6 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Crinômetro"
+#define MyAppDirName "Crinometro"
 #ifndef MyAppVersion
 #define MyAppVersion "4.4.1"
 #endif
@@ -26,7 +27,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppDirName}
 DisableDirPage=no
 AlwaysShowDirOnReadyPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -71,7 +72,8 @@ Type: files; Name: "{app}\*.dll"
 Type: files; Name: "{app}\*.pyd"
 Type: files; Name: "{app}\base_library.zip"
 Type: files; Name: "{app}\python*.zip"
-; Remove pasta legada corrompida por versões anteriores
+; Remove pastas legadas com acento ou corrompidas de versões anteriores
+Type: filesandordirs; Name: "{autopf}\Crinômetro"
 Type: filesandordirs; Name: "{autopf}\Crin?metro"
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 

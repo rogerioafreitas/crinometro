@@ -208,11 +208,16 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
             target_dir = os.path.dirname(sys.executable)
         else:
             default_pf = os.environ.get("ProgramFiles", r"C:\Program Files")
-            target_dir = os.path.join(default_pf, "Crinômetro")
+            target_dir = os.path.join(default_pf, "Crinometro")
 
-    # Normaliza eventuais caracteres de substituição (\ufffd ou '?') originados por bugs de codepage passados
-    target_dir = target_dir.replace("\ufffd", "ô").replace("?", "ô")
+    # Normalização rigorosa: padroniza a pasta de instalação como 'Crinometro' (sem acento)
+    # eliminando de vez incompatibilidades históricas de codepages e caminhos no Windows
     target_dir = os.path.abspath(target_dir)
+    parent_dir = os.path.dirname(target_dir)
+    base_name = os.path.basename(target_dir)
+    if base_name in ("Crinômetro", "Crin\ufffdmetro", "Crin?metro") or base_name.lower().startswith("crin"):
+        target_dir = os.path.join(parent_dir, "Crinometro")
+
     downloaded_file = os.path.abspath(downloaded_file)
     pid = os.getpid()
 
@@ -226,7 +231,7 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = ""):
         kw in os.path.basename(downloaded_file).lower() for kw in ("setup", "install")
     )
     exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "Crinometro.exe"
-    exe_name = exe_name.replace("\ufffd", "ô").replace("?", "ô")
+    exe_name = exe_name.replace("ô", "o").replace("\ufffd", "o").replace("?", "o")
     exe_target = os.path.join(target_dir, exe_name)
 
     if not os.path.exists(exe_target) and os.path.isdir(target_dir):
@@ -277,11 +282,22 @@ Start-Sleep -Milliseconds 600
 # 2. Executa a atualizacao
 {update_cmd_ps1}
 
-# 3. Remove eventuais pastas legadas corrompidas com caractere \\ufffd
+# 3. Migra configuracoes e limpa pastas legadas com acento ou corrompidas
 $parentDir = Split-Path "$TargetDir" -Parent
-$corruptedDir = Join-Path "$parentDir" ("Crin" + [char]0xFFFD + "metro")
-if (Test-Path "$corruptedDir") {{
-    Remove-Item -Path "$corruptedDir" -Recurse -Force -ErrorAction SilentlyContinue
+$legacyDirs = @(
+    (Join-Path "$parentDir" "Crinômetro"),
+    (Join-Path "$parentDir" ("Crin" + [char]0xFFFD + "metro"))
+)
+foreach ($ld in $legacyDirs) {{
+    if (Test-Path "$ld") {{
+        # Preserva crinometro_config.json caso exista na pasta antiga
+        $oldCfg = Join-Path "$ld" "crinometro_config.json"
+        $newCfg = Join-Path "$TargetDir" "crinometro_config.json"
+        if ((Test-Path "$oldCfg") -and !(Test-Path "$newCfg")) {{
+            Copy-Item -Path "$oldCfg" -Destination "$newCfg" -Force -ErrorAction SilentlyContinue
+        }}
+        Remove-Item -Path "$ld" -Recurse -Force -ErrorAction SilentlyContinue
+    }}
 }}
 
 # 4. Localiza o executavel mais recente gerado pelo instalador
