@@ -146,3 +146,47 @@ class SessionContext(QObject):
     def report_params(self, val):
         self._report_params = val
         self.emit_state_changed("report_params")
+
+    def activate_cached_file(self, filename: str) -> bool:
+        """Ativa atomicamente no SessionContext todo o estado associado a um arquivo em cache.
+
+        Atualiza de forma consistente:
+        - active_filename
+        - active_heavy_data
+        - peaks_detected
+        - peaks_user_verified
+        - pulse_metadata
+        """
+        if not filename or filename not in self._analysis_cache:
+            return False
+
+        d = self._analysis_cache[filename]
+        self._active_filename = filename
+        self._active_heavy_data = d
+        self._peaks_detected = list(d.get("peaks_detected", []))
+
+        # Sincroniza peaks_user_verified e pulse_metadata:
+        # Prioriza correções armazenadas em corrections_by_file se existirem, senão extrai do cache
+        stored_corr = self._corrections_by_file.get(filename)
+        if stored_corr is not None:
+            extracted = []
+            extracted_meta = {}
+            for item in stored_corr:
+                if isinstance(item, dict):
+                    extracted.append(item["idx"])
+                    extracted_meta[item["idx"]] = item
+                else:
+                    extracted.append(int(item))
+            self._peaks_user_verified = extracted
+            self._pulse_metadata = extracted_meta
+        else:
+            self._peaks_user_verified = list(d.get("peaks_user_verified", self._peaks_detected))
+            self._pulse_metadata = dict(d.get("pulse_metadata", {}))
+
+        self.emit_state_changed("active_filename")
+        self.emit_state_changed("active_heavy_data")
+        self.emit_state_changed("peaks_detected")
+        self.emit_state_changed("peaks_user_verified")
+        self.emit_state_changed("pulse_metadata")
+        return True
+

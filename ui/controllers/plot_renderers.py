@@ -165,15 +165,11 @@ class PlotRenderers:
         if self.freq_engine is not None and hasattr(self.freq_engine, "debounce_timer"):
             self.freq_engine.debounce_timer.stop()
 
-        # Obtém dados analíticos do arquivo informado (ou do arquivo ativo como fallback)
+        # Ativa atomicamente todo o estado analítico do arquivo no SessionContext
         ctx = self.session_context
         if filename and filename in ctx.analysis_cache:
-            d = ctx.analysis_cache[filename]
-            if ctx.active_filename != filename:
-                ctx.active_filename = filename
-                ctx.active_heavy_data = d
-        else:
-            d = ctx.active_heavy_data
+            ctx.activate_cached_file(filename)
+        d = ctx.active_heavy_data
 
         if not d:
             return

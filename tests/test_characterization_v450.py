@@ -558,7 +558,85 @@ class TestCharacterization(unittest.TestCase):
             ymin, ymax = self.window.panel_spec.ax.get_ylim()
             spy_spec.assert_called_once_with(0.1, 0.5, ymin, ymax, is_sync=True)
 
+    def test_16_render_file_switches_complete_active_state(self):
+        """FASE 3: Comprova que render_file() e activate_cached_file() alternam atomicamente
+
+        TODO o estado ativo (filename, heavy_data, peaks_detected, peaks_user_verified, pulse_metadata)
+        entre dois arquivos com estados propositalmente distintos, sem contaminação de marcadores."""
+        pr = self.window.plot_renderers
+        rate = 44100.0
+
+        fname_a = "file_A.wav"
+        fname_b = "file_B.wav"
+        self.window.loaded_files[fname_a] = self.sample_wav
+        self.window.loaded_files[fname_b] = self.sample_wav
+        self.window.ctx.loaded_files[fname_a] = self.sample_wav
+        self.window.ctx.loaded_files[fname_b] = self.sample_wav
+
+        base_res = self.window.pipeline.run_analysis(fname_a, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        # Configura estado propositalmente distinto para Arquivo A
+        data_a = base_res.copy()
+        data_a["peaks_detected"] = [100, 200]
+        data_a["peaks_user_verified"] = [100]
+        data_a["pulse_metadata"] = {100: {"idx": 100, "freq": 4500.0}}
+        self.window.ctx.analysis_cache[fname_a] = data_a
+
+        # Configura estado propositalmente distinto para Arquivo B
+        data_b = base_res.copy()
+        data_b["peaks_detected"] = [500, 700]
+        data_b["peaks_user_verified"] = [700]
+        data_b["pulse_metadata"] = {700: {"idx": 700, "freq": 6000.0}}
+        self.window.ctx.analysis_cache[fname_b] = data_b
+
+        # 1. Renderiza Arquivo A
+        pr.render_file(fname_a)
+        self.assertEqual(self.window.ctx.active_filename, fname_a)
+        self.assertIs(self.window.ctx.active_heavy_data, data_a)
+        self.assertEqual(self.window.ctx.peaks_detected, [100, 200])
+        self.assertEqual(self.window.ctx.peaks_user_verified, [100])
+        self.assertEqual(self.window.ctx.pulse_metadata, {100: {"idx": 100, "freq": 4500.0}})
+
+        # 2. Renderiza Arquivo B (deve alternar todo o estado atômico)
+        pr.render_file(fname_b)
+        self.assertEqual(self.window.ctx.active_filename, fname_b)
+        self.assertIs(self.window.ctx.active_heavy_data, data_b)
+        self.assertEqual(self.window.ctx.peaks_detected, [500, 700])
+        self.assertEqual(self.window.ctx.peaks_user_verified, [700])
+        self.assertEqual(self.window.ctx.pulse_metadata, {700: {"idx": 700, "freq": 6000.0}})
+
+        # 3. Comprova que os marcadores visuais no painel pertencem estritamente a B
+        # e nenhum marcador de A permanece no canvas
+        markers = pr._wave_user_markers
+        self.assertGreater(len(markers), 0)
+
+        plotted_x = []
+        for m in markers:
+            if hasattr(m, 'get_xdata'):
+                plotted_x.extend(list(m.get_xdata()))
+            elif hasattr(m, 'get_offsets'):
+                offsets = m.get_offsets()
+                if len(offsets) > 0:
+                    plotted_x.extend([pt[0] for pt in offsets])
+
+        expected_b_times = [500 / rate, 700 / rate]
+        prohibited_a_times = [100 / rate, 200 / rate]
+
+        # Verifica presença dos tempos de B
+        for pb_time in expected_b_times:
+            self.assertTrue(
+                any(abs(x - pb_time) < 1e-4 for x in plotted_x),
+                f"Tempo esperado de B ({pb_time}) não encontrado nos marcadores plotados: {plotted_x}"
+            )
+        # Verifica ausência total dos tempos de A
+        for pa_time in prohibited_a_times:
+            self.assertFalse(
+                any(abs(x - pa_time) < 1e-4 for x in plotted_x),
+                f"Tempo proibido de A ({pa_time}) ainda presente nos marcadores plotados: {plotted_x}"
+            )
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

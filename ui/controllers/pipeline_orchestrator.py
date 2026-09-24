@@ -235,7 +235,9 @@ class PipelineOrchestrator(QObject):
             "peak_dur_dict": peak_dur_dict,
             "f_psd": f_psd,
             "Pxx_db": Pxx_db,
+            "pulse_metadata": dict(file_pulse_metadata),
         }
+
 
         # 1. Atualiza sempre o cache da sessão para o arquivo analisado
         new_cache = dict(self.ctx.analysis_cache)

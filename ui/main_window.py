@@ -1640,10 +1640,7 @@ class MainWindow(QMainWindow):
             self.btn_reanalisar_main.setText("Reanalisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
-            self.active_heavy_data = self.analysis_cache[filename]
-            self.peaks_detected = list(self.active_heavy_data.get("peaks_detected", []))
-            self.peaks_user_verified = list(self.active_heavy_data.get("peaks_user_verified", []))
-            self.active_filename = filename
+            self.ctx.activate_cached_file(filename)
             self._pulse_edit_history = []
             carrier_freq = float(self.active_heavy_data.get("carrier_freq", 0.0))
             tol_val = float(self.algo_params.get("freq_tolerance_hz", 700.0))
