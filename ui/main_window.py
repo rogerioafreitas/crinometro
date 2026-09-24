@@ -227,6 +227,20 @@ class MainWindow(QMainWindow):
         self.setup_menu()
         self.setup_ui()
         self._update_theme_icons()
+
+        # FASE 3 — PlotRenderers: instanciado depois de setup_ui para garantir que
+        # panel_wave, panel_spec, panel_hist e panel_freq já existam.
+        from ui.controllers.plot_renderers import PlotRenderers
+        self.plot_renderers = PlotRenderers(
+            session_context=self.ctx,
+            main_window=self,
+            panel_wave=self.panel_wave,
+            panel_spec=self.panel_spec,
+            panel_hist=self.panel_hist,
+            panel_psd=None,
+            panel_freq=self.panel_freq,
+        )
+
         # Início limpo: nenhum arquivo fictício é carregado automaticamente.
 
     # ---------- tema ----------
@@ -2241,6 +2255,10 @@ class MainWindow(QMainWindow):
 
 
     def update_wave_visibility(self, show_raw, show_env, show_lod, show_peaks):
+        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
+        if hasattr(self, 'plot_renderers'):
+            self.plot_renderers.update_wave_visibility(show_raw, show_env, show_lod, show_peaks)
+            return
         if hasattr(self, 'wave_lines'):
             if 'raw' in self.wave_lines and self.wave_lines['raw']:
                 self.wave_lines['raw'].set_visible(bool(show_raw))
@@ -2266,6 +2284,10 @@ class MainWindow(QMainWindow):
             self.capture_backgrounds()
 
     def render_dashboard(self, filename):
+        # FASE 3: delega para PlotRenderers.render_file. Corpo original permanece como fallback (FASE 7).
+        if hasattr(self, 'plot_renderers'):
+            self.plot_renderers.render_file(filename)
+            return
         cur_splitter_sizes = self.splitter.sizes() if hasattr(self, "splitter") else None
         # Limpa referências a linhas de alinhamento do clique em eixos que serão
         # destruídos/recriados nesta renderização. Mantê-las causaria RuntimeError
@@ -2456,6 +2478,10 @@ class MainWindow(QMainWindow):
 
     def apply_spectrogram_y_limits(self, ymin, ymax, unit="kHz"):
         """Atualiza dinamicamente a escala, limites e unidade do eixo Y do espectrograma."""
+        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
+        if hasattr(self, 'plot_renderers'):
+            self.plot_renderers.apply_spectrogram_y_limits(ymin, ymax, unit)
+            return
         if not hasattr(self, "panel_spec"):
             return
         ax4 = self.panel_spec.ax
@@ -2941,6 +2967,10 @@ class MainWindow(QMainWindow):
     def _refresh_histogram(self):
         """Redesenha o histograma bivariado: barras de contagem (eixo Y esquerdo)
         e linha de tendência de duração média do chilreio em ms (eixo Y direito)."""
+        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
+        if hasattr(self, 'plot_renderers'):
+            self.plot_renderers._refresh_histogram()
+            return
         if not hasattr(self, 'panel_hist') or not getattr(self, 'active_heavy_data', None):
             return
         chirps = self.active_heavy_data.get('chirps', [])
@@ -3075,9 +3105,14 @@ class MainWindow(QMainWindow):
 
     def _refresh_user_peak_markers(self):
         """Renderiza marcadores de picos do usuário em todos os gráficos relevantes (onda, freq, spec)."""
+        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
+        if hasattr(self, 'plot_renderers'):
+            self.plot_renderers._refresh_user_peak_markers()
+            return
         if not hasattr(self, 'panel_wave'):
             return
-        
+
+
         # Limpa marcadores antigos de todos os painéis
         for artist in getattr(self, '_wave_user_markers', []):
             try:
