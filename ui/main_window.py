@@ -51,79 +51,57 @@ class MainWindow(QMainWindow):
     @property
     def algo_params(self): return self.ctx.algo_params
     @algo_params.setter
-    def algo_params(self, value): 
-        self.ctx.algo_params = value
-        self.ctx.emit_state_changed("algo_params")
+    def algo_params(self, value): self.ctx.algo_params = value
 
     @property
     def _adaptive_overrides(self): return self.ctx._adaptive_overrides
     @_adaptive_overrides.setter
-    def _adaptive_overrides(self, value): 
-        self.ctx._adaptive_overrides = value
-        self.ctx.emit_state_changed("_adaptive_overrides")
+    def _adaptive_overrides(self, value): self.ctx._adaptive_overrides = value
 
     @property
     def report_params(self): return self.ctx.report_params
     @report_params.setter
-    def report_params(self, value): 
-        self.ctx.report_params = value
-        self.ctx.emit_state_changed("report_params")
+    def report_params(self, value): self.ctx.report_params = value
 
     @property
     def pulse_learner(self): return self.ctx.pulse_learner
     @pulse_learner.setter
-    def pulse_learner(self, value): 
-        self.ctx.pulse_learner = value
-        self.ctx.emit_state_changed("pulse_learner")
+    def pulse_learner(self, value): self.ctx.pulse_learner = value
 
     @property
     def peaks_detected(self): return self.ctx.peaks_detected
     @peaks_detected.setter
-    def peaks_detected(self, value): 
-        self.ctx.peaks_detected = value
-        self.ctx.emit_state_changed("peaks_detected")
+    def peaks_detected(self, value): self.ctx.peaks_detected = value
 
     @property
     def peaks_user_verified(self): return self.ctx.peaks_user_verified
     @peaks_user_verified.setter
-    def peaks_user_verified(self, value): 
-        self.ctx.peaks_user_verified = value
-        self.ctx.emit_state_changed("peaks_user_verified")
+    def peaks_user_verified(self, value): self.ctx.peaks_user_verified = value
 
     @property
     def corrections_by_file(self): return self.ctx.corrections_by_file
     @corrections_by_file.setter
-    def corrections_by_file(self, value): 
-        self.ctx.corrections_by_file = value
-        self.ctx.emit_state_changed("corrections_by_file")
+    def corrections_by_file(self, value): self.ctx.corrections_by_file = value
 
     @property
     def active_filename(self): return self.ctx.active_filename
     @active_filename.setter
-    def active_filename(self, value): 
-        self.ctx.active_filename = value
-        self.ctx.emit_state_changed("active_filename")
+    def active_filename(self, value): self.ctx.active_filename = value
 
     @property
     def analysis_cache(self): return self.ctx.analysis_cache
     @analysis_cache.setter
-    def analysis_cache(self, value): 
-        self.ctx.analysis_cache = value
-        self.ctx.emit_state_changed("analysis_cache")
+    def analysis_cache(self, value): self.ctx.analysis_cache = value
 
     @property
     def active_heavy_data(self): return self.ctx.active_heavy_data
     @active_heavy_data.setter
-    def active_heavy_data(self, value): 
-        self.ctx.active_heavy_data = value
-        self.ctx.emit_state_changed("active_heavy_data")
+    def active_heavy_data(self, value): self.ctx.active_heavy_data = value
 
     @property
     def loaded_files(self): return self.ctx.loaded_files
     @loaded_files.setter
-    def loaded_files(self, value): 
-        self.ctx.loaded_files = value
-        self.ctx.emit_state_changed("loaded_files")
+    def loaded_files(self, value): self.ctx.loaded_files = value
 
     def __init__(self):
         super().__init__()
