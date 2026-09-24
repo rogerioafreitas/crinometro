@@ -103,9 +103,37 @@ class MainWindow(QMainWindow):
     @loaded_files.setter
     def loaded_files(self, value): self.ctx.loaded_files = value
 
+    @property
+    def _reanalyze_worker(self): return getattr(self.pipeline, "_reanalyze_worker", None)
+    @_reanalyze_worker.setter
+    def _reanalyze_worker(self, value):
+        if hasattr(self, "pipeline"):
+            self.pipeline._reanalyze_worker = value
+
+    @property
+    def _batch_worker(self): return getattr(self.pipeline, "_batch_worker", None)
+    @_batch_worker.setter
+    def _batch_worker(self, value):
+        if hasattr(self, "pipeline"):
+            self.pipeline._batch_worker = value
+
+    @property
+    def _pending_carrier_tol(self): return getattr(self.pipeline, "_pending_carrier_tol", None)
+    @_pending_carrier_tol.setter
+    def _pending_carrier_tol(self, value):
+        if hasattr(self, "pipeline"):
+            self.pipeline._pending_carrier_tol = value
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
+        
+        from ui.controllers.pipeline_orchestrator import PipelineOrchestrator
+        self.pipeline = PipelineOrchestrator(self.ctx, self)
+        self.pipeline.analysis_completed.connect(self._on_pipeline_completed)
+        self.pipeline.analysis_failed.connect(self._on_pipeline_failed)
+        self.pipeline.analysis_cancelled.connect(self._on_pipeline_cancelled)
+        self.pipeline.realtime_tolerance_updated.connect(self._on_realtime_tolerance_updated)
 
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
         # NÃO inclui sobreposições adaptativas (prominence, noise_floor adaptados).
@@ -2023,6 +2051,48 @@ class MainWindow(QMainWindow):
                 self.lbl_model_status.setStyleSheet("color: #94A3B8;")
 
     # ---------- análise ----------
+    # ---------- análise (delegada ao PipelineOrchestrator) ----------
+    def _on_pipeline_completed(self, filename):
+        item_widget = self._get_item_widget_by_name(filename)
+        if item_widget and hasattr(item_widget, "set_loading"):
+            item_widget.set_loading(False)
+        if getattr(self, "_reanalyze_spinner", None) is not None:
+            self._reanalyze_spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
+            self._reanalyze_spinner = None
+        if hasattr(self, "btn_reanalisar_main"):
+            self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
+        if self.active_filename == filename:
+            self.render_dashboard(filename)
+
+    def _on_pipeline_failed(self, filename, err_msg):
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        item_widget = self._get_item_widget_by_name(filename)
+        if item_widget and hasattr(item_widget, "set_loading"):
+            item_widget.set_loading(False)
+        if getattr(self, "_reanalyze_spinner", None) is not None:
+            is_first_time = (filename not in self.analysis_cache)
+            restore_text = "Analisar" if is_first_time else "Reanalisar"
+            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
+            self._reanalyze_spinner.stop(restore_icon, restore_text)
+            self._reanalyze_spinner = None
+        QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise:\n{err_msg}")
+
+    def _on_pipeline_cancelled(self, filename):
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(False)
+        if getattr(self, "_reanalyze_spinner", None) is not None:
+            is_first_time = (filename not in self.analysis_cache)
+            restore_text = "Analisar" if is_first_time else "Reanalisar"
+            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
+            self._reanalyze_spinner.stop(restore_icon, restore_text)
+            self._reanalyze_spinner = None
+        if getattr(self, "_batch_spinner", None) is not None:
+            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner = None
+
     def force_reanalyze(self):
         curr = self.list_widget.currentItem()
         filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
@@ -2030,7 +2100,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de analisar.")
             return
 
-        # Desativa a ferramenta de edição caso esteja ativa
         self._update_pulse_edit_buttons(None)
 
         is_first_time = (filename not in self.analysis_cache)
@@ -2040,7 +2109,7 @@ class MainWindow(QMainWindow):
         spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
         spinner.start()
         self._reanalyze_spinner = spinner
-        
+
         self._saved_viewport = None
         if not is_first_time and getattr(self, "panel_spec", None):
             self._saved_viewport = {
@@ -2056,100 +2125,37 @@ class MainWindow(QMainWindow):
         if item_widget and hasattr(item_widget, "set_loading"):
             item_widget.set_loading(True)
 
-        def _task():
-            # 1. Se o usuário fez correções no arquivo atual, atualizamos o modelo
-            if (self.active_heavy_data and self.active_filename == filename and
-                filename in self.corrections_by_file and self.peaks_user_verified):
-                rate = float(self.active_heavy_data.get("rate", 1.0))
-                env = self.active_heavy_data.get("env")
-                data_b1 = self.active_heavy_data.get("data_b1")
-                if env is not None:
-                    try:
-                        self.pulse_learner.update_from_corrections(
-                            self.peaks_detected, self.peaks_user_verified, rate, env, raw_signal=data_b1
-                        )
-                        self._adapt_advanced_params()
-                        self.pulse_learner.save_to_config()
-                    except Exception:
-                        pass
-
-            effective_params = {**self.algo_params, **self._adaptive_overrides}
-            file_path = self.loaded_files[filename]
-            learner = self.pulse_learner if getattr(self, "use_machine_learning", True) else None
-            
-            cached_spec = None
-            if self.active_heavy_data and self.active_filename == filename:
-                cached_spec = {
-                    "f_spec": self.active_heavy_data.get("f_spec"),
-                    "t_spec": self.active_heavy_data.get("t_spec"),
-                    "Sxx_db": self.active_heavy_data.get("Sxx_db"),
-                    "dom_freqs": self.active_heavy_data.get("dom_freqs"),
-                }
-                
-            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner, cached_spec=cached_spec)
-            return res
-
-        worker = GenericWorker(_task)
-        self._reanalyze_worker = worker
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(True)
 
-        def _cleanup():
-            if hasattr(self, "btn_abort_analysis"):
-                self.btn_abort_analysis.setVisible(False)
-
-        def _on_finished(results):
-            _cleanup()
-            if item_widget and hasattr(item_widget, "set_loading"):
-                item_widget.set_loading(False)
-            spinner.stop(make_ui_icon("reload", color="#FFFFFF", size=17), "Reanalisar")
-            self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
-            self._apply_analysis_results(filename, results, render=True, validate_all=True)
-
-        def _on_error(err_msg):
-            _cleanup()
-            if item_widget and hasattr(item_widget, "set_loading"):
-                item_widget.set_loading(False)
-            restore_text = "Analisar" if is_first_time else "Reanalisar"
-            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
-            spinner.stop(restore_icon, restore_text)
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise:\n{err_msg}")
-
-        worker.finished_signal.connect(_on_finished)
-        worker.error_signal.connect(_on_error)
-        worker.start()
+        self.pipeline.force_reanalyze(filename)
 
     def run_analysis(self, filename, params, render=True, validate_all=False):
-        file_path = self.loaded_files[filename]
         try:
-            effective_params = {**params, **self._adaptive_overrides}
-            learner = self.pulse_learner if getattr(self, "use_machine_learning", False) else None
-            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner)
-            self._apply_analysis_results(filename, res, render=render, validate_all=validate_all, params=params)
+            heavy_data = self.pipeline.run_analysis(filename, params)
+            if render:
+                self.active_heavy_data = heavy_data
+                self.active_filename = filename
+                self.render_dashboard(filename)
         except Exception as e:
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
 
     def abort_current_analysis(self):
         """Cancela cooperativamente a análise em andamento (single ou lote)."""
-        aborted = False
-        for attr in ("_reanalyze_worker", "_batch_worker"):
-            worker = getattr(self, attr, None)
-            if worker is not None and worker.isRunning():
-                worker.abort()
-                aborted = True
-        
+        aborted = self.pipeline.abort_current_analysis()
+
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_abort_batch"):
             self.btn_abort_batch.setVisible(False)
-            
+
         if getattr(self, "_reanalyze_spinner", None) is not None:
             is_first_time = (getattr(self, "active_filename", None) not in self.analysis_cache)
             restore_text = "Analisar" if is_first_time else "Reanalisar"
             restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
             self._reanalyze_spinner.stop(restore_icon, restore_text)
             self._reanalyze_spinner = None
-            
+
         if getattr(self, "_batch_spinner", None) is not None:
             self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
             self._batch_spinner = None
@@ -2159,13 +2165,13 @@ class MainWindow(QMainWindow):
                 self.btn_reanalisar_main.setEnabled(True)
             if hasattr(self, "btn_analyze_selected"):
                 self.btn_analyze_selected.setEnabled(True)
-                
+
             curr_name = getattr(self, 'active_filename', None)
             if curr_name:
                 item_widget = self._get_item_widget_by_name(curr_name)
                 if item_widget and hasattr(item_widget, "set_loading"):
                     item_widget.set_loading(False)
-            
+
             checked_files = self.get_checked_files() if hasattr(self, "get_checked_files") else []
             for fname in checked_files:
                 w = self._get_item_widget_by_name(fname)
@@ -2175,87 +2181,9 @@ class MainWindow(QMainWindow):
     def _apply_analysis_results(self, filename, results, render=True, validate_all=False, params=None):
         if params is None:
             params = self.algo_params.copy()
-        rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results[:14]
-        distant_peaks = results[14] if len(results) > 14 else []
-        carrier_freq = float(results[15]) if len(results) > 15 else 0.0
-        discarded_peaks_reasons = results[16] if len(results) > 16 else {}
-        valid_peaks_stage2 = results[17] if len(results) > 17 else list(peaks)
-        peak_dur_dict = results[18] if len(results) > 18 else {}
-        f_psd = results[19] if len(results) > 19 else np.array([])
-        Pxx_db = results[20] if len(results) > 20 else np.array([])
+        heavy_data = self.pipeline._apply_analysis_results(filename, results, params=params)
 
-        # Converte dados volumosos de ponto flutuante para float32 (reduz 50% do consumo de RAM)
-        if isinstance(data, np.ndarray) and data.dtype != np.float32:
-            data = data.astype(np.float32)
-        if isinstance(data_b1, np.ndarray) and data_b1.dtype != np.float32:
-            data_b1 = data_b1.astype(np.float32)
-        if isinstance(env, np.ndarray) and env.dtype != np.float32:
-            env = env.astype(np.float32)
-        if isinstance(Sxx_db, np.ndarray) and Sxx_db.dtype != np.float32:
-            Sxx_db = Sxx_db.astype(np.float32)
-
-        self.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
-        self.active_filename = filename
-
-        stored_corrections = self.corrections_by_file.get(filename)
-        effective_params = {**params, **self._adaptive_overrides}
-        
-        self.pulse_metadata = {}
-
-        # Aplica estritamente correções específicas deste arquivo
-        if stored_corrections is not None:
-            extracted_peaks = []
-            for item in stored_corrections:
-                if isinstance(item, dict):
-                    extracted_peaks.append(item["idx"])
-                    self.pulse_metadata[item["idx"]] = item
-                else:
-                    extracted_peaks.append(int(item))
-            self.peaks_user_verified = extracted_peaks
-            peaks_added = sorted(set(extracted_peaks) - set(self.peaks_detected))
-            peaks_removed = sorted(set(self.peaks_detected) - set(extracted_peaks))
-            
-            if peaks_removed:
-                # Se o algoritmo ou modelo ML ainda achou que o pulso era válido, 
-                # mas o usuário removeu explicitamente, force-o a ser exibido como ruído (distant_peak)
-                distant_peaks = sorted(list(set(distant_peaks) | set(peaks_removed)))
-                for pk in peaks_removed:
-                    discarded_peaks_reasons[int(pk)] = "Removido manualmente pelo usuário"
-            
-            if peaks_added or peaks_removed:
-                effective_peaks = np.asarray(
-                    sorted(set(self.peaks_detected) | set(peaks_added) - set(peaks_removed)),
-                    dtype=int
-                )
-                if len(effective_peaks) >= 2:
-                    try:
-                        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                            effective_peaks, effective_params, rate, env, raw_signal=data_b1
-                        )
-                    except Exception:
-                        pass
-        else:
-            self.peaks_user_verified = list(self.peaks_detected)
-
-        heavy_data = {
-            "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(self.peaks_detected), "chirps": chirps,
-            "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda,
-            "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
-            "duration": audio_duration, "params": params.copy(),
-            "peaks_detected": list(self.peaks_detected),
-            "peaks_user_verified": list(self.peaks_user_verified),
-            "distant_peaks": list(distant_peaks),
-            "carrier_freq": carrier_freq,
-            "discarded_peaks_reasons": discarded_peaks_reasons,
-            "valid_peaks_stage2": list(valid_peaks_stage2),
-            "peak_dur_dict": peak_dur_dict,
-            "f_psd": f_psd,
-            "Pxx_db": Pxx_db,
-        }
-        self.analysis_cache[filename] = heavy_data
-        
         if render:
-            # Captura o zoom atual antes que o render_dashboard o destrua
             has_active = hasattr(self, "active_filename") and self.active_filename == filename
             if has_active and hasattr(self, "panel_wave") and hasattr(self, "panel_spec"):
                 current_vp = {
@@ -2272,7 +2200,7 @@ class MainWindow(QMainWindow):
             self.active_heavy_data = heavy_data
             self.active_filename = filename
 
-            # Sincroniza informações da frequência portadora e tolerância nos painéis
+            carrier_freq = float(heavy_data.get("carrier_freq", 0.0))
             tol_val = float(params.get("freq_tolerance_hz", 700.0))
             if hasattr(self, "panel_spec"):
                 self.panel_spec.set_carrier_info(carrier_freq, tol_val)
@@ -2280,33 +2208,24 @@ class MainWindow(QMainWindow):
                 self.panel_freq.set_carrier_info(carrier_freq, tol_val)
 
             self.render_dashboard(filename)
-            
-            # Restaurar a viewport anterior
+
             vp = current_vp or getattr(self, "_saved_viewport", None)
             if vp is not None and has_active:
                 dur = heavy_data.get("duration", 0.0)
-                
-                # wave
                 x0, x1 = vp.get("wave_xlim", (0, dur))
                 if x1 <= x0: x1 = x0 + 1.0
                 self.panel_wave.ax.set_xlim(x0, x1)
-                
-                # freq não precisa restaurar limites X, pois agora é um espectro estático (PSD)
-                
-                # spec
+
                 sx0, sx1 = vp.get("spec_xlim", (x0, x1))
                 if sx1 <= sx0: sx1 = sx0 + 1.0
                 self.panel_spec.ax.set_xlim(sx0, sx1)
                 if not getattr(self.panel_spec, "_y_locked", False):
                     self.panel_spec.ax.set_ylim(vp.get("spec_ylim", (0, 10)))
-                    
-                # redraw
+
                 for p in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                    p.canvas.draw()  # Must be synchronous draw() before capturing backgrounds
-                # É crucial recapturar o background porque o render_dashboard capturou o fundo no zoom 0-dur
-                # O usuário precisa do background com o zoom exato para poder fazer pan suavemente
+                    p.canvas.draw()
                 self.capture_backgrounds()
-                
+
             self._saved_viewport = None
 
 
@@ -2591,67 +2510,22 @@ class MainWindow(QMainWindow):
         if hasattr(self, "panel_freq") and self.panel_freq is not source_panel and hasattr(self.panel_freq, "set_carrier_tolerance"):
             self.panel_freq.set_carrier_tolerance(new_tol, notify=False)
 
-        d = getattr(self, "active_heavy_data", None)
-        if not d:
-            return
-
-        # Debounce suave de 25 ms para deslizamento contínuo sem sobrecarga
-        if not hasattr(self, "_carrier_tol_timer"):
-            self._carrier_tol_timer = QTimer(self)
-            self._carrier_tol_timer.setSingleShot(True)
-            self._carrier_tol_timer.timeout.connect(self._execute_realtime_freq_tolerance)
-
-        self._pending_carrier_tol = new_tol
-        self._carrier_tol_timer.start(25)
+        self.pipeline.apply_realtime_freq_tolerance(new_tol, source_panel=source_panel)
 
     def _execute_realtime_freq_tolerance(self):
-        d = getattr(self, "active_heavy_data", None)
+        self.pipeline._execute_realtime_freq_tolerance()
+
+    def _on_realtime_tolerance_updated(self, filename):
+        d = self.active_heavy_data
         if not d:
             return
-        new_tol = getattr(self, "_pending_carrier_tol", float(self.algo_params.get("freq_tolerance_hz", 700.0)))
-
-        valid_peaks_stage2 = d.get("valid_peaks_stage2", d.get("peaks_detected", []))
-        carrier_freq = float(d.get("carrier_freq", 5000.0))
-        rate = float(d.get("rate", 44100))
-        t_spec = d.get("t_spec", np.array([]))
-        dom_freqs = d.get("dom_freqs", np.array([]))
-        env = d.get("env1_smooth", d.get("env", np.array([])))
-        data_b1 = d.get("data_b1", None)
-        effective_params = {**self.algo_params, **self._adaptive_overrides, "freq_tolerance_hz": new_tol}
-        learner = self.pulse_learner if getattr(self, "use_machine_learning", False) else None
-        raw_peaks = d.get("peaks_detected", None)
-        peak_dur_dict = d.get("peak_dur_dict", None)
-
-        peaks_detected_set = set(int(p) for p in d.get("peaks_detected", []))
-        peaks_verified_set = set(int(p) for p in d.get("peaks_user_verified", []))
-        peaks_added = sorted(peaks_verified_set - peaks_detected_set)
-        
-        peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons = (
-            CricketAnalyzer.reevaluate_carrier_tolerance(
-                valid_peaks_stage2, carrier_freq, new_tol,
-                rate, t_spec, dom_freqs, env, effective_params,
-                data_b1=data_b1, pulse_learner=learner,
-                base_discarded_reasons=d.get("discarded_peaks_reasons", {})
-            )
-        )
-
-        d["peaks"] = list(peaks)
-        d["chirps"] = chirps
-        d["chirp_peaks_list"] = chirp_peaks_list
-        d["media"] = media
-        d["moda"] = moda
-        d["distant_peaks"] = list(all_distant)
-        d["discarded_peaks_reasons"] = discarded_reasons
-        if "params" in d:
-            d["params"]["freq_tolerance_hz"] = new_tol
-            
-        cf = d.get("carrier_freq", 0.0)
+        cf = float(d.get("carrier_freq", 0.0))
+        new_tol = float(d.get("params", {}).get("freq_tolerance_hz", 700.0))
         if hasattr(self, "panel_spec"):
             self.panel_spec.set_carrier_info(cf, new_tol)
         if hasattr(self, "panel_freq"):
             self.panel_freq.set_carrier_info(cf, new_tol)
 
-        # Preserva o enquadramento (zoom e pan X) atual dos gráficos
         cur_xlim = self.panel_wave.ax.get_xlim() if hasattr(self, "panel_wave") else None
 
         if self.active_filename:
@@ -3483,50 +3357,8 @@ class MainWindow(QMainWindow):
         self._refresh_user_peak_markers()
 
     def _adapt_advanced_params(self):
-        """Atualiza sobreposições adaptativas com estatísticas das correções atuais.
-
-        Os valores calculados são armazenados em self._adaptive_overrides — um dict
-        separado de self.algo_params — garantindo que os parâmetros base do usuário
-        nunca sejam corrompidos pela adaptação automática. As sobreposições são
-        mescladas em tempo de análise dentro de run_analysis().
-        """
-        if not self.active_heavy_data or not self.peaks_user_verified:
-            return
-        env = self.active_heavy_data.get("env")
-        if env is None:
-            return
-        rate = float(self.active_heavy_data.get("rate", 1.0))
-        features = np.asarray([
-            PulseLearner.extract_features_for_peak(p, rate, env)
-            for p in self.peaks_user_verified
-        ])
-        if features.size == 0 or features.shape[1] < 14:
-            return
-
-        adaptation = float(self.algo_params.get("adaptation_rate", 0.10))
-        adaptation = min(0.15, max(0.0, adaptation))
-
-        # Ajuste seguro e fisiológico de proeminência relativa
-        target_prom = float(np.percentile(features[:, 6], 20)) * 0.08
-        current_prominence = float(self._adaptive_overrides.get(
-            "prominence", self.algo_params.get("prominence", 0.01)
-        ))
-        new_prom = (1.0 - adaptation) * current_prominence + adaptation * target_prom
-        self._adaptive_overrides["prominence"] = float(np.clip(new_prom, 0.002, 0.08))
-
-        # Manutenção de noise_floor em faixa segura (0.85 a 1.05)
-        current_noise = float(self._adaptive_overrides.get(
-            "noise_floor", self.algo_params.get("noise_floor", 0.90)
-        ))
-        self._adaptive_overrides["noise_floor"] = float(np.clip(current_noise, 0.85, 1.05))
-
-        target_width_ms = float(np.median(features[:, 1]) * 1000.0)
-        if target_width_ms > 0:
-            current_width = float(self._adaptive_overrides.get(
-                "width_min_ms", self.algo_params.get("width_min_ms", 0.0)
-            ))
-            new_width = (1.0 - adaptation) * current_width + adaptation * (target_width_ms * 0.40)
-            self._adaptive_overrides["width_min_ms"] = float(np.clip(new_width, 0.0, 25.0))
+        """Atualiza sobreposições adaptativas delegando ao PipelineOrchestrator."""
+        self.pipeline._adapt_advanced_params()
 
     def _undo_pulse_edit(self):
         if not self._pulse_edit_history:
