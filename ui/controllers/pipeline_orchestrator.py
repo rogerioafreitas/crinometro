@@ -117,9 +117,8 @@ class PipelineOrchestrator(QObject):
         data_b1 = d.get("data_b1", None)
         effective_params = {**self.ctx.algo_params, **self.ctx._adaptive_overrides, "freq_tolerance_hz": new_tol}
 
-        # Gate estrito: só ativa learner se o modo ML estiver habilitado no pai/janela
-        parent_win = self.parent()
-        use_ml = getattr(parent_win, "use_machine_learning", False) if parent_win else False
+        # Gate estrito de ML via SessionContext
+        use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
 
         peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons = (
@@ -152,6 +151,8 @@ class PipelineOrchestrator(QObject):
 
         Preserva todos os 25 campos de heavy_data, conversão para float32,
         reagrupamento de correções e atualização do cache analítico.
+        Garante que, se o arquivo analisado for o ativo, active_heavy_data é
+        atualizado diretamente no SessionContext.
         """
         if params is None:
             params = self.ctx.algo_params.copy()
@@ -181,17 +182,14 @@ class PipelineOrchestrator(QObject):
         stored_corrections = self.ctx.corrections_by_file.get(filename)
         effective_params = {**params, **self.ctx._adaptive_overrides}
 
-        parent_win = self.parent()
-        if parent_win and hasattr(parent_win, "pulse_metadata"):
-            parent_win.pulse_metadata = {}
+        self.ctx.pulse_metadata = {}
 
         if stored_corrections is not None:
             extracted_peaks = []
             for item in stored_corrections:
                 if isinstance(item, dict):
                     extracted_peaks.append(item["idx"])
-                    if parent_win and hasattr(parent_win, "pulse_metadata"):
-                        parent_win.pulse_metadata[item["idx"]] = item
+                    self.ctx.pulse_metadata[item["idx"]] = item
                 else:
                     extracted_peaks.append(int(item))
             self.ctx.peaks_user_verified = extracted_peaks
@@ -234,33 +232,93 @@ class PipelineOrchestrator(QObject):
             "Pxx_db": Pxx_db,
         }
 
-        # Atualiza o cache do contexto
+        # 1. Atualiza o cache da sessão
         new_cache = dict(self.ctx.analysis_cache)
         new_cache[filename] = heavy_data
         self.ctx.analysis_cache = new_cache
 
+        # 2. Atualiza imediatamente o active_heavy_data se for o arquivo ativo
+        if self.ctx.active_filename == filename:
+            self.ctx.active_heavy_data = heavy_data
+
         return heavy_data
 
     # ------------------------------------------------------------------ #
-    # 4. Execução Síncrona / Lote (run_analysis)                         #
+    # 4. Execução Síncrona / Contrato v4.5.0 (run_analysis)               #
     # ------------------------------------------------------------------ #
-    def run_analysis(self, filename, params):
-        """Executa a análise direta no caminho especificado."""
+    def run_analysis(self, filename, params, render=True, validate_all=False):
+        """Executa a análise mantendo a assinatura exata do contrato ROADMAP v4.5.0."""
         file_path = self.ctx.loaded_files.get(filename)
         if not file_path or not os.path.exists(file_path):
             raise FileNotFoundError(f"Arquivo não encontrado: {filename}")
 
         effective_params = {**params, **self.ctx._adaptive_overrides}
-        parent_win = self.parent()
-        use_ml = getattr(parent_win, "use_machine_learning", False) if parent_win else False
+        use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
 
         res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner)
         heavy_data = self._apply_analysis_results(filename, res, params=params)
+
+        if render:
+            self.ctx.active_heavy_data = heavy_data
+            self.ctx.active_filename = filename
+            self.analysis_completed.emit(filename)
+
         return heavy_data
 
     # ------------------------------------------------------------------ #
-    # 5. Reanálise em Background (force_reanalyze)                       #
+    # 5. Execução em Lote Assíncrona (run_batch_analysis)                #
+    # ------------------------------------------------------------------ #
+    def run_batch_analysis(self, checked_files, params):
+        """Gerencia worker de análise em lote e emite analysis_progress de ponta a ponta."""
+        if not checked_files:
+            return None
+
+        effective_params = {**params, **self.ctx._adaptive_overrides}
+        use_ml = self.ctx.use_machine_learning
+        learner = self.ctx.pulse_learner if use_ml else None
+
+        def _task():
+            success_count = 0
+            errors = []
+            worker = self._batch_worker
+            for i, fname in enumerate(checked_files):
+                if worker and worker.abort_requested:
+                    break
+                if fname not in self.ctx.loaded_files or not os.path.exists(self.ctx.loaded_files[fname]):
+                    continue
+                try:
+                    fpath = self.ctx.loaded_files[fname]
+                    res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=learner)
+                    if worker and not worker.abort_requested:
+                        worker.result_ready_signal.emit(fname, res)
+                        success_count += 1
+                except Exception as exc:
+                    errors.append(f"{fname}: {exc}")
+
+                if worker and not worker.abort_requested:
+                    worker.progress_signal.emit(i + 1, len(checked_files))
+
+            return success_count, errors
+
+        worker = GenericWorker(_task)
+        self._batch_worker = worker
+
+        def _on_single_result(fname, res):
+            self._apply_analysis_results(fname, res, params=params)
+            self.analysis_completed.emit(fname)
+
+        def _on_progress(current, total):
+            # Emissão real de analysis_progress de ponta a ponta
+            self.analysis_progress.emit(current, total)
+
+        worker.result_ready_signal.connect(_on_single_result)
+        worker.progress_signal.connect(_on_progress)
+        worker.start()
+        return worker
+
+    # ------------------------------------------------------------------ #
+    # 6. Reanálise em Background (force_reanalyze)                       #
     # ------------------------------------------------------------------ #
     def force_reanalyze(self, filename):
         """Inicia análise em thread secundária GenericWorker."""
@@ -273,9 +331,7 @@ class PipelineOrchestrator(QObject):
 
         def _task():
             # 1. Se o usuário fez correções, atualiza o modelo ML
-            parent_win = self.parent()
-            use_ml = getattr(parent_win, "use_machine_learning", False) if parent_win else False
-            
+            use_ml = self.ctx.use_machine_learning
             if (self.ctx.active_heavy_data and self.ctx.active_filename == filename and
                 filename in self.ctx.corrections_by_file and self.ctx.peaks_user_verified and use_ml):
                 rate = float(self.ctx.active_heavy_data.get("rate", 1.0))
@@ -297,12 +353,13 @@ class PipelineOrchestrator(QObject):
 
             cached_spec = None
             if self.ctx.active_heavy_data and self.ctx.active_filename == filename:
-                cached_spec = {
-                    "f_spec": self.ctx.active_heavy_data.get("f_spec"),
-                    "t_spec": self.ctx.active_heavy_data.get("t_spec"),
-                    "Sxx_db": self.ctx.active_heavy_data.get("Sxx_db"),
-                    "dom_freqs": self.ctx.active_heavy_data.get("dom_freqs"),
-                }
+                if all(self.ctx.active_heavy_data.get(k) is not None for k in ("f_spec", "t_spec", "Sxx_db", "dom_freqs")):
+                    cached_spec = {
+                        "f_spec": self.ctx.active_heavy_data.get("f_spec"),
+                        "t_spec": self.ctx.active_heavy_data.get("t_spec"),
+                        "Sxx_db": self.ctx.active_heavy_data.get("Sxx_db"),
+                        "dom_freqs": self.ctx.active_heavy_data.get("dom_freqs"),
+                    }
 
             res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner, cached_spec=cached_spec)
             return res
@@ -311,6 +368,7 @@ class PipelineOrchestrator(QObject):
         self._reanalyze_worker = worker
 
         def _on_finished(results):
+            # _apply_analysis_results atualiza active_heavy_data e cache
             self._apply_analysis_results(filename, results)
             self.analysis_completed.emit(filename)
 
@@ -322,7 +380,7 @@ class PipelineOrchestrator(QObject):
         worker.start()
 
     # ------------------------------------------------------------------ #
-    # 6. Cancelamento Cooperativo (abort_current_analysis)               #
+    # 7. Cancelamento Cooperativo (abort_current_analysis)               #
     # ------------------------------------------------------------------ #
     def abort_current_analysis(self):
         """Cancela cooperativamente qualquer worker em execução (individual ou lote)."""

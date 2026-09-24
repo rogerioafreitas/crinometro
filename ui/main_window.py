@@ -124,6 +124,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, "pipeline"):
             self.pipeline._pending_carrier_tol = value
 
+    @property
+    def use_machine_learning(self): return self.ctx.use_machine_learning
+    @use_machine_learning.setter
+    def use_machine_learning(self, value): self.ctx.use_machine_learning = value
+
+    @property
+    def pulse_metadata(self): return self.ctx.pulse_metadata
+    @pulse_metadata.setter
+    def pulse_metadata(self, value): self.ctx.pulse_metadata = value
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
@@ -133,6 +143,7 @@ class MainWindow(QMainWindow):
         self.pipeline.analysis_completed.connect(self._on_pipeline_completed)
         self.pipeline.analysis_failed.connect(self._on_pipeline_failed)
         self.pipeline.analysis_cancelled.connect(self._on_pipeline_cancelled)
+        self.pipeline.analysis_progress.connect(self._on_batch_progress)
         self.pipeline.realtime_tolerance_updated.connect(self._on_realtime_tolerance_updated)
 
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
@@ -1430,39 +1441,11 @@ class MainWindow(QMainWindow):
 
         curr = self.list_widget.currentItem()
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        effective_params = {**self.algo_params, **self._adaptive_overrides}
 
-        def _task():
-            success_count = 0
-            errors = []
-            
-            for i, fname in enumerate(checked_files):
-                if worker.abort_requested:
-                    break
-                
-                if fname not in self.loaded_files or not os.path.exists(self.loaded_files[fname]):
-                    continue
-                
-                try:
-                    fpath = self.loaded_files[fname]
-                    # Analysis runs sequentially. It takes ~1s per file, leaving GIL frequently.
-                    res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=self.pulse_learner)
-                    
-                    # Emitir resultado imediatamente para a UI thread processar
-                    if not worker.abort_requested:
-                        worker.result_ready_signal.emit(fname, res)
-                        success_count += 1
-                        
-                except Exception as exc:
-                    errors.append(f"{fname}: {exc}")
-                    
-                if not worker.abort_requested:
-                    worker.progress_signal.emit(i + 1, len(checked_files))
+        worker = self.pipeline.run_batch_analysis(checked_files, self.algo_params)
+        if not worker:
+            return
 
-            return success_count, errors
-
-        worker = GenericWorker(_task)
-        self._batch_worker = worker
         if hasattr(self, "btn_abort_batch"):
             self.btn_abort_batch.setVisible(True)
         if hasattr(self, "btn_abort_analysis"):
@@ -1477,12 +1460,10 @@ class MainWindow(QMainWindow):
                 w = self._get_item_widget_by_name(fname)
                 if w and hasattr(w, "set_loading"):
                     w.set_loading(False)
-                    
+
         def _on_single_result(fname, res):
-            # Chamado no fluxo da main thread, processa as arrays um arquivo por vez
-            self._apply_analysis_results(fname, res, render=(fname == curr_name))
-            
-            # Atualiza o estado da UI para este item especifico
+            if fname == curr_name:
+                self.render_dashboard(fname)
             w = self._get_item_widget_by_name(fname)
             if w and hasattr(w, "set_loading"):
                 w.set_loading(False)
@@ -1513,15 +1494,9 @@ class MainWindow(QMainWindow):
             spinner.stop(None, "⚡ Analisar Selecionados")
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
-        def _on_progress(current, total):
-            if hasattr(self, "_batch_spinner") and getattr(self._batch_spinner, "button", None) is not None:
-                self._batch_spinner.button.setText(f"Analisando... ({current}/{total})")
-
         worker.finished_signal.connect(_on_finished)
         worker.result_ready_signal.connect(_on_single_result)
-        worker.progress_signal.connect(_on_progress)
         worker.error_signal.connect(_on_error)
-        worker.start()
 
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()
@@ -2053,6 +2028,8 @@ class MainWindow(QMainWindow):
     # ---------- análise ----------
     # ---------- análise (delegada ao PipelineOrchestrator) ----------
     def _on_pipeline_completed(self, filename):
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
         item_widget = self._get_item_widget_by_name(filename)
         if item_widget and hasattr(item_widget, "set_loading"):
             item_widget.set_loading(False)
@@ -2063,6 +2040,27 @@ class MainWindow(QMainWindow):
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
         if self.active_filename == filename:
             self.render_dashboard(filename)
+            vp = getattr(self, "_saved_viewport", None)
+            if vp is not None and self.active_heavy_data:
+                dur = self.active_heavy_data.get("duration", 0.0)
+                x0, x1 = vp.get("wave_xlim", (0, dur))
+                if x1 <= x0: x1 = x0 + 1.0
+                self.panel_wave.ax.set_xlim(x0, x1)
+
+                sx0, sx1 = vp.get("spec_xlim", (x0, x1))
+                if sx1 <= sx0: sx1 = sx0 + 1.0
+                self.panel_spec.ax.set_xlim(sx0, sx1)
+                if not getattr(self.panel_spec, "_y_locked", False):
+                    self.panel_spec.ax.set_ylim(vp.get("spec_ylim", (0, 10)))
+
+                for p in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                    p.canvas.draw()
+                self.capture_backgrounds()
+                self._saved_viewport = None
+
+    def _on_batch_progress(self, current, total):
+        if hasattr(self, "_batch_spinner") and getattr(self._batch_spinner, "button", None) is not None:
+            self._batch_spinner.button.setText(f"Analisando... ({current}/{total})")
 
     def _on_pipeline_failed(self, filename, err_msg):
         if hasattr(self, "btn_abort_analysis"):
@@ -2132,13 +2130,10 @@ class MainWindow(QMainWindow):
 
     def run_analysis(self, filename, params, render=True, validate_all=False):
         try:
-            heavy_data = self.pipeline.run_analysis(filename, params)
-            if render:
-                self.active_heavy_data = heavy_data
-                self.active_filename = filename
-                self.render_dashboard(filename)
+            return self.pipeline.run_analysis(filename, params, render=render, validate_all=validate_all)
         except Exception as e:
             QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
+            return None
 
     def abort_current_analysis(self):
         """Cancela cooperativamente a análise em andamento (single ou lote)."""

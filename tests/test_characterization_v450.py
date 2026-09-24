@@ -11,6 +11,7 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtMultimedia import QMediaPlayer
+from matplotlib.backend_bases import MouseEvent
 
 from ui.main_window import MainWindow
 from core.analyzer import CricketAnalyzer
@@ -38,12 +39,16 @@ class TestCharacterization(unittest.TestCase):
         self.patch_info.start()
 
         self.window = MainWindow()
+        self.window.show()
 
     def tearDown(self):
         self.patch_crit.stop()
         self.patch_warn.stop()
         self.patch_info.stop()
-        self.window.close()
+        if hasattr(self, 'window'):
+            self.window.pipeline.abort_current_analysis()
+            self.window.close()
+        QApplication.processEvents()
 
     def test_00_session_context_redirection_and_emission(self):
         """Verifica se SessionContext armazena o estado e emite state_changed em qualquer atribuição."""
@@ -132,16 +137,46 @@ class TestCharacterization(unittest.TestCase):
         self.assertFalse(worker.isRunning())
 
     def test_03_navegacao_pan_zoom(self):
-        """Verifica se pan/zoom altera somente o viewport pretendido."""
-        ax_wave = self.window.panel_wave.ax
-        ax_wave.set_xlim(0.0, 1.0)
-        ax_wave.set_ylim(-1.0, 1.0)
+        """Verifica o algoritmo real de pan e zoom do Crinômetro (on_press, on_release, zoom_graph)."""
+        ax = self.window.panel_wave.ax
+        ax.set_xlim(0.0, 1.0)
+        ax.set_ylim(-1.0, 1.0)
+        self.window.active_heavy_data = {"rate": 44100, "duration": 1.0}
 
-        # Simula alteração de limites de visualização via navegação
-        ax_wave.set_xlim(0.1, 0.5)
-        new_xlim = ax_wave.get_xlim()
-        self.assertAlmostEqual(new_xlim[0], 0.1, places=3)
-        self.assertAlmostEqual(new_xlim[1], 0.5, places=3)
+        # 1. Teste de Pan via on_press (botão direito = 3)
+        event_press = MouseEvent(
+            'button_press_event', self.window.panel_wave.canvas,
+            x=100, y=100, button=3, dblclick=False, guiEvent=None
+        )
+        event_press.inaxes = ax
+        self.window.on_press(event_press)
+        self.assertTrue(self.window.panning)
+        self.assertEqual(self.window.active_ax, ax)
+        self.assertEqual(self.window.start_xlim, (0.0, 1.0))
+
+        # 2. Teste de término de Pan via on_release
+        event_release = MouseEvent(
+            'button_release_event', self.window.panel_wave.canvas,
+            x=100, y=100, button=3, dblclick=False, guiEvent=None
+        )
+        self.window.on_release(event_release)
+        self.assertFalse(self.window.panning)
+        self.assertIsNone(self.window.active_ax)
+
+        # 3. Teste de Zoom real via zoom_graph (scroll 'up' dá zoom in)
+        event_zoom = MouseEvent(
+            'scroll_event', self.window.panel_wave.canvas,
+            x=100, y=100, button='up', step=1, dblclick=False, guiEvent=None
+        )
+        event_zoom.inaxes = ax
+        event_zoom.xdata = 0.5
+        event_zoom.ydata = 0.0
+
+        orig_width = ax.get_xlim()[1] - ax.get_xlim()[0]
+        self.window.zoom_graph(event_zoom)
+        new_width = ax.get_xlim()[1] - ax.get_xlim()[0]
+
+        self.assertLess(new_width, orig_width, "Zoom 'up' deve aproximar reduzindo a largura da janela de tempo")
 
     def test_04_sincronizacao_eixos(self):
         """Verifica se a alteração do eixo X propaga aos painéis sincronizados."""
@@ -179,27 +214,25 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(len(self.window._pulse_edit_history), 0)
 
     def test_06_machine_learning_gate(self):
-        """Verifica respeito estrito ao gate use_machine_learning."""
-        # Cenário 1: IA desativada (Modo DSP) -> Não deve invocar adaptações nem learner
+        """Verifica interceptação de CricketAnalyzer.analyze comprovando o gate de ML."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        params = DEFAULT_ALGO_PARAMS.copy()
+        params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
+
+        # Cenário 1: IA desativada (Modo DSP) -> CricketAnalyzer.analyze recebe pulse_learner=None
         self.window.use_machine_learning = False
-        self.window.active_heavy_data = {
-            "rate": 1000.0, "env": np.ones(1000), "data_b1": np.ones(1000),
-            "peaks_detected": [10, 50], "peaks_user_verified": [10]
-        }
-        self.window.active_filename = "test.wav"
-        self.window.corrections_by_file["test.wav"] = [10]
+        with patch.object(CricketAnalyzer, 'analyze', wraps=CricketAnalyzer.analyze) as mock_analyze:
+            self.window.run_analysis(fname, params, render=False)
+            mock_analyze.assert_called_once()
+            self.assertIsNone(mock_analyze.call_args.kwargs.get('pulse_learner'))
 
-        with patch.object(PulseLearner, 'update_from_corrections') as mock_update:
-            # Em modo DSP (ML=False), learner é None
-            learner = self.window.pulse_learner if self.window.use_machine_learning else None
-            self.assertIsNone(learner)
-            mock_update.assert_not_called()
-
-        # Cenário 2: IA ativada -> Executa adaptação de parâmetros
+        # Cenário 2: IA ativada -> CricketAnalyzer.analyze recebe self.window.pulse_learner
         self.window.use_machine_learning = True
-        self.window._adaptive_overrides = {}
-        self.window._adapt_advanced_params()
-        self.assertIsInstance(self.window._adaptive_overrides, dict)
+        with patch.object(CricketAnalyzer, 'analyze', wraps=CricketAnalyzer.analyze) as mock_analyze:
+            self.window.run_analysis(fname, params, render=False)
+            mock_analyze.assert_called_once()
+            self.assertIs(mock_analyze.call_args.kwargs.get('pulse_learner'), self.window.pulse_learner)
 
     def test_07_exportacao_txt_e_pdf(self):
         """Verifica produção real de arquivos válidos TXT e PDF."""
@@ -248,7 +281,7 @@ class TestCharacterization(unittest.TestCase):
         self.window.player.setPosition.assert_called_with(250)
 
     def test_09_realtime_frequency_tolerance(self):
-        """Verifica reavaliação de tolerância espectral em tempo real."""
+        """Verifica reavaliação de tolerância espectral em tempo real, sincronização e preservação de zoom."""
         fname = "sample_chirp.wav"
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
@@ -257,15 +290,95 @@ class TestCharacterization(unittest.TestCase):
 
         # Ativa os dados para simular o estado em exibição
         self.window.active_heavy_data = self.window.analysis_cache[fname]
-        initial_peaks_count = len(self.window.active_heavy_data["peaks"])
-        self.assertGreater(initial_peaks_count, 0)
+        self.window.panel_wave.ax.set_xlim(0.05, 0.35)
+        cur_xlim = self.window.panel_wave.ax.get_xlim()
 
-        # Aplica tolerância estreita que força descarte
-        self.window.apply_realtime_freq_tolerance(50.0)
+        signals_emitted = []
+        self.window.pipeline.realtime_tolerance_updated.connect(lambda s: signals_emitted.append(s))
+
+        # Aplica tolerância de 500 Hz
+        self.window.apply_realtime_freq_tolerance(500.0)
         self.window._execute_realtime_freq_tolerance()
 
+        # 1. Verifica emissão do sinal realtime_tolerance_updated
+        self.assertIn(fname, signals_emitted)
+        # 2. Verifica dados atualizados
         self.assertIn("carrier_freq", self.window.active_heavy_data)
-        self.assertEqual(self.window.active_heavy_data["params"]["freq_tolerance_hz"], 50.0)
+        self.assertEqual(self.window.active_heavy_data["params"]["freq_tolerance_hz"], 500.0)
+        # 3. Verifica sincronização de tolerância visual no espectrograma
+        if hasattr(self.window.panel_spec, "slider_carrier_tol"):
+            self.assertEqual(self.window.panel_spec.slider_carrier_tol.value(), 500)
+        # 4. Verifica preservação do zoom X
+        self.assertEqual(self.window.panel_wave.ax.get_xlim(), cur_xlim)
+
+    def test_10_force_reanalyze_lifecycle(self):
+        """Testa o ciclo de vida completo de force_reanalyze:
+        - Inicia worker e exibe botão Abortar
+        - Conclui análise em thread secundária
+        - active_heavy_data no SessionContext é atualizado com novo resultado
+        - Cache aponta para o mesmo resultado
+        - Botão Abortar desaparece
+        """
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.active_filename = fname
+
+        # Inicializa com um dado antigo
+        old_data = {"rate": 22050, "peaks": [1, 2], "carrier_freq": 1000.0, "params": {}}
+        self.window.ctx.active_heavy_data = old_data
+        self.window.ctx.analysis_cache[fname] = old_data
+
+        # Botão Abortar inicialmente oculto
+        self.assertFalse(self.window.btn_abort_analysis.isVisible())
+
+        # Dispara reanálise
+        self.window.force_reanalyze()
+
+        # Botão Abortar deve estar visível durante execução
+        self.assertTrue(self.window.btn_abort_analysis.isVisible())
+
+        # Aguarda thread secundária terminar
+        worker = self.window.pipeline._reanalyze_worker
+        self.assertIsNotNone(worker)
+        worker.wait(3000)
+
+        for _ in range(10):
+            QApplication.processEvents()
+            time.sleep(0.02)
+
+        # 1. active_heavy_data deve ser o NOVO resultado, não o antigo!
+        new_active = self.window.ctx.active_heavy_data
+        self.assertIsNot(new_active, old_data)
+        self.assertEqual(new_active["rate"], 44100)
+        self.assertIn("f_psd", new_active)
+
+        # 2. Cache deve apontar para o mesmo resultado
+        self.assertIs(self.window.ctx.analysis_cache[fname], new_active)
+
+        # 3. Botão Abortar deve ter desaparecido!
+        self.assertFalse(self.window.btn_abort_analysis.isVisible())
+
+    def test_11_batch_analysis_and_progress(self):
+        """Testa análise em lote e emissão do sinal analysis_progress de ponta a ponta."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        
+        progress_events = []
+        self.window.pipeline.analysis_progress.connect(lambda cur, tot: progress_events.append((cur, tot)))
+
+        params = DEFAULT_ALGO_PARAMS.copy()
+        params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
+
+        worker = self.window.pipeline.run_batch_analysis([fname], params)
+        self.assertIsNotNone(worker)
+        worker.wait(3000)
+        for _ in range(10):
+            QApplication.processEvents()
+            time.sleep(0.02)
+
+        # Verifica se o progresso (1, 1) foi emitido
+        self.assertIn((1, 1), progress_events)
+        self.assertIn(fname, self.window.ctx.analysis_cache)
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,13 +3,14 @@
 Portão de Qualidade Arquitetural (Quality Gate) - Crinômetro v4.5.0
 Valida:
 1. Codificação (UTF-8 sem BOM, ausência de mojibake como Ã¡, Ã©, etc.)
-2. Análise estática por AST (detecção de NameError em tempo de definição/função)
-3. Preservação de assinaturas e métodos de compatibilidade
+2. Análise estática por AST e Symtable (detecção real de NameError / variáveis indefinidas)
+3. Preservação de integridade estrutural
 """
 
 import os
 import sys
 import ast
+import symtable
 import re
 
 MOJIBAKE_PATTERNS = [
@@ -40,89 +41,13 @@ def check_file_encoding(filepath):
     for pattern in MOJIBAKE_PATTERNS:
         match = pattern.search(text)
         if match:
-            # Encontra linha do erro
             line_no = text[:match.start()].count("\n") + 1
             errors.append(f"{filepath}:{line_no}: Detectado mojibake ('{match.group(0)}')")
             break
 
     return errors
 
-class ScopeVisitor(ast.NodeVisitor):
-    """
-    Rastreia variáveis definidas e detecta uso de nomes indefinidos
-    em escopos de funções.
-    """
-    BUILTINS = set(dir(__builtins__)) | {
-        "__file__", "__name__", "__doc__", "__package__"
-    }
-
-    def __init__(self, filename):
-        self.filename = filename
-        self.errors = []
-        self.scopes = []
-        self.globals = set(self.BUILTINS)
-
-    def visit_Module(self, node):
-        for stmt in node.body:
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                self.globals.add(stmt.name)
-            elif isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    if isinstance(target, ast.Name):
-                        self.globals.add(target.id)
-            elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
-                for alias in stmt.names:
-                    self.globals.add(alias.asname or alias.name.split('.')[0])
-        self.generic_visit(node)
-
-    def visit_FunctionDef(self, node):
-        local_scope = set()
-        # Argumentos da função
-        for arg in node.args.args + node.args.kwonlyargs:
-            local_scope.add(arg.arg)
-        if node.args.vararg:
-            local_scope.add(node.args.vararg.arg)
-        if node.args.kwarg:
-            local_scope.add(node.args.kwarg.arg)
-
-        # Encontra variáveis atribuídas localmente ou imports locais
-        for child in ast.walk(node):
-            if isinstance(child, ast.Assign):
-                for target in child.targets:
-                    if isinstance(target, ast.Name):
-                        local_scope.add(target.id)
-                    elif isinstance(target, (ast.Tuple, ast.List)):
-                        for elt in target.elts:
-                            if isinstance(elt, ast.Name):
-                                local_scope.add(elt.id)
-            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                local_scope.add(child.name)
-            elif isinstance(child, (ast.Import, ast.ImportFrom)):
-                for alias in child.names:
-                    local_scope.add(alias.asname or alias.name.split('.')[0])
-            elif isinstance(child, ast.ExceptHandler) and child.name:
-                local_scope.add(child.name)
-            elif isinstance(child, (ast.For, ast.AsyncFor)):
-                if isinstance(child.target, ast.Name):
-                    local_scope.add(child.target.id)
-                elif isinstance(child.target, (ast.Tuple, ast.List)):
-                    for elt in child.target.elts:
-                        if isinstance(elt, ast.Name):
-                            local_scope.add(elt.id)
-
-        # Checa Names carregados dentro do corpo
-        for child in ast.walk(node):
-            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
-                name = child.id
-                if (name not in local_scope and 
-                    name not in self.globals and 
-                    name not in self.BUILTINS):
-                    # Não relata se for atribuído depois se for global ou local
-                    pass
-
-        self.generic_visit(node)
-
-def check_ast_syntax(filepath):
+def check_ast_syntax_and_symbols(filepath):
     errors = []
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -130,6 +55,30 @@ def check_ast_syntax(filepath):
         ast.parse(code, filename=filepath)
     except Exception as e:
         errors.append(f"{filepath}: Erro de sintaxe AST: {e}")
+        return errors
+
+    # Verificação de tabela de símbolos (symtable) para detectar NameError em escopos locais
+    try:
+        st = symtable.symtable(code, filepath, "exec")
+        module_globals = (
+            set(st.get_identifiers())
+            | set(dir(__builtins__))
+            | {"__file__", "__name__", "__doc__", "__package__"}
+        )
+
+        def walk(table, path):
+            for child in table.get_children():
+                child_path = f"{path}.{child.get_name()}"
+                if child.get_type() == "function":
+                    for sym in child.get_symbols():
+                        if sym.is_global() and sym.get_name() not in module_globals:
+                            errors.append(f"{filepath} em {child_path}: Nome global indefinido '{sym.get_name()}'")
+                walk(child, child_path)
+
+        walk(st, os.path.basename(filepath))
+    except Exception as e:
+        errors.append(f"{filepath}: Erro na análise de tabela de símbolos: {e}")
+
     return errors
 
 def run_gate():
@@ -147,7 +96,7 @@ def run_gate():
         if os.path.exists(fp):
             all_errors.extend(check_file_encoding(fp))
             if fp.endswith(".py"):
-                all_errors.extend(check_ast_syntax(fp))
+                all_errors.extend(check_ast_syntax_and_symbols(fp))
 
     if all_errors:
         print("FAIL: Quality Gate encontrou problemas:")
@@ -155,7 +104,7 @@ def run_gate():
             print("  -", err)
         return 1
 
-    print("PASS: Quality Gate passou com sucesso (Codificação UTF-8 pura, sem BOM, sem mojibake e sintaxe AST íntegra).")
+    print("PASS: Quality Gate passou com sucesso (Codificação UTF-8 pura, sem BOM, sem mojibake, sintaxe AST íntegra e zero NameError).")
     return 0
 
 if __name__ == "__main__":

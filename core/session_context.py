@@ -25,6 +25,8 @@ class SessionContext(QObject):
         self._peaks_user_verified = []
         self._corrections_by_file = {}
         self._pulse_learner = None
+        self._use_machine_learning = False
+        self._pulse_metadata = {}
         
         # Estado de Relatório / Exportação
         self._report_params = {
@@ -120,6 +122,22 @@ class SessionContext(QObject):
     def pulse_learner(self, val):
         self._pulse_learner = val
         self.emit_state_changed("pulse_learner")
+
+    @property
+    def use_machine_learning(self):
+        return self._use_machine_learning
+    @use_machine_learning.setter
+    def use_machine_learning(self, val):
+        self._use_machine_learning = bool(val)
+        self.emit_state_changed("use_machine_learning")
+
+    @property
+    def pulse_metadata(self):
+        return self._pulse_metadata
+    @pulse_metadata.setter
+    def pulse_metadata(self, val):
+        self._pulse_metadata = val
+        self.emit_state_changed("pulse_metadata")
 
     @property
     def report_params(self):
