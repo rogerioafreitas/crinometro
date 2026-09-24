@@ -555,4 +555,4 @@ Persistência segura do modelo
 **Status:** Plano revisado para execução da v4.5.0.  
 **Base arquitetural:** `ui/main_window.py` atual e ROADMAP anterior.  
 **Escopo central:** desacoplamento seguro da `MainWindow`, preservação de comportamento, exportação científica modular e critérios explícitos de validação.  
-**Próximo marco de implementação:** executar a **FASE 2 — PipelineOrchestrator** (FASE 0 e FASE 1 implementadas e validadas).
+**Próximo marco de implementação:** executar a **FASE 3 — PlotRenderers** (FASE 0, FASE 1 e FASE 2 implementadas e validadas rigorosamente).
