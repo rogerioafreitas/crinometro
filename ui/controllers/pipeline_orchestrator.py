@@ -183,25 +183,23 @@ class PipelineOrchestrator(QObject):
         if isinstance(Sxx_db, np.ndarray) and Sxx_db.dtype != np.float32:
             Sxx_db = Sxx_db.astype(np.float32)
 
-        self.ctx.peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
-        self.ctx.active_filename = filename
-
+        file_peaks_detected = [int(p) for p in np.asarray(peaks, dtype=int)]
         stored_corrections = self.ctx.corrections_by_file.get(filename)
         effective_params = {**params, **self.ctx._adaptive_overrides}
 
-        self.ctx.pulse_metadata = {}
+        file_pulse_metadata = {}
 
         if stored_corrections is not None:
             extracted_peaks = []
             for item in stored_corrections:
                 if isinstance(item, dict):
                     extracted_peaks.append(item["idx"])
-                    self.ctx.pulse_metadata[item["idx"]] = item
+                    file_pulse_metadata[item["idx"]] = item
                 else:
                     extracted_peaks.append(int(item))
-            self.ctx.peaks_user_verified = extracted_peaks
-            peaks_added = sorted(set(extracted_peaks) - set(self.ctx.peaks_detected))
-            peaks_removed = sorted(set(self.ctx.peaks_detected) - set(extracted_peaks))
+            file_peaks_user_verified = extracted_peaks
+            peaks_added = sorted(set(extracted_peaks) - set(file_peaks_detected))
+            peaks_removed = sorted(set(file_peaks_detected) - set(extracted_peaks))
 
             if peaks_removed:
                 distant_peaks = sorted(list(set(distant_peaks) | set(peaks_removed)))
@@ -210,7 +208,7 @@ class PipelineOrchestrator(QObject):
 
             if peaks_added or peaks_removed:
                 effective_peaks = np.asarray(
-                    sorted(set(self.ctx.peaks_detected) | set(peaks_added) - set(peaks_removed)),
+                    sorted(set(file_peaks_detected) | set(peaks_added) - set(peaks_removed)),
                     dtype=int
                 )
                 if len(effective_peaks) >= 2:
@@ -221,15 +219,15 @@ class PipelineOrchestrator(QObject):
                     except Exception:
                         pass
         else:
-            self.ctx.peaks_user_verified = list(self.ctx.peaks_detected)
+            file_peaks_user_verified = list(file_peaks_detected)
 
         heavy_data = {
-            "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(self.ctx.peaks_detected), "chirps": chirps,
+            "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(file_peaks_detected), "chirps": chirps,
             "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda,
             "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
             "duration": audio_duration, "params": params.copy(),
-            "peaks_detected": list(self.ctx.peaks_detected),
-            "peaks_user_verified": list(self.ctx.peaks_user_verified),
+            "peaks_detected": list(file_peaks_detected),
+            "peaks_user_verified": list(file_peaks_user_verified),
             "distant_peaks": list(distant_peaks),
             "carrier_freq": carrier_freq,
             "discarded_peaks_reasons": discarded_peaks_reasons,
@@ -239,13 +237,16 @@ class PipelineOrchestrator(QObject):
             "Pxx_db": Pxx_db,
         }
 
-        # 1. Atualiza o cache da sessão
+        # 1. Atualiza sempre o cache da sessão para o arquivo analisado
         new_cache = dict(self.ctx.analysis_cache)
         new_cache[filename] = heavy_data
         self.ctx.analysis_cache = new_cache
 
-        # 2. Atualiza imediatamente o active_heavy_data se for o arquivo ativo
+        # 2. Atualiza os estados ativos do SessionContext ESTRITAMENTE se este arquivo for o arquivo ativo
         if self.ctx.active_filename == filename:
+            self.ctx.peaks_detected = list(file_peaks_detected)
+            self.ctx.peaks_user_verified = list(file_peaks_user_verified)
+            self.ctx.pulse_metadata = file_pulse_metadata
             self.ctx.active_heavy_data = heavy_data
 
         return heavy_data
@@ -357,6 +358,7 @@ class PipelineOrchestrator(QObject):
             self.analysis_failed.emit(filename or "", "Arquivo não carregado ou não encontrado.")
             return
 
+        self.ctx.active_filename = filename
         is_first_time = (filename not in self.ctx.analysis_cache)
         self.analysis_started.emit(filename, is_first_time)
 

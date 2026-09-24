@@ -90,6 +90,7 @@ class TestCharacterization(unittest.TestCase):
         # 2. Aplicação na MainWindow e verificação das chaves obrigatórias do cache
         fname = "sample_chirp.wav"
         self.window.loaded_files[fname] = self.sample_wav
+        self.window.active_filename = fname
         self.window._apply_analysis_results(fname, res, params=params, render=False)
 
         self.assertIn(fname, self.window.analysis_cache)
@@ -289,6 +290,7 @@ class TestCharacterization(unittest.TestCase):
         self.window._apply_analysis_results(fname, res, params=params, render=False)
 
         # Ativa os dados para simular o estado em exibição
+        self.window.active_filename = fname
         self.window.active_heavy_data = self.window.analysis_cache[fname]
         self.window.panel_wave.ax.set_xlim(0.05, 0.35)
         cur_xlim = self.window.panel_wave.ax.get_xlim()
@@ -389,6 +391,51 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(len(completed_events), 1)
         self.assertEqual(completed_events[0][0], 1)
         self.assertIn(fname, self.window.ctx.analysis_cache)
+
+    def test_12_batch_preserves_active_file_state(self):
+        """Teste de regressão: análise em lote com múltiplos arquivos preserva estritamente o arquivo ativo."""
+        file_a = "file_a.wav"
+        file_b = "file_b.wav"
+        file_c = "file_c.wav"
+        self.window.loaded_files[file_a] = self.sample_wav
+        self.window.loaded_files[file_b] = self.sample_wav
+        self.window.loaded_files[file_c] = self.sample_wav
+
+        params = DEFAULT_ALGO_PARAMS.copy()
+        params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
+
+        # 1. Usuário seleciona e analisa inicialmente o file_a (tornando-o ativo)
+        self.window.run_analysis(file_a, params, render=True)
+        self.assertEqual(self.window.ctx.active_filename, file_a)
+        initial_active_heavy = self.window.ctx.active_heavy_data
+        self.assertIsNotNone(initial_active_heavy)
+
+        # 2. Executa lote com file_a, file_b e file_c (file_b e file_c processados em background)
+        completed_events = []
+        self.window.pipeline.batch_completed.connect(lambda count, errs: completed_events.append((count, errs)))
+
+        started = self.window.pipeline.run_batch_analysis([file_a, file_b, file_c], params)
+        self.assertTrue(started)
+
+        worker = self.window.pipeline._batch_worker
+        self.assertIsNotNone(worker)
+        worker.wait(6000)
+        for _ in range(15):
+            QApplication.processEvents()
+            time.sleep(0.02)
+
+        # 3. Todos os arquivos devem estar presentes no cache da sessão
+        self.assertEqual(len(completed_events), 1)
+        self.assertIn(file_a, self.window.ctx.analysis_cache)
+        self.assertIn(file_b, self.window.ctx.analysis_cache)
+        self.assertIn(file_c, self.window.ctx.analysis_cache)
+
+        # 4. CRÍTICO: O arquivo ativo e o active_heavy_data no SessionContext DEVEM ser estritamente de file_a!
+        self.assertEqual(self.window.ctx.active_filename, file_a)
+        self.assertIs(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[file_a])
+        self.assertIsNot(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[file_b])
+        self.assertIsNot(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[file_c])
+        self.assertEqual(self.window.ctx.peaks_detected, self.window.ctx.analysis_cache[file_a]["peaks_detected"])
 
 if __name__ == '__main__':
     unittest.main()
