@@ -171,8 +171,15 @@ A reanálise (`force_reanalyze`) e o lote (`run_batch_analysis`) executam estrit
 # FASE 3 — `ui/controllers/plot_renderers.py`
 
 > [!NOTE]
-> **Scaffold experimental presente (`ui/controllers/plot_renderers.py`):**  
-> O arquivo existe no repositório como draft preparatório herdado de iterações preliminares, mas **ainda não está integrado nem validado como FASE 3**. A integração oficial com a `MainWindow` (`self.plot_renderers`) e a migração controlada dos métodos gráficos ocorrerão formalmente na execução da FASE 3.
+> **Status da FASE 3: CONCLUÍDA E VALIDADA.**  
+> O controller `ui/controllers/plot_renderers.py` foi plenamente integrado à `MainWindow` (`self.plot_renderers`). Os métodos gráficos foram migrados mantendo compatibilidade e fidelidade comportamental.
+> 
+> **Decisões arquiteturais e registro de auditoria:**
+> 1. **Eliminação de Dual Ownership (Solução A):** A `MainWindow` expõe `@property` e setters para `line_engine`, `spectro_engine`, `freq_engine`, `wave_lines` e `_wave_user_markers`, delegando diretamente ao `self.plot_renderers`. Não há cópia paralela nem dualidade de estado gráfico fora do controller.
+> 2. **Sincronização de FP (Frequência Portadora):** Sincronização explícita do valor modal da portadora e da tolerância nos badges `lbl_carrier_info` dos painéis de espectrograma e frequência via `set_carrier_info`, corrigindo a exibição indevida de "FP: —".
+> 3. **Extensão controlada de escopo:** O método `update_wave_visibility` foi migrado para `PlotRenderers`, consolidando o controle de visibilidade das camadas da forma de onda junto ao subsistema de renderização.
+> 4. **Dívida explícita transitória:** Métodos de hover e blitting (`win.capture_backgrounds`, `win._update_pulse_hover_data`, `win.cursor_lines`, etc.) são chamados transitoriamente via `weakref` e serão formalmente isolados na FASE 4 (`NavigationController`).
+> 5. **Testes dedicados:** Adicionados `test_13_plot_renderers_integration_and_engine_aliasing` e `test_14_plot_renderers_semantic_api` na suíte de caracterização.
 
 ## 3.1. Responsabilidade
 
@@ -180,25 +187,28 @@ Coordenar as engines gráficas existentes e concentrar a renderização dos quat
 
 ## 3.2. Métodos-alvo
 
-Migrar progressivamente:
+Migrados:
 
-- `render_dashboard(self, filename)`;
-- `_refresh_histogram(self)`;
-- `_refresh_user_peak_markers(self)`;
-- `apply_spectrogram_y_limits(self, ymin, ymax, unit)`.
+- `render_dashboard(self, filename)` (e `render_file(filename)`);
+- `_refresh_histogram(self)` (e `refresh_histogram()`);
+- `_refresh_user_peak_markers(self)` (e `refresh_markers()`);
+- `apply_spectrogram_y_limits(self, ymin, ymax, unit)`;
+- `update_wave_visibility(self, show_raw, show_env, show_lod, show_peaks)`.
 
 ## 3.3. Contrato
 
-O `PlotRenderers` lê o `SessionContext` e recebe referências controladas aos `PlotPanel`s. Deve expor operações semânticas como:
+O `PlotRenderers` lê o `SessionContext` e recebe referências controladas aos `PlotPanel`s via `weakref`. Expõe operações semânticas:
 
 ```text
 render_file(filename)
 refresh_histogram()
 refresh_markers()
 refresh_all()
+update_wave_visibility(show_raw, show_env, show_lod, show_peaks)
+apply_spectrogram_y_limits(ymin, ymax, unit)
 ```
 
-A navegação não deve precisar conhecer detalhes internos de como cada gráfico é desenhado.
+A navegação interativa na FASE 4 consumirá os engines através do controller sem dualidade.
 
 ---
 
@@ -577,5 +587,5 @@ Persistência segura do modelo
 **Status:** Plano revisado para execução da v4.5.0.  
 **Base arquitetural:** `ui/main_window.py` atual e ROADMAP anterior.  
 **Escopo central:** desacoplamento seguro da `MainWindow`, preservação de comportamento, exportação científica modular e critérios explícitos de validação.  
-**Fases concluídas e validadas:** FASE 0, FASE 1, FASE 2, **FASE 3**.  
-**Próximo marco de implementação:** executar a **FASE 4 — NavigationController** (FASE 3 — PlotRenderers implementada e validada: `ui/controllers/plot_renderers.py` integrado à `MainWindow`, 20/20 testes passando, commit `d528058`).
+**Fases concluídas e validadas:** FASE 0, FASE 1, FASE 2, **FASE 3** (100% auditada: dual ownership eliminado via aliases, FP badge sincronizado, 15/15 testes de caracterização e 22/22 testes da suíte completa passando).  
+**Próximo marco de implementação:** executar a **FASE 4 — NavigationController** (isolamento de pan/zoom, sincronização horizontal, hover, cursor blitting e `capture_backgrounds`).

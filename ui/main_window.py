@@ -134,6 +134,73 @@ class MainWindow(QMainWindow):
     @pulse_metadata.setter
     def pulse_metadata(self, value): self.ctx.pulse_metadata = value
 
+    # ---------- FASE 3: Aliases de compatibilidade para engines e estado de plot ----------
+    @property
+    def line_engine(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "line_engine", None) if pr else getattr(self, "_compat_line_engine", None)
+    @line_engine.setter
+    def line_engine(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers.line_engine = value
+        else:
+            self._compat_line_engine = value
+
+    @property
+    def spectro_engine(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "spectro_engine", None) if pr else getattr(self, "_compat_spectro_engine", None)
+    @spectro_engine.setter
+    def spectro_engine(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers.spectro_engine = value
+        else:
+            self._compat_spectro_engine = value
+
+    @property
+    def freq_engine(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "freq_engine", None) if pr else getattr(self, "_compat_freq_engine", None)
+    @freq_engine.setter
+    def freq_engine(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers.freq_engine = value
+        else:
+            self._compat_freq_engine = value
+
+    @property
+    def wave_lines(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "wave_lines", {}) if pr else getattr(self, "_compat_wave_lines", {})
+    @wave_lines.setter
+    def wave_lines(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers.wave_lines = value
+        else:
+            self._compat_wave_lines = value
+
+    @property
+    def _wave_user_markers(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "_wave_user_markers", []) if pr else getattr(self, "_compat_wave_user_markers", [])
+    @_wave_user_markers.setter
+    def _wave_user_markers(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers._wave_user_markers = value
+        else:
+            self._compat_wave_user_markers = value
+
+    @property
+    def _last_applied_spec_unit(self):
+        pr = getattr(self, "plot_renderers", None)
+        return getattr(pr, "_last_applied_spec_unit", None) if pr else getattr(self, "_compat_last_applied_spec_unit", None)
+    @_last_applied_spec_unit.setter
+    def _last_applied_spec_unit(self, value):
+        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
+            self.plot_renderers._last_applied_spec_unit = value
+        else:
+            self._compat_last_applied_spec_unit = value
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
@@ -1578,6 +1645,12 @@ class MainWindow(QMainWindow):
             self.peaks_user_verified = list(self.active_heavy_data.get("peaks_user_verified", []))
             self.active_filename = filename
             self._pulse_edit_history = []
+            carrier_freq = float(self.active_heavy_data.get("carrier_freq", 0.0))
+            tol_val = float(self.algo_params.get("freq_tolerance_hz", 700.0))
+            if hasattr(self, "panel_spec"):
+                self.panel_spec.set_carrier_info(carrier_freq, tol_val)
+            if hasattr(self, "panel_freq"):
+                self.panel_freq.set_carrier_info(carrier_freq, tol_val)
             self.render_dashboard(filename)
         else:
             self.btn_reanalisar_main.setText("Analisar")
@@ -2005,6 +2078,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "btn_reanalisar_main"):
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
         if self.active_filename == filename:
+            if self.active_heavy_data:
+                carrier_freq = float(self.active_heavy_data.get("carrier_freq", 0.0))
+                tol_val = float(self.algo_params.get("freq_tolerance_hz", 700.0))
+                if hasattr(self, "panel_spec"):
+                    self.panel_spec.set_carrier_info(carrier_freq, tol_val)
+                if hasattr(self, "panel_freq"):
+                    self.panel_freq.set_carrier_info(carrier_freq, tol_val)
             self.render_dashboard(filename)
             vp = getattr(self, "_saved_viewport", None)
             if vp is not None and self.active_heavy_data:

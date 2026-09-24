@@ -437,5 +437,86 @@ class TestCharacterization(unittest.TestCase):
         self.assertIsNot(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[file_c])
         self.assertEqual(self.window.ctx.peaks_detected, self.window.ctx.analysis_cache[file_a]["peaks_detected"])
 
+    def test_13_plot_renderers_integration_and_engine_aliasing(self):
+        """FASE 3: Verifica a integração do PlotRenderers, eliminação de duplicidade de estado
+
+        e ausência de dual ownership para engines gráficos e marcadores."""
+        from ui.controllers.plot_renderers import PlotRenderers
+        from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine
+
+        # 1. PlotRenderers instanciado e acessível na MainWindow
+        self.assertIsInstance(self.window.plot_renderers, PlotRenderers)
+        self.assertIs(self.window.plot_renderers.session_context, self.window.ctx)
+
+        # 2. Executa análise real
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        params = DEFAULT_ALGO_PARAMS.copy()
+        heavy_data = self.window.pipeline.run_analysis(fname, params, render=True)
+
+        # 3. Engines criados no PlotRenderers e refletidos unicamente na MainWindow
+        pr = self.window.plot_renderers
+        self.assertIsNotNone(pr.line_engine)
+        self.assertIsInstance(pr.line_engine, HighPerfLineEngine)
+        self.assertIsNotNone(pr.spectro_engine)
+        self.assertIsInstance(pr.spectro_engine, HighPerfSpectrogramEngine)
+
+        # 4. CRÍTICO: Eliminação de dual ownership (Solução A — aliases estritos)
+        self.assertIs(self.window.line_engine, pr.line_engine)
+        self.assertIs(self.window.spectro_engine, pr.spectro_engine)
+        self.assertIs(self.window.freq_engine, pr.freq_engine)
+        self.assertIs(self.window.wave_lines, pr.wave_lines)
+        self.assertIs(self.window._wave_user_markers, pr._wave_user_markers)
+
+        # 5. Sincronização da Frequência Portadora (FP badge)
+        badge_text = self.window.panel_spec.lbl_carrier_info.text()
+        self.assertNotEqual(badge_text, "FP: —")
+        self.assertIn("FP:", badge_text)
+        self.assertIn("kHz", badge_text)
+        self.assertGreater(getattr(self.window.panel_spec, "_carrier_freq", 0.0), 0.0)
+
+    def test_14_plot_renderers_semantic_api(self):
+        """FASE 3: Verifica as operações semânticas públicas do PlotRenderers
+
+        (render_file, refresh_histogram, refresh_markers, refresh_all, update_wave_visibility, apply_spectrogram_y_limits)."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        params = DEFAULT_ALGO_PARAMS.copy()
+        self.window.pipeline.run_analysis(fname, params, render=True)
+
+        pr = self.window.plot_renderers
+
+        # 1. refresh_histogram
+        pr.refresh_histogram()
+        ax_hist = pr.panel_hist.ax
+        self.assertGreater(len(ax_hist.patches), 0)
+
+        # 2. refresh_markers
+        initial_marker_count = len(pr._wave_user_markers)
+        self.assertGreater(initial_marker_count, 0)
+        pr.refresh_markers()
+        self.assertEqual(len(pr._wave_user_markers), initial_marker_count)
+
+        # 3. update_wave_visibility
+        pr.update_wave_visibility(show_raw=False, show_env=True, show_lod=True, show_peaks=False)
+        self.assertFalse(pr.wave_lines['raw'].get_visible())
+        self.assertTrue(pr.wave_lines['env'].get_visible())
+        self.assertTrue(pr.wave_lines['lod'].get_visible())
+
+        # 4. apply_spectrogram_y_limits
+        pr.apply_spectrogram_y_limits(2.5, 7.5, unit="kHz")
+        ymin, ymax = pr.panel_spec.ax.get_ylim()
+        self.assertAlmostEqual(ymin, 2.5, places=1)
+        self.assertAlmostEqual(ymax, 7.5, places=1)
+
+        # 5. refresh_all (re-renderiza arquivo ativo)
+        pr.refresh_all()
+        self.assertIsNotNone(pr.line_engine)
+        self.assertIsNotNone(pr.spectro_engine)
+        self.assertIs(self.window.line_engine, pr.line_engine)
+
 if __name__ == '__main__':
     unittest.main()
+

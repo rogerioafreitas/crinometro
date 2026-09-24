@@ -185,6 +185,14 @@ class PlotRenderers:
         if hasattr(win, "_update_ml_toggle_ui"):
             win._update_ml_toggle_ui()
 
+        # Sincroniza informações da frequência portadora (FP) e tolerância nos painéis
+        carrier_freq = float(d.get("carrier_freq", 0.0))
+        tol_val = float(p.get("freq_tolerance_hz", 700.0))
+        if self.panel_spec and hasattr(self.panel_spec, "set_carrier_info"):
+            self.panel_spec.set_carrier_info(carrier_freq, tol_val)
+        if self.panel_freq and hasattr(self.panel_freq, "set_carrier_info"):
+            self.panel_freq.set_carrier_info(carrier_freq, tol_val)
+
         # Paleta canônica por quantidade de pulsos (2 a 10 + extra para outros escopos).
         # A mesma cor é usada no histograma, nos X da onda, frequência e espectrograma.
         pulse_colors = {
