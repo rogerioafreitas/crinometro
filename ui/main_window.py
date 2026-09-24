@@ -44,10 +44,68 @@ from ui.dialogs import (
 )
 from core.updater import UpdateCheckerThread
 from ui.update_dialog import UpdateDialog
+from core.session_context import SessionContext
 
 class MainWindow(QMainWindow):
+    # --- PROPRIEDADES REDIRECIONADAS PARA O SESSIONCONTEXT ---
+    @property
+    def algo_params(self): return self.ctx.algo_params
+    @algo_params.setter
+    def algo_params(self, value): self.ctx.algo_params = value
+
+    @property
+    def _adaptive_overrides(self): return self.ctx._adaptive_overrides
+    @_adaptive_overrides.setter
+    def _adaptive_overrides(self, value): self.ctx._adaptive_overrides = value
+
+    @property
+    def report_params(self): return self.ctx.report_params
+    @report_params.setter
+    def report_params(self, value): self.ctx.report_params = value
+
+    @property
+    def pulse_learner(self): return self.ctx.pulse_learner
+    @pulse_learner.setter
+    def pulse_learner(self, value): self.ctx.pulse_learner = value
+
+    @property
+    def peaks_detected(self): return self.ctx.peaks_detected
+    @peaks_detected.setter
+    def peaks_detected(self, value): self.ctx.peaks_detected = value
+
+    @property
+    def peaks_user_verified(self): return self.ctx.peaks_user_verified
+    @peaks_user_verified.setter
+    def peaks_user_verified(self, value): self.ctx.peaks_user_verified = value
+
+    @property
+    def corrections_by_file(self): return self.ctx.corrections_by_file
+    @corrections_by_file.setter
+    def corrections_by_file(self, value): self.ctx.corrections_by_file = value
+
+    @property
+    def active_filename(self): return self.ctx.active_filename
+    @active_filename.setter
+    def active_filename(self, value): self.ctx.active_filename = value
+
+    @property
+    def analysis_cache(self): return self.ctx.analysis_cache
+    @analysis_cache.setter
+    def analysis_cache(self, value): self.ctx.analysis_cache = value
+
+    @property
+    def active_heavy_data(self): return self.ctx.active_heavy_data
+    @active_heavy_data.setter
+    def active_heavy_data(self, value): self.ctx.active_heavy_data = value
+
+    @property
+    def loaded_files(self): return self.ctx.loaded_files
+    @loaded_files.setter
+    def loaded_files(self, value): self.ctx.loaded_files = value
+
     def __init__(self):
         super().__init__()
+        self.ctx = SessionContext(self)
 
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
         # NÃO inclui sobreposições adaptativas (prominence, noise_floor adaptados).
