@@ -261,7 +261,7 @@ class TestCharacterization(unittest.TestCase):
         self.assertGreater(initial_peaks_count, 0)
 
         # Aplica tolerância estreita que força descarte
-        self.window._pending_carrier_tol = 50.0
+        self.window.apply_realtime_freq_tolerance(50.0)
         self.window._execute_realtime_freq_tolerance()
 
         self.assertIn("carrier_freq", self.window.active_heavy_data)
