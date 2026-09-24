@@ -67,7 +67,7 @@ class HighPerfLineEngine:
             QTimer.singleShot(50, self.update_bg_callback)
 
     def _update_plot(self, t, y):
-        if self.line is None:
+        if self.line is None or getattr(self.line, "axes", None) is None:
             self.line, = self.ax.plot(t, y, color=self.base_color, zorder=1, antialiased=False)
         else:
             self.line.set_data(t, y)
@@ -159,7 +159,7 @@ class HighPerfSpectrogramEngine:
             QTimer.singleShot(50, self.update_bg_callback)
 
     def _update_imshow(self, data, x0, x1, y0, y1):
-        if self.image is None:
+        if self.image is None or getattr(self.image, "axes", None) is None:
             self.image = self.ax.imshow(data, aspect='auto', origin='lower', cmap='viridis', extent=[x0, x1, y0, y1], interpolation='bilinear', zorder=1)
         else:
             self.image.set_data(data)

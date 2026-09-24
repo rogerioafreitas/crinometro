@@ -466,6 +466,7 @@ class TestCharacterization(unittest.TestCase):
         self.assertIs(self.window.line_engine, pr.line_engine)
         self.assertIs(self.window.spectro_engine, pr.spectro_engine)
         self.assertIs(self.window.freq_engine, pr.freq_engine)
+        self.assertIsNone(pr.freq_engine, "freq_engine permanece None por preservação de compatibilidade legada")
         self.assertIs(self.window.wave_lines, pr.wave_lines)
         self.assertIs(self.window._wave_user_markers, pr._wave_user_markers)
 
@@ -517,6 +518,47 @@ class TestCharacterization(unittest.TestCase):
         self.assertIsNotNone(pr.spectro_engine)
         self.assertIs(self.window.line_engine, pr.line_engine)
 
+        # 6. render_file seleciona arquivo do cache e atualiza o estado ativo
+        dummy_file = "dummy_other.wav"
+        dummy_data = self.window.ctx.active_heavy_data.copy()
+        dummy_data["duration"] = 12.34
+        self.window.ctx.analysis_cache[dummy_file] = dummy_data
+
+        pr.render_file(dummy_file)
+        self.assertEqual(self.window.ctx.active_filename, dummy_file)
+        self.assertEqual(self.window.lbl_summary_file.text(), dummy_file)
+        self.assertEqual(self.window.ctx.active_heavy_data["duration"], 12.34)
+
+    def test_15_sync_render_invokes_plot_renderers_engines(self):
+        """FASE 3: Comprova que rotinas de navegação da MainWindow (_sync_render)
+
+        consomem diretamente os engines HighPerf instanciados pelo PlotRenderers."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        params = DEFAULT_ALGO_PARAMS.copy()
+        self.window.pipeline.run_analysis(fname, params, render=True)
+
+        pr = self.window.plot_renderers
+        self.assertIsNotNone(pr.line_engine)
+        self.assertIsNotNone(pr.spectro_engine)
+
+        with patch.object(pr.line_engine, 'render_interactive', wraps=pr.line_engine.render_interactive) as spy_line, \
+             patch.object(pr.spectro_engine, 'render_interactive', wraps=pr.spectro_engine.render_interactive) as spy_spec:
+
+            self.window.panel_wave.setVisible(True)
+            self.window.panel_spec.setVisible(True)
+            self.window.sync_throttle_time = 0.0
+
+            # Invoca o caminho real de sincronização da navegação da MainWindow
+            self.window._sync_render([self.window.panel_wave, self.window.panel_spec], xmin=0.1, xmax=0.5)
+
+            # Comprova que _sync_render acionou os engines reais do PlotRenderers
+            spy_line.assert_called_once_with(0.1, 0.5, is_sync=True)
+            ymin, ymax = self.window.panel_spec.ax.get_ylim()
+            spy_spec.assert_called_once_with(0.1, 0.5, ymin, ymax, is_sync=True)
+
 if __name__ == '__main__':
     unittest.main()
+
 

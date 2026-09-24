@@ -7,7 +7,12 @@ Responsabilidade: coordenar as engines gráficas existentes e concentrar a
 renderização dos quatro painéis sem assumir a lógica de navegação do mouse.
 
 O PlotRenderers lê o SessionContext e recebe referências controladas aos
-PlotPanels via weakref, evitando ciclos de referência com a MainWindow.
+PlotPanels e à MainWindow via weakref.
+
+Dívida técnica transitória (FASE 4): os callbacks de background update
+(update_bg_callback=win.capture_backgrounds) passados aos engines HighPerf
+mantêm referências bound à MainWindow até o isolamento completo da navegação,
+hover e blitting no NavigationController (FASE 4).
 
 A navegação (pan/zoom/hover/blit) permanece na MainWindow até a FASE 4.
 """
@@ -152,7 +157,27 @@ class PlotRenderers:
         # ao chamar line.remove() na próxima chamada de _align_click_marker().
         win._click_alignment_lines = []
 
-        d = self.session_context.active_heavy_data
+        # Para timers de debounce pendentes dos engines anteriores antes de recriá-los
+        if self.line_engine is not None and hasattr(self.line_engine, "debounce_timer"):
+            self.line_engine.debounce_timer.stop()
+        if self.spectro_engine is not None and hasattr(self.spectro_engine, "debounce_timer"):
+            self.spectro_engine.debounce_timer.stop()
+        if self.freq_engine is not None and hasattr(self.freq_engine, "debounce_timer"):
+            self.freq_engine.debounce_timer.stop()
+
+        # Obtém dados analíticos do arquivo informado (ou do arquivo ativo como fallback)
+        ctx = self.session_context
+        if filename and filename in ctx.analysis_cache:
+            d = ctx.analysis_cache[filename]
+            if ctx.active_filename != filename:
+                ctx.active_filename = filename
+                ctx.active_heavy_data = d
+        else:
+            d = ctx.active_heavy_data
+
+        if not d:
+            return
+
         p = d.get("params") or {}
         rate = d["rate"]
         data = d["data"]
@@ -309,6 +334,8 @@ class PlotRenderers:
             y_range = np.ptp(Pxx_db) if len(Pxx_db) > 0 else 10
             ax3.set_ylim(np.min(Pxx_db) - y_range * 0.1, np.max(Pxx_db) + y_range * 0.1)
 
+        # Nota histórica: HighPerfFreqEngine permanece não instanciado nesta fase;
+        # freq_engine continua None, preservando estritamente o comportamento legado da MainWindow.
         self.freq_engine = None
 
         # ── SPEC ──────────────────────────────────────────────────────────
