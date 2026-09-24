@@ -1,8 +1,8 @@
-﻿from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
 class SessionContext(QObject):
     """
-    Fonte de verdade (Source of Truth) para o estado compartilhado da aplicação.
+    Fonte (Source of Truth) para o estado compartilhado da aplicação.
     """
     state_changed = pyqtSignal(str)
 
@@ -33,3 +33,7 @@ class SessionContext(QObject):
             "role": "",
             "level": ""
         }
+
+    def emit_state_changed(self, category: str):
+        """Dispara o sinal informando que uma fatia do estado foi atualizada."""
+        self.state_changed.emit(category)

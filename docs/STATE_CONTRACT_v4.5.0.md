@@ -1,4 +1,4 @@
-﻿# Contrato de Estado (State Contract) - v4.5.0
+# Contrato de Estado (State Contract) - v4.5.0
 
 Este documento inventaria o estado atual contido na `MainWindow` e define como ele será migrado para o `SessionContext` ou controladores específicos, garantindo uma única fonte de verdade.
 
@@ -15,8 +15,8 @@ Este documento inventaria o estado atual contido na `MainWindow` e define como e
 - `pulse_learner`: Instância de ML/classificação.
 
 ## 3. Estado de Seleção / Navegação (Vai para `NavigationController`)
-- `active_filename`: Arquivo selecionado no momento.
-- `loaded_files`: Lista (opcional, pode ser de um painel de arquivos).
+- `active_filename`: Arquivo selecionado no momento. (Permanece temporariamente no SessionContext durante a FASE 1 e será transferido à NavigationController na FASE 4)
+- `loaded_files`: Dict de arquivos carregados. (Permanece temporariamente no SessionContext durante a FASE 1 e será transferido à NavigationController na FASE 4)
 - `bg_cache_valid` / `backgrounds`: Caches de blitting do Matplotlib.
 - Limites de visualização (xlim/ylim atuais dos gráficos).
 
