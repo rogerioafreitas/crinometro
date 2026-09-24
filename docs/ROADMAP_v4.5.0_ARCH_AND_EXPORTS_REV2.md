@@ -114,6 +114,8 @@ Os sinais devem comunicar fatos sobre o estado, não impor a ordem interna de ex
 
 Depois de migrado um atributo, a `MainWindow` deixa de ser sua fonte autoritativa. Referências temporárias de compatibilidade podem existir durante a transição, mas não devem ser atualizadas por dois lugares diferentes.
 
+**Dívida arquitetural / Nota de transição:** Atualmente, a atribuição completa de estado (`self.active_heavy_data = novo_dict`) dispara `state_changed`, mas a **mutação interna** de dicionários e listas (ex: `self.analysis_cache[filename] = ...`) **não** dispara notificação. Esta é uma pendência aceita na FASE 1 e será resolvida durante a implementação dos controladores (FASE 2 a 5), não devendo ser usada como mecanismo definitivo de notificação quando os controladores passarem a depender do `SessionContext`.
+
 ---
 
 # FASE 2 — `ui/controllers/pipeline_orchestrator.py`
