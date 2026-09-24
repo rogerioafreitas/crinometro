@@ -11,6 +11,7 @@ import os
 import sys
 import ast
 import symtable
+import builtins
 import re
 
 MOJIBAKE_PATTERNS = [
@@ -57,12 +58,12 @@ def check_ast_syntax_and_symbols(filepath):
         errors.append(f"{filepath}: Erro de sintaxe AST: {e}")
         return errors
 
-    # Verificação de tabela de símbolos (symtable) para detectar NameError em escopos locais
+    # Verificação de tabela de símbolos (symtable) para detectar referências a variáveis indefinidas
     try:
         st = symtable.symtable(code, filepath, "exec")
         module_globals = (
             set(st.get_identifiers())
-            | set(dir(__builtins__))
+            | set(dir(builtins))
             | {"__file__", "__name__", "__doc__", "__package__"}
         )
 
@@ -90,6 +91,8 @@ def run_gate():
     ]
     if os.path.exists("ui/controllers/pipeline_orchestrator.py"):
         files_to_check.append("ui/controllers/pipeline_orchestrator.py")
+    if os.path.exists("ui/controllers/plot_renderers.py"):
+        files_to_check.append("ui/controllers/plot_renderers.py")
 
     all_errors = []
     for fp in files_to_check:
@@ -104,7 +107,7 @@ def run_gate():
             print("  -", err)
         return 1
 
-    print("PASS: Quality Gate passou com sucesso (Codificação UTF-8 pura, sem BOM, sem mojibake, sintaxe AST íntegra e zero NameError).")
+    print("PASS: Quality Gate passou com sucesso (Codificação UTF-8 pura, sem BOM, sem mojibake, sintaxe AST íntegra e detecção estática de referências a nomes globais não resolvidos nos arquivos analisados).")
     return 0
 
 if __name__ == "__main__":

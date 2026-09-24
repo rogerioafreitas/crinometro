@@ -145,6 +145,11 @@ class MainWindow(QMainWindow):
         self.pipeline.analysis_cancelled.connect(self._on_pipeline_cancelled)
         self.pipeline.analysis_progress.connect(self._on_batch_progress)
         self.pipeline.realtime_tolerance_updated.connect(self._on_realtime_tolerance_updated)
+        self.pipeline.batch_started.connect(self._on_batch_started)
+        self.pipeline.batch_item_completed.connect(self._on_batch_item_completed)
+        self.pipeline.batch_completed.connect(self._on_batch_completed)
+        self.pipeline.batch_failed.connect(self._on_batch_failed)
+        self.pipeline.batch_cancelled.connect(self._on_batch_cancelled)
 
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
         # NÃO inclui sobreposições adaptativas (prominence, noise_floor adaptados).
@@ -1430,73 +1435,20 @@ class MainWindow(QMainWindow):
         # Desativa a ferramenta de edição caso esteja ativa
         self._update_pulse_edit_buttons(None)
 
-        spinner = ButtonSpinner(self.btn_analyze_selected, "Analisando...")
-        spinner.start()
-        self._batch_spinner = spinner
-
         for fname in checked_files:
             w = self._get_item_widget_by_name(fname)
             if w and hasattr(w, "set_loading"):
                 w.set_loading(True)
 
-        curr = self.list_widget.currentItem()
-        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setEnabled(False)
 
-        worker = self.pipeline.run_batch_analysis(checked_files, self.algo_params)
-        if not worker:
-            return
+        spinner = ButtonSpinner(self.btn_analyze_selected, "Analisando em lote...")
+        spinner.start()
+        self._batch_spinner = spinner
 
-        if hasattr(self, "btn_abort_batch"):
-            self.btn_abort_batch.setVisible(True)
-        if hasattr(self, "btn_abort_analysis"):
-            self.btn_abort_analysis.setVisible(True)
-
-        def _cleanup_batch():
-            if hasattr(self, "btn_abort_batch"):
-                self.btn_abort_batch.setVisible(False)
-            if hasattr(self, "btn_abort_analysis"):
-                self.btn_abort_analysis.setVisible(False)
-            for fname in checked_files:
-                w = self._get_item_widget_by_name(fname)
-                if w and hasattr(w, "set_loading"):
-                    w.set_loading(False)
-
-        def _on_single_result(fname, res):
-            if fname == curr_name:
-                self.render_dashboard(fname)
-            w = self._get_item_widget_by_name(fname)
-            if w and hasattr(w, "set_loading"):
-                w.set_loading(False)
-
-        def _on_finished(payload):
-            _cleanup_batch()
-            success_count, errors = payload
-
-            if curr_name in self.analysis_cache:
-                self.btn_reanalisar_main.setText("Reanalisar")
-                self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
-                self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
-
-            if curr_name not in checked_files and checked_files and checked_files[0] in self.analysis_cache:
-                self.select_file_by_name(checked_files[0])
-
-            spinner.stop(None, "⚡ Analisar Selecionados")
-            total = len(checked_files)
-            msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
-            if errors:
-                msg += f"\n\nFalhas ({len(errors)}):\n" + "\n".join(errors[:5])
-                QMessageBox.warning(self, "Análise em Lote", msg)
-            else:
-                QMessageBox.information(self, I18N[self.lang]["success"], msg)
-
-        def _on_error(err_msg):
-            _cleanup_batch()
-            spinner.stop(None, "⚡ Analisar Selecionados")
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
-
-        worker.finished_signal.connect(_on_finished)
-        worker.result_ready_signal.connect(_on_single_result)
-        worker.error_signal.connect(_on_error)
+        # Delega inteiramente ao PipelineOrchestrator sem tocar no GenericWorker
+        self.pipeline.run_batch_analysis(checked_files, self.algo_params)
 
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()
@@ -2058,9 +2010,72 @@ class MainWindow(QMainWindow):
                 self.capture_backgrounds()
                 self._saved_viewport = None
 
+    def _on_batch_started(self, total_files):
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(True)
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(True)
+
     def _on_batch_progress(self, current, total):
         if hasattr(self, "_batch_spinner") and getattr(self._batch_spinner, "button", None) is not None:
             self._batch_spinner.button.setText(f"Analisando... ({current}/{total})")
+
+    def _on_batch_item_completed(self, fname):
+        w = self._get_item_widget_by_name(fname)
+        if w and hasattr(w, "set_loading"):
+            w.set_loading(False)
+
+    def _on_batch_completed(self, success_count, errors):
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(False)
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setEnabled(True)
+
+        curr = self.list_widget.currentItem()
+        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        if curr_name in self.analysis_cache and hasattr(self, "btn_reanalisar_main"):
+            self.btn_reanalisar_main.setText("Reanalisar")
+            self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
+            self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
+
+        if getattr(self, "_batch_spinner", None) is not None:
+            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner = None
+
+        total = success_count + len(errors)
+        msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
+        if errors:
+            msg += f"\n\nFalhas ({len(errors)}):\n" + "\n".join(errors[:5])
+            if len(errors) > 5:
+                msg += f"\n...e mais {len(errors)-5} erros."
+            QMessageBox.warning(self, "Análise em Lote", msg)
+        else:
+            QMessageBox.information(self, I18N[self.lang]["success"], msg)
+
+    def _on_batch_failed(self, err_msg):
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(False)
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setEnabled(True)
+        if getattr(self, "_batch_spinner", None) is not None:
+            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner = None
+        QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
+
+    def _on_batch_cancelled(self):
+        if hasattr(self, "btn_abort_batch"):
+            self.btn_abort_batch.setVisible(False)
+        if hasattr(self, "btn_abort_analysis"):
+            self.btn_abort_analysis.setVisible(False)
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setEnabled(True)
+        if getattr(self, "_batch_spinner", None) is not None:
+            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner = None
 
     def _on_pipeline_failed(self, filename, err_msg):
         if hasattr(self, "btn_abort_analysis"):

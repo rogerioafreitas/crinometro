@@ -359,25 +359,35 @@ class TestCharacterization(unittest.TestCase):
         self.assertFalse(self.window.btn_abort_analysis.isVisible())
 
     def test_11_batch_analysis_and_progress(self):
-        """Testa análise em lote e emissão do sinal analysis_progress de ponta a ponta."""
+        """Testa análise em lote e emissão dos sinais de lote de ponta a ponta sem corrida."""
         fname = "sample_chirp.wav"
         self.window.loaded_files[fname] = self.sample_wav
         
         progress_events = []
-        self.window.pipeline.analysis_progress.connect(lambda cur, tot: progress_events.append((cur, tot)))
+        item_events = []
+        completed_events = []
+        self.window.pipeline.batch_progress.connect(lambda cur, tot: progress_events.append((cur, tot)))
+        self.window.pipeline.batch_item_completed.connect(lambda f: item_events.append(f))
+        self.window.pipeline.batch_completed.connect(lambda count, errs: completed_events.append((count, errs)))
 
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
 
-        worker = self.window.pipeline.run_batch_analysis([fname], params)
+        started = self.window.pipeline.run_batch_analysis([fname], params)
+        self.assertTrue(started)
+
+        worker = self.window.pipeline._batch_worker
         self.assertIsNotNone(worker)
         worker.wait(3000)
         for _ in range(10):
             QApplication.processEvents()
             time.sleep(0.02)
 
-        # Verifica se o progresso (1, 1) foi emitido
+        # Verifica se o progresso (1, 1), item e finalização foram emitidos
         self.assertIn((1, 1), progress_events)
+        self.assertIn(fname, item_events)
+        self.assertEqual(len(completed_events), 1)
+        self.assertEqual(completed_events[0][0], 1)
         self.assertIn(fname, self.window.ctx.analysis_cache)
 
 if __name__ == '__main__':

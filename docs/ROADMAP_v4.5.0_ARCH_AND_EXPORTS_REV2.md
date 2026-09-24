@@ -148,9 +148,31 @@ analysis_cancelled(filename)
 
 O renderizador decide como refletir `analysis_completed` na interface.
 
+## 2.4. Sinais formais e propriedade do worker no processamento em lote
+
+O `PipelineOrchestrator` é o proprietário exclusivo dos workers assíncronos (`GenericWorker`). Nenhum sinal de worker de baixo nível (`finished_signal`, `result_ready_signal`) é exposto diretamente à `MainWindow`. O orquestrador gerencia internamente o ciclo de vida do worker e expõe sinais semânticos de alto nível:
+
+```text
+batch_started(total_files)
+batch_item_completed(filename)
+batch_progress(current, total)
+batch_completed(success_count, errors)
+batch_failed(error_message)
+batch_cancelled()
+```
+
+A interface conecta-se exclusivamente a esses sinais, eliminando condições de corrida de conexão e garantindo autoridade única de renderização.
+
+**Dívida arquitetural / Nota de transição (run_analysis síncrono):**  
+A reanálise (`force_reanalyze`) e o lote (`run_batch_analysis`) executam estritamente em segundo plano via worker. No entanto, o método utilitário `run_analysis()` permanece temporariamente síncrono para atender chamadas diretas preexistentes na GUI (como resets de parâmetros e preparação de relatórios antes de sua modularização nas Fases 8 e 9). Essa pendência de transição é registrada e será convertida em rotinas assíncronas dedicadas quando os consumidores correspondentes forem refatorados.
+
 ---
 
 # FASE 3 — `ui/controllers/plot_renderers.py`
+
+> [!NOTE]
+> **Scaffold experimental presente (`ui/controllers/plot_renderers.py`):**  
+> O arquivo existe no repositório como draft preparatório herdado de iterações preliminares, mas **ainda não está integrado nem validado como FASE 3**. A integração oficial com a `MainWindow` (`self.plot_renderers`) e a migração controlada dos métodos gráficos ocorrerão formalmente na execução da FASE 3.
 
 ## 3.1. Responsabilidade
 

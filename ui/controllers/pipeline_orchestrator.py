@@ -17,13 +17,20 @@ from core.worker import GenericWorker
 from core.learner import PulseLearner
 
 class PipelineOrchestrator(QObject):
-    # Sinais formais do ciclo de vida da análise (Roadmap 2.3)
     analysis_started = pyqtSignal(str, bool)     # (filename, is_first_time)
-    analysis_progress = pyqtSignal(int, int)      # (current, total) para lote
+    analysis_progress = pyqtSignal(int, int)      # (current, total)
     analysis_completed = pyqtSignal(str)         # (filename)
     analysis_failed = pyqtSignal(str, str)       # (filename, error_msg)
     analysis_cancelled = pyqtSignal(str)         # (filename)
     realtime_tolerance_updated = pyqtSignal(str) # (filename)
+
+    # Sinais formais de alto nível para análise em lote (Roadmap FASE 2)
+    batch_started = pyqtSignal(int)              # (total_files)
+    batch_item_completed = pyqtSignal(str)       # (filename)
+    batch_progress = pyqtSignal(int, int)        # (current, total)
+    batch_completed = pyqtSignal(int, list)      # (success_count, errors)
+    batch_failed = pyqtSignal(str)               # (error_message)
+    batch_cancelled = pyqtSignal()               # ()
 
     def __init__(self, session_context, parent=None):
         super().__init__(parent)
@@ -270,13 +277,23 @@ class PipelineOrchestrator(QObject):
     # 5. Execução em Lote Assíncrona (run_batch_analysis)                #
     # ------------------------------------------------------------------ #
     def run_batch_analysis(self, checked_files, params):
-        """Gerencia worker de análise em lote e emite analysis_progress de ponta a ponta."""
+        """Gerencia worker de análise em lote e emite sinais de alto nível de ponta a ponta.
+        
+        O ciclo de vida do GenericWorker é de propriedade exclusiva do PipelineOrchestrator.
+        Nenhum sinal do worker é exposto diretamente à MainWindow, eliminando qualquer
+        janela de corrida na conexão de sinais e prevenindo renderizações duplicadas.
+        """
         if not checked_files:
-            return None
+            return False
+
+        if self._batch_worker and self._batch_worker.isRunning():
+            return False
 
         effective_params = {**params, **self.ctx._adaptive_overrides}
         use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
+
+        self.batch_started.emit(len(checked_files))
 
         def _task():
             success_count = 0
@@ -305,17 +322,31 @@ class PipelineOrchestrator(QObject):
         self._batch_worker = worker
 
         def _on_single_result(fname, res):
+            is_active = (self.ctx.active_filename == fname)
             self._apply_analysis_results(fname, res, params=params)
-            self.analysis_completed.emit(fname)
+            self.batch_item_completed.emit(fname)
+            # Centraliza a autoridade visual: emite analysis_completed apenas se for o arquivo ativo
+            if is_active:
+                self.analysis_completed.emit(fname)
 
         def _on_progress(current, total):
-            # Emissão real de analysis_progress de ponta a ponta
             self.analysis_progress.emit(current, total)
+            self.batch_progress.emit(current, total)
+
+        def _on_finished(result):
+            success_count, errors = result
+            self.batch_completed.emit(success_count, errors)
+
+        def _on_error(err_msg):
+            self.batch_failed.emit(err_msg)
 
         worker.result_ready_signal.connect(_on_single_result)
         worker.progress_signal.connect(_on_progress)
+        worker.finished_signal.connect(_on_finished)
+        worker.error_signal.connect(_on_error)
+
         worker.start()
-        return worker
+        return True
 
     # ------------------------------------------------------------------ #
     # 6. Reanálise em Background (force_reanalyze)                       #
@@ -385,10 +416,13 @@ class PipelineOrchestrator(QObject):
     def abort_current_analysis(self):
         """Cancela cooperativamente qualquer worker em execução (individual ou lote)."""
         aborted = False
-        for worker in (self._reanalyze_worker, self._batch_worker):
-            if worker is not None and worker.isRunning():
-                worker.abort()
-                aborted = True
+        if self._reanalyze_worker and self._reanalyze_worker.isRunning():
+            self._reanalyze_worker.abort()
+            aborted = True
+        if self._batch_worker and self._batch_worker.isRunning():
+            self._batch_worker.abort()
+            aborted = True
+            self.batch_cancelled.emit()
 
         if aborted:
             active_name = self.ctx.active_filename or ""
