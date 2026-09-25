@@ -14,6 +14,7 @@ from PyQt6.QtMultimedia import QMediaPlayer
 from matplotlib.backend_bases import MouseEvent
 
 from ui.main_window import MainWindow
+from ui.controllers.navigation_controller import NavigationController
 from core.analyzer import CricketAnalyzer
 from core.worker import GenericWorker
 from core.learner import PulseLearner
@@ -701,8 +702,263 @@ class TestCharacterization(unittest.TestCase):
             self.assertAlmostEqual(self.window.ctx.active_heavy_data["carrier_freq"], 6200.0)
             self.assertNotAlmostEqual(self.window.ctx.active_heavy_data["carrier_freq"], 4500.0)
 
+    def test_18_navigation_controller_extracted_and_single_ownership(self):
+        """FASE 4: Comprova instanciação do NavigationController, sinais semânticos
+        e eliminação total de dual ownership através de aliases bidirecionais."""
+        self.assertIsNotNone(self.window.nav_controller)
+        self.assertIsInstance(self.window.nav_controller, NavigationController)
+
+        # Conexão entre PlotRenderers e NavigationController
+        self.assertIs(self.window.plot_renderers.nav_controller, self.window.nav_controller)
+
+        # Validação de ownership único e compartilhamento de referências de estado
+        nc = self.window.nav_controller
+        self.assertIs(self.window.cursor_lines, nc.cursor_lines)
+        self.assertIs(self.window.backgrounds, nc.backgrounds)
+        self.assertEqual(self.window.bg_cache_valid, nc.bg_cache_valid)
+        self.assertEqual(self.window.panning, nc.panning)
+        self.assertIs(self.window.pulse_hover_data, nc.pulse_hover_data)
+        self.assertIs(self.window._click_alignment_lines, nc._click_alignment_lines)
+        self.assertEqual(self.window.start_xlim, nc.start_xlim)
+        self.assertEqual(self.window.start_ylim, nc.start_ylim)
+
+        # Mutação através de setters na MainWindow reflete no NavigationController
+        self.window.cursor_lines = ["dummy_line"]
+        self.assertEqual(nc.cursor_lines, ["dummy_line"])
+        self.window.cursor_lines = []
+
+        self.window.panning = True
+        self.assertTrue(nc.panning)
+        self.window.panning = False
+        self.assertFalse(nc.panning)
+
+        # Verificação da existência dos sinais do contrato §4.3
+        self.assertTrue(hasattr(nc, "viewport_changed"))
+        self.assertTrue(hasattr(nc, "hover_changed"))
+        self.assertTrue(hasattr(nc, "pan_started"))
+        self.assertTrue(hasattr(nc, "pan_finished"))
+
+    def test_19_navigation_controller_pan_lifecycle_and_signals(self):
+        """FASE 4: Comprova o ciclo completo de pan (início, movimento com clamping, término)
+        e a emissão correspondente de pan_started, pan_finished e viewport_changed."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        nc = self.window.nav_controller
+        ax = self.window.panel_wave.ax
+
+        pan_started_spy = MagicMock()
+        pan_finished_spy = MagicMock()
+        viewport_spy = MagicMock()
+
+        nc.pan_started.connect(pan_started_spy)
+        nc.pan_finished.connect(pan_finished_spy)
+        nc.viewport_changed.connect(viewport_spy)
+
+        # 1. Inicia Pan com botão direito (button == 3)
+        ev_press = MouseEvent('button_press_event', self.window.panel_wave.canvas, x=200, y=150, button=3)
+        ev_press.inaxes = ax
+        self.window.on_press(ev_press)
+
+        pan_started_spy.assert_called_once()
+        self.assertTrue(nc.panning)
+        self.assertIs(nc.active_ax, ax)
+
+        # 2. Movimento do mouse durante pan
+        nc._last_pan_time = 0.0  # Reseta throttle para garantir execução
+        ev_motion = MouseEvent('motion_notify_event', self.window.panel_wave.canvas, x=250, y=170, button=3)
+        ev_motion.inaxes = ax
+        self.window.on_motion(ev_motion)
+
+        viewport_spy.assert_called()
+        call_xmin, call_xmax = viewport_spy.call_args[0]
+        self.assertLess(call_xmin, call_xmax)
+
+        # 3. Finalização do Pan
+        ev_release = MouseEvent('button_release_event', self.window.panel_wave.canvas, x=250, y=170, button=3)
+        ev_release.inaxes = ax
+        self.window.on_release(ev_release)
+
+        pan_finished_spy.assert_called_once()
+        self.assertFalse(nc.panning)
+        self.assertIsNone(nc.active_ax)
+
+    def test_20_navigation_controller_zoom_and_bounds_clamping(self):
+        """FASE 4: Comprova zoom centrado no cursor, restrição por _clamp_bounds
+        e sincronização entre eixos temporal wave e spec via NavigationController."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        nc = self.window.nav_controller
+        ax_wave = self.window.panel_wave.ax
+        ax_spec = self.window.panel_spec.ax
+
+        initial_xlim = ax_wave.get_xlim()
+        initial_width = initial_xlim[1] - initial_xlim[0]
+
+        viewport_spy = MagicMock()
+        nc.viewport_changed.connect(viewport_spy)
+
+        # 1. Zoom in (scroll 'up' centrado em x=0.25)
+        ev_zoom_in = MouseEvent('scroll_event', self.window.panel_wave.canvas, x=150, y=150, button='up', step=1)
+        ev_zoom_in.inaxes = ax_wave
+        ev_zoom_in.xdata = 0.25
+        ev_zoom_in.ydata = 0.0
+        self.window.zoom_graph(ev_zoom_in)
+
+        new_xlim = ax_wave.get_xlim()
+        new_width = new_xlim[1] - new_xlim[0]
+        self.assertLess(new_width, initial_width)
+        viewport_spy.assert_called()
+
+        # 2. Zoom out sincronizado com botão de sincronização ativo
+        self.window.btn_sync.setChecked(True)
+        ev_zoom_out = MouseEvent('scroll_event', self.window.panel_wave.canvas, x=150, y=150, button='down', step=-1)
+        ev_zoom_out.inaxes = ax_wave
+        ev_zoom_out.xdata = 0.25
+        ev_zoom_out.ydata = 0.0
+        self.window.zoom_graph(ev_zoom_out)
+
+        # Ambos os eixos de tempo (wave e spec) devem ter recebido o mesmo xlim
+        self.assertAlmostEqual(ax_wave.get_xlim()[0], ax_spec.get_xlim()[0], places=5)
+        self.assertAlmostEqual(ax_wave.get_xlim()[1], ax_spec.get_xlim()[1], places=5)
+
+        # 3. Teste explícito de _clamp_bounds
+        dur = float(self.window.ctx.active_heavy_data["duration"])
+        clamped = nc._clamp_bounds(ax_wave, -0.5, dur + 1.0, -2.0, 2.0)
+        self.assertEqual(clamped[0], 0.0)
+        self.assertEqual(clamped[1], dur)
+        self.assertEqual(clamped[2], -1.05)
+        self.assertEqual(clamped[3], 1.05)
+
+    def test_21_navigation_controller_hover_metadata_and_signals(self):
+        """FASE 4: Comprova detecção de hover sobre marcadores de pulsos, formatação
+        de coordenadas e emissão semântica de hover_changed."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        nc = self.window.nav_controller
+        self.assertGreater(len(nc.pulse_hover_data), 0)
+
+        first_pulse = nc.pulse_hover_data[0]
+        t_pulse = first_pulse["time"]
+
+        hover_spy = MagicMock()
+        nc.hover_changed.connect(hover_spy)
+
+        ax = self.window.panel_wave.ax
+        # Transforma coordenada de dados em coordenada de display (pixels)
+        pt_disp = ax.transData.transform((t_pulse, first_pulse["env_y"]))
+
+        # 1. Movimento diretamente sobre o marcador do pulso
+        ev_hover = MouseEvent('motion_notify_event', self.window.panel_wave.canvas, x=pt_disp[0], y=pt_disp[1])
+        ev_hover.inaxes = ax
+        ev_hover.xdata = t_pulse
+        ev_hover.ydata = first_pulse["env_y"]
+        self.window.on_motion(ev_hover)
+
+        # Valida emissão do sinal com o dicionário de metadados do pulso
+        hover_spy.assert_called()
+        emitted_payload = hover_spy.call_args[0][0]
+        self.assertIsNotNone(emitted_payload)
+        self.assertEqual(emitted_payload["time"], t_pulse)
+
+        # 2. Movimento para área vazia (fora do raio de tolerância de pixels)
+        hover_spy.reset_mock()
+        ev_away = MouseEvent('motion_notify_event', self.window.panel_wave.canvas, x=0, y=0)
+        ev_away.inaxes = ax
+        ev_away.xdata = t_pulse + 5.0
+        ev_away.ydata = 0.9
+        self.window.on_motion(ev_away)
+
+        hover_spy.assert_called()
+        self.assertIsNone(hover_spy.call_args[0][0])
+
+        # 3. Saída do eixo oculta coord_label
+        self.window.panel_wave.coord_label.setVisible(True)
+        ev_leave = MouseEvent('axes_leave_event', self.window.panel_wave.canvas, x=0, y=0)
+        ev_leave.inaxes = ax
+        self.window.on_axes_leave(ev_leave)
+        self.assertFalse(self.window.panel_wave.coord_label.isVisible())
+
+    def test_22_navigation_controller_background_blitting_and_cursor(self):
+        """FASE 4: Comprova captura de backgrounds para blitting ultra-rápido,
+        atualização do cursor de reprodução e preservação do cache de background."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        nc = self.window.nav_controller
+        self.assertEqual(len(nc.cursor_lines), 2)  # wave e spec
+
+        # 1. Captura de backgrounds
+        nc.capture_backgrounds()
+        self.assertTrue(nc.bg_cache_valid)
+        self.assertEqual(len(nc.backgrounds), 2)
+
+        # 2. Atualização de posição do cursor com blitting
+        target_pos = 0.25
+        nc.update_playback_cursor(target_pos)
+
+        # Verifica que as linhas de cursor foram atualizadas para a posição solicitada
+        for line in nc.cursor_lines:
+            self.assertEqual(list(line.get_xdata()), [target_pos, target_pos])
+
+        # O cache de background deve permanecer íntegro após o blitting
+        self.assertTrue(nc.bg_cache_valid)
+
+    def test_23_navigation_controller_robustness_and_edge_cases(self):
+        """FASE 4: Comprova robustez do NavigationController contra casos degenerados
+        (limites invertidos, divisão por zero em zoom, heavy_data com campos nulos e invalidação de cache)."""
+        nc = self.window.nav_controller
+        ax = self.window.panel_wave.ax
+
+        # 1. Limites invertidos em _clamp_bounds são reordenados canonicamente
+        xmin, xmax, ymin, ymax = nc._clamp_bounds(ax, 0.8, 0.2, 1.0, -1.0)
+        self.assertLessEqual(xmin, xmax)
+        self.assertLessEqual(ymin, ymax)
+
+        # 2. Zoom com eixo degenerado (delta zero) não gera ZeroDivisionError
+        with patch.object(ax, 'get_xlim', return_value=(0.5, 0.5)), \
+             patch.object(ax, 'get_ylim', return_value=(0.0, 0.0)):
+            ev_zero_delta = MouseEvent('scroll_event', self.window.panel_wave.canvas, x=100, y=100, button='up', step=1)
+            ev_zero_delta.inaxes = ax
+            ev_zero_delta.xdata = 0.5
+            ev_zero_delta.ydata = 0.0
+            # Não deve lançar ZeroDivisionError
+            nc.zoom_graph(ev_zero_delta)
+
+        # 3. update_hover_data com chaves None no dicionário
+        sparse_heavy = {
+            "rate": 44100,
+            "duration": 1.0,
+            "env1_smooth": None,
+            "env": None,
+            "chirp_peaks_list": None,
+            "distant_peaks": None,
+            "discarded_peaks_reasons": None,
+            "params": None,
+        }
+        nc.update_hover_data(sparse_heavy)
+        self.assertEqual(nc.pulse_hover_data, [])
+
+        # 4. setup_cursor_lines invalida o cache de background
+        nc.bg_cache_valid = True
+        nc.backgrounds = ["dummy_cached_bg"]
+        nc.setup_cursor_lines()
+        self.assertFalse(nc.bg_cache_valid)
+        self.assertEqual(nc.backgrounds, [])
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

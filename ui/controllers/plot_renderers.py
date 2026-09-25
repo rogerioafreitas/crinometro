@@ -7,14 +7,11 @@ Responsabilidade: coordenar as engines gráficas existentes e concentrar a
 renderização dos quatro painéis sem assumir a lógica de navegação do mouse.
 
 O PlotRenderers lê o SessionContext e recebe referências controladas aos
-PlotPanels e à MainWindow via weakref.
+PlotPanels, à MainWindow e ao NavigationController via weakref.
 
-Dívida técnica transitória (FASE 4): os callbacks de background update
-(update_bg_callback=win.capture_backgrounds) passados aos engines HighPerf
-mantêm referências bound à MainWindow até o isolamento completo da navegação,
-hover e blitting no NavigationController (FASE 4).
-
-A navegação (pan/zoom/hover/blit) permanece na MainWindow até a FASE 4.
+Resolução da dívida técnica na FASE 4: os callbacks de background update
+(update_bg_callback) conectam-se prioritariamente ao NavigationController.capture_backgrounds,
+isolando navegação, hover e blitting de forma desacoplada.
 """
 
 import weakref
@@ -53,6 +50,7 @@ class PlotRenderers:
         panel_hist=None,
         panel_psd=None,
         panel_freq=None,
+        nav_controller=None,
     ):
         self.session_context = session_context
         self._main_window = weakref.ref(main_window) if main_window is not None else lambda: None
@@ -61,6 +59,7 @@ class PlotRenderers:
         self._panel_hist = weakref.ref(panel_hist) if panel_hist is not None else lambda: None
         self._panel_psd = weakref.ref(panel_psd) if panel_psd is not None else lambda: None
         self._panel_freq = weakref.ref(panel_freq) if panel_freq is not None else lambda: None
+        self._nav_controller = weakref.ref(nav_controller) if nav_controller is not None else lambda: None
 
         # Estado interno de renderização (propriedade de PlotRenderers, não do SessionContext)
         self.wave_lines: dict = {}
@@ -73,6 +72,17 @@ class PlotRenderers:
     @property
     def main_window(self):
         return self._main_window()
+
+    @property
+    def nav_controller(self):
+        ctrl = self._nav_controller()
+        if ctrl is not None:
+            return ctrl
+        win = self.main_window
+        return getattr(win, "nav_controller", None) if win is not None else None
+
+    def set_navigation_controller(self, nav_controller):
+        self._nav_controller = weakref.ref(nav_controller) if nav_controller is not None else lambda: None
 
     @property
     def panel_wave(self):
@@ -272,10 +282,19 @@ class PlotRenderers:
         line_env.set_visible(bool(show_env))
         self.wave_lines['env'] = line_env
 
+        # Obtém callback de atualização de background (NavigationController ou MainWindow)
+        nav = self.nav_controller
+        if nav is not None and hasattr(nav, "capture_backgrounds"):
+            bg_cb = nav.capture_backgrounds
+        elif win is not None and hasattr(win, "capture_backgrounds"):
+            bg_cb = win.capture_backgrounds
+        else:
+            bg_cb = None
+
         # 3. Decimação Min-Max LOD (Linha Laranja dinâmica com preservação de picos)
         self.line_engine = HighPerfLineEngine(
             ax1, time_sec, data, base_color='#F97316',
-            update_bg_callback=win.capture_backgrounds if hasattr(win, "capture_backgrounds") else None,
+            update_bg_callback=bg_cb,
         )
         self.line_engine.render_high_detail()
         if self.line_engine.line:
@@ -359,17 +378,20 @@ class PlotRenderers:
         ax4.set_ylim(ymin, ymax)
         self.spectro_engine = HighPerfSpectrogramEngine(
             ax4, Sxx_db, t_spec, f_spec,
-            update_bg_callback=win.capture_backgrounds if hasattr(win, "capture_backgrounds") else None,
+            update_bg_callback=bg_cb,
             unit=unit,
         )
         self.spectro_engine.render_high_detail()
 
         # Atualiza mapa de eixos independente da posição atual.
-        win.cursor_lines = []
-        for panel in [self.panel_wave, self.panel_spec]:
-            win.cursor_lines.append(
-                panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9)
-            )
+        if nav is not None and hasattr(nav, "setup_cursor_lines"):
+            nav.setup_cursor_lines()
+        elif win is not None:
+            win.cursor_lines = []
+            for panel in [self.panel_wave, self.panel_spec]:
+                win.cursor_lines.append(
+                    panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9)
+                )
 
         for panel in self.all_panels:
             panel.apply_dark_theme()
@@ -396,9 +418,14 @@ class PlotRenderers:
             win.timeline.set_position(win.player.position() / 1000.0)
 
         self._refresh_user_peak_markers()
-        if hasattr(win, "_update_pulse_hover_data"):
+        if nav is not None and hasattr(nav, "update_hover_data"):
+            nav.update_hover_data()
+        elif hasattr(win, "_update_pulse_hover_data"):
             win._update_pulse_hover_data()
-        if hasattr(win, "capture_backgrounds"):
+
+        if nav is not None and hasattr(nav, "capture_backgrounds"):
+            nav.capture_backgrounds()
+        elif hasattr(win, "capture_backgrounds"):
             win.capture_backgrounds()
 
         if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
@@ -884,7 +911,12 @@ class PlotRenderers:
         if self.panel_wave is not None and hasattr(self.panel_wave, 'canvas'):
             self.panel_wave.canvas.draw_idle()
 
-        win = self.main_window
-        if win is not None and hasattr(win, "capture_backgrounds"):
-            win.bg_cache_valid = False
-            win.capture_backgrounds()
+        nav = self.nav_controller
+        if nav is not None and hasattr(nav, "capture_backgrounds"):
+            nav.bg_cache_valid = False
+            nav.capture_backgrounds()
+        else:
+            win = self.main_window
+            if win is not None and hasattr(win, "capture_backgrounds"):
+                win.bg_cache_valid = False
+                win.capture_backgrounds()

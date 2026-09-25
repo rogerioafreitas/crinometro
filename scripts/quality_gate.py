@@ -95,6 +95,8 @@ def run_gate():
         files_to_check.append("ui/controllers/pipeline_orchestrator.py")
     if os.path.exists("ui/controllers/plot_renderers.py"):
         files_to_check.append("ui/controllers/plot_renderers.py")
+    if os.path.exists("ui/controllers/navigation_controller.py"):
+        files_to_check.append("ui/controllers/navigation_controller.py")
 
     all_errors = []
     for fp in files_to_check:

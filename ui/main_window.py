@@ -201,6 +201,163 @@ class MainWindow(QMainWindow):
         else:
             self._compat_last_applied_spec_unit = value
 
+    # ---------- FASE 4: Aliases de compatibilidade para NavigationController ----------
+    @property
+    def cursor_lines(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.cursor_lines if nc is not None else getattr(self, "_compat_cursor_lines", [])
+    @cursor_lines.setter
+    def cursor_lines(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.cursor_lines = value
+        else:
+            self._compat_cursor_lines = value
+
+    @property
+    def backgrounds(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.backgrounds if nc is not None else getattr(self, "_compat_backgrounds", [])
+    @backgrounds.setter
+    def backgrounds(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.backgrounds = value
+        else:
+            self._compat_backgrounds = value
+
+    @property
+    def bg_cache_valid(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.bg_cache_valid if nc is not None else getattr(self, "_compat_bg_cache_valid", False)
+    @bg_cache_valid.setter
+    def bg_cache_valid(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.bg_cache_valid = value
+        else:
+            self._compat_bg_cache_valid = value
+
+    @property
+    def panning(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.panning if nc is not None else getattr(self, "_compat_panning", False)
+    @panning.setter
+    def panning(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.panning = value
+        else:
+            self._compat_panning = value
+
+    @property
+    def active_ax(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.active_ax if nc is not None else getattr(self, "_compat_active_ax", None)
+    @active_ax.setter
+    def active_ax(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.active_ax = value
+        else:
+            self._compat_active_ax = value
+
+    @property
+    def pulse_hover_data(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.pulse_hover_data if nc is not None else getattr(self, "_compat_pulse_hover_data", [])
+    @pulse_hover_data.setter
+    def pulse_hover_data(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.pulse_hover_data = value
+        else:
+            self._compat_pulse_hover_data = value
+
+    @property
+    def _click_alignment_lines(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc._click_alignment_lines if nc is not None else getattr(self, "_compat_click_alignment_lines", [])
+    @_click_alignment_lines.setter
+    def _click_alignment_lines(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc._click_alignment_lines = value
+        else:
+            self._compat_click_alignment_lines = value
+
+    @property
+    def start_xlim(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.start_xlim if nc is not None else getattr(self, "_compat_start_xlim", (0.0, 1.0))
+    @start_xlim.setter
+    def start_xlim(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.start_xlim = value
+        else:
+            self._compat_start_xlim = value
+
+    @property
+    def start_ylim(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.start_ylim if nc is not None else getattr(self, "_compat_start_ylim", (0.0, 1.0))
+    @start_ylim.setter
+    def start_ylim(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.start_ylim = value
+        else:
+            self._compat_start_ylim = value
+
+    @property
+    def start_x(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.start_x if nc is not None else getattr(self, "_compat_start_x", 0.0)
+    @start_x.setter
+    def start_x(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.start_x = value
+        else:
+            self._compat_start_x = value
+
+    @property
+    def start_y(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.start_y if nc is not None else getattr(self, "_compat_start_y", 0.0)
+    @start_y.setter
+    def start_y(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.start_y = value
+        else:
+            self._compat_start_y = value
+
+    @property
+    def sync_throttle_time(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.sync_throttle_time if nc is not None else getattr(self, "_compat_sync_throttle_time", 0.0)
+    @sync_throttle_time.setter
+    def sync_throttle_time(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.sync_throttle_time = value
+        else:
+            self._compat_sync_throttle_time = value
+
+    @property
+    def last_draw_time(self):
+        nc = getattr(self, "nav_controller", None)
+        return nc.last_draw_time if nc is not None else getattr(self, "_compat_last_draw_time", 0.0)
+    @last_draw_time.setter
+    def last_draw_time(self, value):
+        nc = getattr(self, "nav_controller", None)
+        if nc is not None:
+            nc.last_draw_time = value
+        else:
+            self._compat_last_draw_time = value
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
@@ -307,6 +464,21 @@ class MainWindow(QMainWindow):
             panel_psd=None,
             panel_freq=self.panel_freq,
         )
+
+        # FASE 4 — NavigationController: isolamento de viewport, pan, zoom, hover e blitting
+        from ui.controllers.navigation_controller import NavigationController
+        self.nav_controller = NavigationController(
+            session_context=self.ctx,
+            plot_renderers=self.plot_renderers,
+            main_window=self,
+            panel_wave=self.panel_wave,
+            panel_spec=self.panel_spec,
+            panel_hist=self.panel_hist,
+            panel_psd=None,
+            panel_freq=self.panel_freq,
+            parent=self,
+        )
+        self.plot_renderers.set_navigation_controller(self.nav_controller)
 
         # Início limpo: nenhum arquivo fictício é carregado automaticamente.
 
@@ -1327,6 +1499,12 @@ class MainWindow(QMainWindow):
         """Inicializa os 4 painéis gráficos com enquadramento perfeito mesmo sem áudio carregado."""
         if not hasattr(self, "all_panels"):
             return
+        if hasattr(self, "nav_controller") and self.nav_controller is not None:
+            self.nav_controller.reset()
+        else:
+            self.cursor_lines = []
+            self.backgrounds = []
+            self.bg_cache_valid = False
         for p in self.all_panels:
             p.ax.clear()
             p.apply_dark_theme()
@@ -2653,6 +2831,8 @@ class MainWindow(QMainWindow):
 
     def _update_pulse_hover_data(self):
         """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.update_hover_data()
         self.pulse_hover_data = []
         d = getattr(self, "active_heavy_data", None)
         if not d:
@@ -3006,6 +3186,12 @@ class MainWindow(QMainWindow):
                 self.timeline.set_position(position_sec)
             except Exception:
                 pass
+
+        # FASE 4: Delega renderização do cursor e blitting para NavigationController
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            self.nav_controller.update_playback_cursor(position_sec)
+            return
+
         for line in self.cursor_lines:
             try:
                 line.set_xdata([position_sec, position_sec])
@@ -3701,6 +3887,9 @@ class MainWindow(QMainWindow):
         self.swap_main_panel(panel)
 
     def capture_backgrounds(self):
+        """FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.capture_backgrounds()
         if not self.cursor_lines:
             return
         for line in self.cursor_lines:
@@ -3718,6 +3907,10 @@ class MainWindow(QMainWindow):
 
     def on_press(self, event):
         """Gerencia cliques em painéis. Se modo de edição de pulsos estiver ativo, permite editar."""
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.on_press(event)
+
         # Alinha o marcador de referência temporal com o botão esquerdo (button == 1)
         if event.button == 1 and event.xdata is not None:
             self._align_click_marker(float(event.xdata))
@@ -3758,6 +3951,9 @@ class MainWindow(QMainWindow):
 
     def _align_click_marker(self, time_sec):
         """Desenha a referência vertical do clique em todos os eixos temporais."""
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller._align_click_marker(time_sec)
         for line in self._click_alignment_lines:
             line.remove()
         self._click_alignment_lines = []
@@ -3782,6 +3978,9 @@ class MainWindow(QMainWindow):
                     panel.btn_pulse_edit.blockSignals(False)
 
     def on_release(self, event):
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.on_release(event)
         if event.button == 3:
             self.panning, self.active_ax = False, None
             for panel in self.all_panels:
@@ -3793,6 +3992,9 @@ class MainWindow(QMainWindow):
 
     def on_sync_toggled(self, enabled):
         """Reestabelece uma geometria consistente nos três eixos temporais ao ativar a sincronização."""
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.on_sync_toggled(enabled)
         if getattr(self, "_swapping_panels", False):
             return
         self.bg_cache_valid = False
@@ -3829,6 +4031,9 @@ class MainWindow(QMainWindow):
         """Redesenha os painéis depois que o Qt estabiliza as geometrias.
         Usa renderização de alta definição para evitar tiles/viewport cortados.
         """
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller._refresh_synced_views()
         if not self.active_heavy_data:
             return
         QApplication.processEvents()
@@ -3868,6 +4073,9 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(40, self.capture_backgrounds)
 
     def _sync_render(self, target_panels, xmin, xmax):
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller._sync_render(target_panels, xmin, xmax)
         if getattr(self, "_swapping_panels", False):
             return
         current_time = time.time()
@@ -3888,6 +4096,9 @@ class MainWindow(QMainWindow):
         self.sync_throttle_time = current_time
 
     def _clamp_bounds(self, ax, xmin, xmax, ymin, ymax):
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller._clamp_bounds(ax, xmin, xmax, ymin, ymax)
         if not self.active_heavy_data: return xmin, xmax, ymin, ymax
         d = self.active_heavy_data
         dur = float(d.get("duration", 0.0))
@@ -3948,11 +4159,17 @@ class MainWindow(QMainWindow):
 
     def on_axes_leave(self, event):
         """Oculta o label de coordenadas quando o cursor sai do eixo."""
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.on_axes_leave(event)
         for panel in self.all_panels:
             if hasattr(panel, "coord_label") and event.inaxes == panel.ax:
                 panel.coord_label.setVisible(False)
 
     def on_motion(self, event):
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.on_motion(event)
         if self.panning and self.active_ax is not None and event.inaxes == self.active_ax:
             now_t = time.time()
             if now_t - getattr(self, "_last_pan_time", 0) < 0.018:
@@ -4123,6 +4340,9 @@ class MainWindow(QMainWindow):
                     QToolTip.hideText()
 
     def zoom_graph(self, event):
+        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
+        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
+            return self.nav_controller.zoom_graph(event)
         if not event.inaxes:
             return
         self.bg_cache_valid = False
