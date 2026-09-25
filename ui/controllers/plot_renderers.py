@@ -51,6 +51,7 @@ class PlotRenderers:
         panel_psd=None,
         panel_freq=None,
         nav_controller=None,
+        editor_controller=None,
     ):
         self.session_context = session_context
         self._main_window = weakref.ref(main_window) if main_window is not None else lambda: None
@@ -60,6 +61,7 @@ class PlotRenderers:
         self._panel_psd = weakref.ref(panel_psd) if panel_psd is not None else lambda: None
         self._panel_freq = weakref.ref(panel_freq) if panel_freq is not None else lambda: None
         self._nav_controller = weakref.ref(nav_controller) if nav_controller is not None else lambda: None
+        self._editor_controller = weakref.ref(editor_controller) if editor_controller is not None else lambda: None
 
         # Estado interno de renderização (propriedade de PlotRenderers, não do SessionContext)
         self.wave_lines: dict = {}
@@ -68,6 +70,8 @@ class PlotRenderers:
         self.spectro_engine = None
         self.freq_engine = None
         self._last_applied_spec_unit = None
+        self._last_rendered_filename = None
+        self._last_rendered_heavy_id = None
 
     @property
     def main_window(self):
@@ -83,6 +87,17 @@ class PlotRenderers:
 
     def set_navigation_controller(self, nav_controller):
         self._nav_controller = weakref.ref(nav_controller) if nav_controller is not None else lambda: None
+
+    @property
+    def editor_controller(self):
+        ctrl = self._editor_controller() if hasattr(self, "_editor_controller") else None
+        if ctrl is not None:
+            return ctrl
+        win = self.main_window
+        return getattr(win, "editor_controller", None) if win is not None else None
+
+    def set_editor_controller(self, editor_controller):
+        self._editor_controller = weakref.ref(editor_controller) if editor_controller is not None else lambda: None
 
     @property
     def panel_wave(self):
@@ -220,6 +235,28 @@ class PlotRenderers:
             win.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
         if hasattr(win, "_update_ml_toggle_ui"):
             win._update_ml_toggle_ui()
+
+        # Reseta histórico de edições somente quando há troca real de arquivo
+        # ou quando uma reanálise gerou novo objeto de dados em cache
+        last_fn = getattr(self, "_last_rendered_filename", None)
+        last_heavy_id = getattr(self, "_last_rendered_heavy_id", None)
+        current_heavy_id = id(d)
+
+        should_reset_history = (
+            last_fn is None
+            or filename != last_fn
+            or current_heavy_id != last_heavy_id
+        )
+
+        if should_reset_history:
+            ed = self.editor_controller
+            if ed is not None and hasattr(ed, "reset_history"):
+                ed.reset_history()
+            elif hasattr(win, "_pulse_edit_history"):
+                win._pulse_edit_history = []
+
+        self._last_rendered_filename = filename
+        self._last_rendered_heavy_id = current_heavy_id
 
         # Sincroniza informações da frequência portadora (FP) e tolerância nos painéis
         carrier_freq = float(d.get("carrier_freq", 0.0))

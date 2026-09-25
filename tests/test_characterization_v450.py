@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import time
 import tempfile
 import unittest
@@ -15,10 +16,11 @@ from matplotlib.backend_bases import MouseEvent
 
 from ui.main_window import MainWindow
 from ui.controllers.navigation_controller import NavigationController
+from ui.controllers.editor_controller import EditorController
 from core.analyzer import CricketAnalyzer
 from core.worker import GenericWorker
 from core.learner import PulseLearner
-from utils.constants import DEFAULT_ALGO_PARAMS
+from utils.constants import DEFAULT_ALGO_PARAMS, CONFIG_FILE
 
 app = QApplication.instance() or QApplication(sys.argv)
 
@@ -29,6 +31,10 @@ class TestCharacterization(unittest.TestCase):
         cls.sample_wav = os.path.abspath(os.path.join("tests", "fixtures", "sample_chirp.wav"))
         if not os.path.exists(cls.sample_wav):
             raise FileNotFoundError(f"Arquivo de teste obrigatório não encontrado: {cls.sample_wav}")
+        cls._original_config_text = None
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cls._original_config_text = f.read()
 
     def setUp(self):
         # Silencia caixas de diálogo durante testes para evitar bloqueio
@@ -49,6 +55,12 @@ class TestCharacterization(unittest.TestCase):
         if hasattr(self, 'window'):
             self.window.pipeline.abort_current_analysis()
             self.window.close()
+        if hasattr(self.__class__, '_original_config_text') and self._original_config_text is not None:
+            try:
+                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                    f.write(self._original_config_text)
+            except Exception:
+                pass
         QApplication.processEvents()
 
     def test_00_session_context_redirection_and_emission(self):
@@ -955,6 +967,455 @@ class TestCharacterization(unittest.TestCase):
         nc.setup_cursor_lines()
         self.assertFalse(nc.bg_cache_valid)
         self.assertEqual(nc.backgrounds, [])
+
+    def test_24_editor_controller_extracted_and_single_ownership(self):
+        """FASE 5: Comprova instanciação do EditorController, conexão com PlotRenderers
+        e NavigationController, e eliminação total de dual ownership no histórico de edição."""
+        self.assertIsNotNone(self.window.editor_controller)
+        self.assertIsInstance(self.window.editor_controller, EditorController)
+
+        ec = self.window.editor_controller
+        self.assertIs(ec.session_context, self.window.ctx)
+        self.assertIs(self.window.plot_renderers.editor_controller, ec)
+        self.assertEqual(self.window.nav_controller.pulse_edit_handler, ec.toggle_peak_marker)
+
+        # Single ownership: MainWindow._pulse_edit_history reflete diretamente ec._pulse_edit_history
+        self.assertIs(self.window._pulse_edit_history, ec._pulse_edit_history)
+
+        # Modificação via setter da MainWindow afeta o EditorController
+        self.window._pulse_edit_history = [[100, 200]]
+        self.assertEqual(ec._pulse_edit_history, [[100, 200]])
+        self.window._pulse_edit_history = []
+        self.assertEqual(ec._pulse_edit_history, [])
+
+        # Verificação da existência dos sinais do contrato §5.3
+        self.assertTrue(hasattr(ec, "pulse_added"))
+        self.assertTrue(hasattr(ec, "pulse_removed"))
+        self.assertTrue(hasattr(ec, "pulses_changed"))
+        self.assertTrue(hasattr(ec, "undo_availability_changed"))
+        self.assertTrue(hasattr(ec, "metrics_recalculated"))
+        self.assertTrue(hasattr(ec, "learning_started"))
+        self.assertTrue(hasattr(ec, "learning_completed"))
+        self.assertTrue(hasattr(ec, "learning_failed"))
+
+    def test_25_editor_controller_toggle_and_snapping(self):
+        """FASE 5: Comprova alternância de picos (adição e remoção com snapping temporal e metadados)
+        e a correta emissão de sinais semânticos pulse_added, pulse_removed e pulses_changed."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        added_spy = MagicMock()
+        removed_spy = MagicMock()
+        changed_spy = MagicMock()
+        ec.pulse_added.connect(added_spy)
+        ec.pulse_removed.connect(removed_spy)
+        ec.pulses_changed.connect(changed_spy)
+
+        initial_verified = list(self.window.ctx.peaks_user_verified)
+        self.assertGreater(len(initial_verified), 2)
+        target_sample = initial_verified[0]
+        target_time = target_sample / rate
+
+        # 1. Alterna pulso existente -> deve remover
+        self.window._toggle_peak_marker(target_time)
+        removed_spy.assert_called_once_with(target_sample)
+        self.assertNotIn(target_sample, self.window.ctx.peaks_user_verified)
+        changed_spy.assert_called()
+
+        # 2. Alterna mesmo pulso novamente -> deve re-adicionar
+        added_spy.reset_mock()
+        self.window._toggle_peak_marker(target_time)
+        added_spy.assert_called_once_with(target_sample)
+        self.assertIn(target_sample, self.window.ctx.peaks_user_verified)
+
+        # 3. Adiciona pulso novo manual com metadados de frequência e amplitude (dentro da duração de 0.4s)
+        novel_time = 0.35
+        novel_sample = int(round(novel_time * rate))
+        self.window._toggle_peak_marker(novel_time, f_click=5200.0, amp_click=0.75)
+        self.assertIn(novel_sample, self.window.ctx.peaks_user_verified)
+        self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["freq"], 5200.0)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["amp"], 0.75)
+
+    def test_26_editor_controller_undo_lifecycle(self):
+        """FASE 5: Comprova a pilha de desfeita (undo), integridade de estados anteriores,
+        limite de histórico e sinalização de undo_availability_changed."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        # Estado inicial sem desfeita
+        self.assertFalse(ec.can_undo)
+        initial_verified = list(self.window.ctx.peaks_user_verified)
+
+        # 1ª Edição: remove 1º pico
+        pk1 = initial_verified[0]
+        ec.toggle_peak_marker(pk1 / rate)
+        self.assertTrue(ec.can_undo)
+        self.assertEqual(len(ec._pulse_edit_history), 1)
+
+        # 2ª Edição: remove 2º pico
+        pk2 = initial_verified[1]
+        ec.toggle_peak_marker(pk2 / rate)
+        self.assertEqual(len(ec._pulse_edit_history), 2)
+
+        undo_avail_spy = MagicMock()
+        ec.undo_availability_changed.connect(undo_avail_spy)
+
+        # Desfaz 2ª edição
+        undone = ec.undo()
+        self.assertTrue(undone)
+        self.assertTrue(ec.can_undo)
+        self.assertIn(pk2, self.window.ctx.peaks_user_verified)
+        self.assertNotIn(pk1, self.window.ctx.peaks_user_verified)
+
+        # Desfaz 1ª edição
+        undone = ec.undo()
+        self.assertTrue(undone)
+        self.assertFalse(ec.can_undo)
+        self.assertEqual(self.window.ctx.peaks_user_verified, initial_verified)
+        undo_avail_spy.assert_called_with(False)
+
+        # Desfazer com histórico vazio retorna False sem exceção
+        undone = ec.undo()
+        self.assertFalse(undone)
+
+        # reset_history limpa o histórico
+        ec._pulse_edit_history = [[10, 20]]
+        ec.reset_history()
+        self.assertFalse(ec.can_undo)
+        self.assertEqual(len(ec._pulse_edit_history), 0)
+
+    def test_27_editor_controller_metrics_recalculation(self):
+        """FASE 5: Comprova recálculo automático de chirps e métricas fisiológicas
+        via CricketAnalyzer.regroup_chirps e sincronização no SessionContext e UI."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        metrics_spy = MagicMock()
+        ec.metrics_recalculated.connect(metrics_spy)
+
+        # Executa recálculo explícito
+        metrics = ec.recalculate_metrics()
+        self.assertIsNotNone(metrics)
+        self.assertIn("total_chirps", metrics)
+        self.assertIn("media", metrics)
+        self.assertIn("moda", metrics)
+        metrics_spy.assert_called_once()
+
+        # Comprova que o cache de análise e active_heavy_data receberam os novos valores
+        heavy = self.window.ctx.active_heavy_data
+        self.assertEqual(heavy["chirps"], metrics["chirps"])
+        self.assertEqual(heavy["media"], metrics["media"])
+        self.assertEqual(heavy["moda"], metrics["moda"])
+
+        cached = self.window.ctx.analysis_cache[fname]
+        self.assertEqual(cached["chirps"], metrics["chirps"])
+
+    def test_28_editor_controller_learning_integration(self):
+        """FASE 5: Comprova a integração do EditorController com PulseLearner, persistência
+        de correções no arquivo de configuração e emissão dos sinais de ciclo de vida."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        started_spy = MagicMock()
+        completed_spy = MagicMock()
+        ec.learning_started.connect(started_spy)
+        ec.learning_completed.connect(completed_spy)
+
+        # Treinamento síncrono/bloqueante para validação determinística
+        success, num_corr = ec.learn_from_corrections(filename=fname, blocking=True)
+        self.assertTrue(success)
+        started_spy.assert_called_once()
+        completed_spy.assert_called_once()
+        self.assertEqual(completed_spy.call_args[0][1], fname)
+
+        # Comprova persistência das correções no SessionContext
+        self.assertIn(fname, self.window.ctx.corrections_by_file)
+        self.assertEqual(self.window.ctx.corrections_by_file[fname], list(self.window.ctx.peaks_user_verified))
+
+    def test_29_editor_controller_undo_metadata_restoration(self):
+        """FASE 5 Loop 3: Comprova que o Undo restaura integralmente peaks_user_verified E pulse_metadata,
+        eliminando metadados órfãos e recuperando metadados de pulsos removidos e restaurados."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        # Estado inicial sem metadados manuais
+        initial_meta = dict(self.window.ctx.pulse_metadata or {})
+        initial_verified = list(self.window.ctx.peaks_user_verified)
+
+        # 1. Adiciona pulso manual com freq e amp
+        novel_time = 0.35
+        novel_sample = int(round(novel_time * rate))
+        ec.toggle_peak_marker(novel_time, f_click=5432.0, amp_click=0.88)
+
+        self.assertIn(novel_sample, self.window.ctx.peaks_user_verified)
+        self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["freq"], 5432.0)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["amp"], 0.88)
+
+        # 2. Desfaz adição: deve remover o pulso E remover o metadado (sem estado órfão)
+        undone = ec.undo()
+        self.assertTrue(undone)
+        self.assertNotIn(novel_sample, self.window.ctx.peaks_user_verified)
+        self.assertNotIn(novel_sample, self.window.ctx.pulse_metadata)
+        self.assertEqual(self.window.ctx.pulse_metadata, initial_meta)
+
+        # 3. Adiciona novamente com metadados
+        ec.toggle_peak_marker(novel_time, f_click=5432.0, amp_click=0.88)
+        self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
+
+        # 4. Remove o pulso com metadado: o metadado deve ser eliminado imediatamente
+        ec.toggle_peak_marker(novel_time)
+        self.assertNotIn(novel_sample, self.window.ctx.peaks_user_verified)
+        self.assertNotIn(novel_sample, self.window.ctx.pulse_metadata)
+
+        # 5. Desfaz remoção: o pulso E seus metadados originais devem ser restaurados
+        undone = ec.undo()
+        self.assertTrue(undone)
+        self.assertIn(novel_sample, self.window.ctx.peaks_user_verified)
+        self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["freq"], 5432.0)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["amp"], 0.88)
+
+    def test_30_render_dashboard_preserves_undo_on_same_file(self):
+        """FASE 5 Loop 3: Comprova que render_dashboard() preserva o histórico de Undo em re-renderizações
+        normais do mesmo arquivo (ex: ajuste de tolerância), mas limpa em troca de arquivo ou reanálise."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        # Realiza uma edição para ter histórico de Undo
+        pk = self.window.ctx.peaks_user_verified[0]
+        ec.toggle_peak_marker(pk / rate)
+        self.assertTrue(ec.can_undo)
+        self.assertEqual(len(ec._pulse_edit_history), 1)
+
+        # 1. Re-renderiza o MESMO arquivo (ex: alteração de tolerância de frequência ou redraw)
+        self.window.plot_renderers.render_dashboard(fname)
+        # O histórico de Undo DEVE ser preservado
+        self.assertTrue(ec.can_undo, "render_dashboard no mesmo arquivo não deve apagar o histórico de Undo")
+        self.assertEqual(len(ec._pulse_edit_history), 1)
+
+        # 2. Reanálise do mesmo arquivo: produz novo cache heavy_data
+        # Simula nova análise substituindo o dicionário
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+        # O histórico de Undo DEVE ser resetado após reanálise
+        self.assertFalse(ec.can_undo, "Reanálise completa que substitui o cache deve resetar o histórico de Undo")
+        self.assertEqual(len(ec._pulse_edit_history), 0)
+
+        # 3. Troca de arquivo: cria arquivo fictício no cache
+        ec.toggle_peak_marker(pk / rate)
+        self.assertTrue(ec.can_undo)
+
+        fname_b = "sample_b.wav"
+        self.window.ctx.analysis_cache[fname_b] = dict(self.window.ctx.active_heavy_data)
+        self.window.plot_renderers.render_dashboard(fname_b)
+        self.assertFalse(ec.can_undo, "Troca para outro arquivo deve resetar o histórico de Undo")
+
+    def test_31_editor_controller_atomic_save_corrections(self):
+        """FASE 5 Loop 3: Comprova que save_corrections_state() realiza gravação atômica
+        e trata exceções sem corromper o arquivo ou deixar resíduos temporários."""
+        ec = self.window.editor_controller
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_cfg = os.path.join(tmp_dir, "test_config.json")
+            orig_cfg = ec.config_file
+            try:
+                ec.config_file = tmp_cfg
+                self.window.ctx.corrections_by_file = {
+                    "test.wav": [100, {"idx": 200, "freq": 5000.0, "amp": 0.5}]
+                }
+
+                # Gravação atômica bem sucedida
+                success = ec.save_corrections_state()
+                self.assertTrue(success)
+                self.assertTrue(os.path.exists(tmp_cfg))
+
+                with open(tmp_cfg, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                self.assertIn("corrections_by_file", loaded)
+                self.assertEqual(loaded["corrections_by_file"]["test.wav"][0], 100)
+                self.assertEqual(loaded["corrections_by_file"]["test.wav"][1]["freq"], 5000.0)
+
+                # Tratamento de erro sem exceção não capturada
+                ec.config_file = os.path.join(tmp_dir, "nonexistent_dir", "sub", "config.json")
+                with patch('os.replace', side_effect=OSError("Falha simulada de disco")):
+                    err_result = ec.save_corrections_state()
+                    self.assertFalse(err_result)
+            finally:
+                ec.config_file = orig_cfg
+
+    def test_32_learn_from_corrections_preserves_metadata_and_sync(self):
+        """FASE 5 Loop 3: Comprova que learn_from_corrections() preserva metadados enriquecidos
+        dos pulsos (freq/amp) em corrections_by_file e sincroniza a coerência com o arquivo ativo."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        # Adiciona pulso com metadados
+        novel_time = 0.35
+        novel_sample = int(round(novel_time * rate))
+        ec.toggle_peak_marker(novel_time, f_click=5300.0, amp_click=0.77)
+
+        # Executa aprendizado supervisionado
+        success, _ = ec.learn_from_corrections(filename=fname, blocking=True)
+        self.assertTrue(success)
+
+        # Comprova que as correções salvas contêm o dicionário com metadados e não apenas inteiros
+        saved_corr = self.window.ctx.corrections_by_file[fname]
+        meta_items = [item for item in saved_corr if isinstance(item, dict)]
+        self.assertEqual(len(meta_items), 1)
+        self.assertEqual(meta_items[0]["idx"], novel_sample)
+        self.assertEqual(meta_items[0]["freq"], 5300.0)
+        self.assertEqual(meta_items[0]["amp"], 0.77)
+
+        # Comprova que ao reativar o arquivo do cache, pulse_metadata é recuperado
+        self.window.ctx.activate_cached_file(fname)
+        self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
+        self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["freq"], 5300.0)
+
+        # Comprova tratamento de arquivo inexistente / não sincronizado
+        failed_spy = MagicMock()
+        ec.learning_failed.connect(failed_spy)
+        res_ok, res_msg = ec.learn_from_corrections(filename="arquivo_inexistente.wav", blocking=True)
+        self.assertFalse(res_ok)
+        failed_spy.assert_called_once()
+
+    def test_33_metrics_cleared_when_less_than_two_peaks(self):
+        """FASE 5 Loop 4: Comprova que quando restam menos de 2 pulsos verificados (< 2),
+        as métricas (chirps, media, moda) e os rótulos de UI são explicitamente limpos,
+        evitando valores obsoletos em tela, e devidamente restaurados no undo."""
+        fname = "sample_chirp.wav"
+        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
+
+        ec = self.window.editor_controller
+        rate = float(self.window.ctx.active_heavy_data["rate"])
+
+        # Estado inicial com múltiplos chilreios
+        self.assertGreater(len(self.window.ctx.peaks_user_verified), 2)
+        initial_chirps = list(self.window.ctx.active_heavy_data["chirps"])
+        self.assertGreater(len(initial_chirps), 0)
+
+        metrics_spy = MagicMock()
+        ec.metrics_recalculated.connect(metrics_spy)
+
+        # Remove pulsos sucessivamente até restar apenas 1 pulso
+        all_peaks = list(self.window.ctx.peaks_user_verified)
+        for pk in all_peaks[1:]:
+            ec.toggle_peak_marker(pk / rate)
+
+        self.assertEqual(len(self.window.ctx.peaks_user_verified), 1)
+
+        # Comprova que as métricas foram limpas
+        heavy = self.window.ctx.active_heavy_data
+        self.assertEqual(heavy["chirps"], [])
+        self.assertEqual(heavy["chirp_peaks_list"], [])
+        self.assertEqual(heavy["media"], 0.0)
+        self.assertEqual(heavy["moda"], 0.0)
+
+        # Comprova atualização do cache e UI
+        cached = self.window.ctx.analysis_cache[fname]
+        self.assertEqual(cached["chirps"], [])
+        self.assertEqual(cached["media"], 0.0)
+        self.assertEqual(self.window.lbl_total.text(), "0")
+        self.assertEqual(self.window.lbl_metric_sub.text(), "Moda: —   |   Média: —")
+
+        # Comprova payload do sinal emitido
+        last_metrics = metrics_spy.call_args[0][0]
+        self.assertEqual(last_metrics["total_chirps"], 0)
+        self.assertEqual(last_metrics["media"], 0.0)
+
+        # Desfaz as remoções: métricas devem ser recalculadas e restauradas
+        for _ in range(len(all_peaks) - 1):
+            ec.undo()
+
+        self.assertEqual(len(self.window.ctx.peaks_user_verified), len(all_peaks))
+        self.assertEqual(self.window.ctx.active_heavy_data["chirps"], initial_chirps)
+        self.assertGreater(len(self.window.ctx.active_heavy_data["chirps"]), 0)
+        self.assertNotEqual(self.window.lbl_total.text(), "0")
+
+    def test_34_session_context_transactional_batch_update_and_atomic_undo(self):
+        """FASE 5 Loop 4: Comprova que SessionContext.batch_update() impede a emissão
+        de estados intermediários parcialmente atualizados aos observadores de state_changed,
+        tanto no undo() quanto no activate_cached_file()."""
+        ctx = self.window.ctx
+        ec = self.window.editor_controller
+
+        observed_states = []
+        def _on_state_changed(category):
+            # No momento em que qualquer sinal é emitido, registra o estado observado
+            observed_states.append({
+                "category": category,
+                "verified": list(ctx.peaks_user_verified or []),
+                "meta": dict(ctx.pulse_metadata or {}),
+            })
+
+        ctx.state_changed.connect(_on_state_changed)
+
+        # 1. Configura estado A consistente: 1 pulso sem metadados
+        ctx.update_verified_and_metadata([100], {})
+        observed_states.clear()
+
+        # 2. Configura estado B: 2 pulsos, sendo o segundo com metadados
+        # Salva estado A no histórico do EditorController
+        ec._pulse_edit_history = [{"peaks": [100], "metadata": {}}]
+        ctx.update_verified_and_metadata([100, 200], {200: {"idx": 200, "freq": 5000.0, "amp": 0.8}})
+        observed_states.clear()
+
+        # 3. Executa undo() para retornar a A
+        undone = ec.undo()
+        self.assertTrue(undone)
+
+        # Comprova que em NENHUMA emissão de state_changed houve estado parcial
+        # (por exemplo: verified=[100] mas meta ainda contendo 200)
+        self.assertGreater(len(observed_states), 0)
+        for obs in observed_states:
+            # Em todas as notificações emitidas, verified e meta devem ser os do estado restaurado A
+            self.assertEqual(obs["verified"], [100], f"Estado intermediário observado: {obs}")
+            self.assertEqual(obs["meta"], {}, f"Metadado órfão intermediário observado: {obs}")
+
+        # 4. Testa batch_update() direto e adiamento de sinais
+        observed_states.clear()
+        with ctx.batch_update():
+            ctx.active_filename = "arquivo_batch.wav"
+            ctx.use_machine_learning = True
+            # Durante o bloco, nenhum sinal foi emitido ainda
+            self.assertEqual(len(observed_states), 0)
+
+        # Ao sair do bloco, os sinais pendentes consolidados foram emitidos
+        categories = [obs["category"] for obs in observed_states]
+        self.assertIn("active_filename", categories)
+        self.assertIn("use_machine_learning", categories)
 
 if __name__ == '__main__':
     unittest.main()

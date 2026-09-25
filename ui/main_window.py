@@ -358,6 +358,19 @@ class MainWindow(QMainWindow):
         else:
             self._compat_last_draw_time = value
 
+    # ---------- FASE 5: Aliases de compatibilidade para EditorController ----------
+    @property
+    def _pulse_edit_history(self):
+        ec = getattr(self, "editor_controller", None)
+        return ec._pulse_edit_history if ec is not None else getattr(self, "_compat_pulse_edit_history", [])
+    @_pulse_edit_history.setter
+    def _pulse_edit_history(self, value):
+        ec = getattr(self, "editor_controller", None)
+        if ec is not None:
+            ec._pulse_edit_history = value
+        else:
+            self._compat_pulse_edit_history = value
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
@@ -479,6 +492,19 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.plot_renderers.set_navigation_controller(self.nav_controller)
+
+        # FASE 5 — EditorController: edição de pulsos, undo history e retreinamento
+        from ui.controllers.editor_controller import EditorController
+        self.editor_controller = EditorController(
+            session_context=self.ctx,
+            plot_renderers=self.plot_renderers,
+            navigation_controller=self.nav_controller,
+            pipeline_orchestrator=self.pipeline,
+            main_window=self,
+            parent=self,
+        )
+        self.plot_renderers.set_editor_controller(self.editor_controller)
+        self.nav_controller.pulse_edit_handler = self.editor_controller.toggle_peak_marker
 
         # Início limpo: nenhum arquivo fictício é carregado automaticamente.
 
@@ -3542,7 +3568,9 @@ class MainWindow(QMainWindow):
                 pass
 
     def _find_nearest_user_peak(self, time_sec, tolerance_sec=0.005):
-        """Encontra o pico mais próximo ao clique, com tolerância precisa de 5 ms."""
+        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            return self.editor_controller.find_nearest_user_peak(time_sec, tolerance_sec)
         if not self.peaks_user_verified or not self.active_heavy_data:
             return None
         rate = float(self.active_heavy_data.get('rate', 1.0))
@@ -3558,7 +3586,9 @@ class MainWindow(QMainWindow):
         return None
 
     def _toggle_peak_marker(self, time_sec, panel=None, event=None, f_click=None, amp_click=None):
-        """Alterna a classificação do pico mais próximo com snapping inteligente em pixels ou adiciona um novo pico."""
+        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            return self.editor_controller.toggle_peak_marker(time_sec, panel, event, f_click, amp_click)
         if not self.active_heavy_data:
             return
         rate = float(self.active_heavy_data.get('rate', 1.0))
@@ -3669,10 +3699,19 @@ class MainWindow(QMainWindow):
         self.pipeline._adapt_advanced_params()
 
     def _undo_pulse_edit(self):
+        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            return self.editor_controller.undo()
         if not self._pulse_edit_history:
             return
-        self.peaks_user_verified = self._pulse_edit_history.pop()
+        entry = self._pulse_edit_history.pop()
+        if isinstance(entry, dict) and "peaks" in entry:
+            self.peaks_user_verified = list(entry["peaks"])
+            self.pulse_metadata = dict(entry.get("metadata", {}))
+        else:
+            self.peaks_user_verified = list(entry)
         self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
+        self.active_heavy_data['pulse_metadata'] = dict(getattr(self, "pulse_metadata", {}))
         if self.active_filename:
             combined = []
             for p in self.peaks_user_verified:
@@ -3717,7 +3756,9 @@ class MainWindow(QMainWindow):
         self._refresh_user_peak_markers()
 
     def _save_corrections_state(self):
-        """Persiste correções sem exibir o diálogo de confirmação das configurações."""
+        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            return self.editor_controller.save_corrections_state()
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
@@ -3730,6 +3771,7 @@ class MainWindow(QMainWindow):
             print(f"Erro ao persistir correções: {exc}")
 
     def learn_from_corrections(self):
+        """Coordena o retreinamento do classificador supervisionado com feedback de UI."""
         curr = self.list_widget.currentItem()
         filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
         if not filename:
@@ -3740,8 +3782,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Sem dados", "Primeiro carregue um arquivo WAV antes de treinar o classificador.")
             return
 
-        detected = list(self.peaks_detected)
-        verified = list(self.peaks_user_verified)
+        detected = list(self.peaks_detected or [])
+        verified = list(self.peaks_user_verified or [])
         detected_set = set(int(p) for p in detected)
         verified_set = set(int(p) for p in verified)
 
@@ -3749,12 +3791,50 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Dados insuficientes", "Você precisa ter tanto pulsos detectados quanto verificados para treinar.")
             return
 
-        # O usuário confirmou que o estado atual é o correto, então salvamos no cache
-        self.corrections_by_file[filename] = list(verified)
-        self._save_corrections_state()
-
         spinner = ButtonSpinner(self.btn_learn_corrections, "Treinando...")
         spinner.start()
+
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            ec = self.editor_controller
+
+            def _on_finished(num_corrections, fn):
+                try:
+                    ec.learning_completed.disconnect(_on_finished)
+                    ec.learning_failed.disconnect(_on_error)
+                except Exception:
+                    pass
+                spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
+                if hasattr(self, 'lbl_model_status'):
+                    self._update_ml_toggle_ui()
+                QMessageBox.information(
+                    self, 
+                    I18N[self.lang]['success'], 
+                    f'Modelo treinado com sucesso!\n\n'
+                    f'Arquivo: {fn}\n'
+                    f'Picos analisados: {len(detected)}\n'
+                    f'Correções aprendidas: {num_corrections}\n'
+                    f'Picos verificados: {len(verified)}\n\n'
+                    f'O modelo com 500 árvores foi atualizado e salvo.'
+                )
+
+            def _on_error(err_msg):
+                try:
+                    ec.learning_completed.disconnect(_on_finished)
+                    ec.learning_failed.disconnect(_on_error)
+                except Exception:
+                    pass
+                spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
+                QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{err_msg}')
+
+            ec.learning_completed.connect(_on_finished)
+            ec.learning_failed.connect(_on_error)
+            worker = ec.learn_from_corrections(filename=filename, blocking=False)
+            self._learn_worker = worker
+            return
+
+        # Fallback legado (FASE 7)
+        self.corrections_by_file[filename] = list(verified)
+        self._save_corrections_state()
 
         rate = float(self.active_heavy_data.get('rate', 1.0))
         env = self.active_heavy_data.get('env')
@@ -3771,7 +3851,7 @@ class MainWindow(QMainWindow):
         worker = GenericWorker(_task)
         self._learn_worker = worker
 
-        def _on_finished(num_corrections):
+        def _legacy_on_finished(num_corrections):
             spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
             if hasattr(self, 'lbl_model_status'):
                 self._update_ml_toggle_ui()
@@ -3786,12 +3866,12 @@ class MainWindow(QMainWindow):
                 f'O modelo com 500 árvores foi atualizado e salvo.'
             )
 
-        def _on_error(err_msg):
+        def _legacy_on_error(err_msg):
             spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
             QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{err_msg}')
 
-        worker.finished_signal.connect(_on_finished)
-        worker.error_signal.connect(_on_error)
+        worker.finished_signal.connect(_legacy_on_finished)
+        worker.error_signal.connect(_legacy_on_error)
         worker.start()
 
     def on_double_click(self, event):
@@ -3966,7 +4046,9 @@ class MainWindow(QMainWindow):
             panel.canvas.draw_idle()
 
     def _update_pulse_edit_buttons(self, activated_panel):
-        """Quando um painel é ativado para edição de pulsos, desativa os outros."""
+        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
+        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
+            return self.editor_controller.update_pulse_edit_buttons(activated_panel)
         for panel in self.all_panels:
             if panel != activated_panel:
                 panel.pulse_edit_mode = False

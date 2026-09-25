@@ -1,15 +1,21 @@
+from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal
 
 class SessionContext(QObject):
     """
     Fonte da Verdade (Source of Truth) para o estado compartilhado da aplicação.
     Emite state_changed(category) sempre que uma propriedade gerenciada é atribuída.
+    Suporta transações atômicas via batch_update() para evitar emissão de estados parciais.
     """
     state_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        # Controle de transação/batch para atualizações atômicas
+        self._batch_depth = 0
+        self._pending_state_changes = set()
+
         # Estado Analítico / Heavy Data
         self._active_heavy_data = {}
         self._analysis_cache = {}
@@ -38,8 +44,41 @@ class SessionContext(QObject):
         }
 
     def emit_state_changed(self, category: str):
-        """Dispara o sinal informando que uma fatia do estado foi atualizada."""
+        """Dispara o sinal informando que uma fatia do estado foi atualizada,
+        ou adia a emissão se estiver dentro de uma transação batch_update()."""
+        if getattr(self, "_batch_depth", 0) > 0:
+            self._pending_state_changes.add(category)
+            return
         self.state_changed.emit(category)
+
+    @contextmanager
+    def batch_update(self):
+        """Gerenciador de contexto para atualizações transacionais atômicas.
+        Adia a emissão de sinais state_changed até que todas as atribuições
+        sejam concluídas, emitindo os sinais consolidados apenas no final."""
+        self._batch_depth = getattr(self, "_batch_depth", 0) + 1
+        try:
+            yield self
+        except Exception:
+            if self._batch_depth == 1:
+                self._pending_state_changes.clear()
+            raise
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0 and self._pending_state_changes:
+                pending = sorted(self._pending_state_changes)
+                self._pending_state_changes.clear()
+                for cat in pending:
+                    self.state_changed.emit(cat)
+
+    transaction = batch_update  # Alias semântico
+
+    def update_verified_and_metadata(self, peaks_user_verified, pulse_metadata):
+        """Atualiza atomicamente peaks_user_verified e pulse_metadata,
+        garantindo que nenhum observador veja estado parcial ou dessincronizado."""
+        with self.batch_update():
+            self.peaks_user_verified = list(peaks_user_verified)
+            self.pulse_metadata = dict(pulse_metadata)
 
     # --- Properties com emissão automática de state_changed ---
 
@@ -150,7 +189,7 @@ class SessionContext(QObject):
     def activate_cached_file(self, filename: str) -> bool:
         """Ativa atomicamente no SessionContext todo o estado associado a um arquivo em cache.
 
-        Atualiza de forma consistente:
+        Atualiza de forma transacional e consistente:
         - active_filename
         - active_heavy_data
         - peaks_detected
@@ -161,12 +200,6 @@ class SessionContext(QObject):
             return False
 
         d = self._analysis_cache[filename]
-        self._active_filename = filename
-        self._active_heavy_data = d
-        self._peaks_detected = list(d.get("peaks_detected", []))
-
-        # Sincroniza peaks_user_verified e pulse_metadata:
-        # Prioriza correções armazenadas em corrections_by_file se existirem, senão extrai do cache
         stored_corr = self._corrections_by_file.get(filename)
         if stored_corr is not None:
             extracted = []
@@ -177,16 +210,18 @@ class SessionContext(QObject):
                     extracted_meta[item["idx"]] = item
                 else:
                     extracted.append(int(item))
-            self._peaks_user_verified = extracted
-            self._pulse_metadata = extracted_meta
+            verified_target = extracted
+            meta_target = extracted_meta
         else:
-            self._peaks_user_verified = list(d.get("peaks_user_verified", self._peaks_detected))
-            self._pulse_metadata = dict(d.get("pulse_metadata", {}))
+            verified_target = list(d.get("peaks_user_verified", d.get("peaks_detected", [])))
+            meta_target = dict(d.get("pulse_metadata", {}))
 
-        self.emit_state_changed("active_filename")
-        self.emit_state_changed("active_heavy_data")
-        self.emit_state_changed("peaks_detected")
-        self.emit_state_changed("peaks_user_verified")
-        self.emit_state_changed("pulse_metadata")
+        with self.batch_update():
+            self.active_filename = filename
+            self.active_heavy_data = d
+            self.peaks_detected = list(d.get("peaks_detected", []))
+            self.peaks_user_verified = verified_target
+            self.pulse_metadata = meta_target
+
         return True
 
