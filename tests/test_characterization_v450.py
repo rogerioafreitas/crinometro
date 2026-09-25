@@ -529,6 +529,11 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(self.window.lbl_summary_file.text(), dummy_file)
         self.assertEqual(self.window.ctx.active_heavy_data["duration"], 12.34)
 
+        # 7. render_file com arquivo inexistente no cache preserva estado sem renderização inconsistente
+        old_active = pr.session_context.active_filename
+        pr.render_file("arquivo_inexistente_no_cache.wav")
+        self.assertEqual(pr.session_context.active_filename, old_active)
+
     def test_15_sync_render_invokes_plot_renderers_engines(self):
         """FASE 3: Comprova que rotinas de navegação da MainWindow (_sync_render)
 
@@ -646,7 +651,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 3: Comprova que run_analysis(render=True) utiliza atomicamente
 
         activate_cached_file(), sincronizando todo o estado ativo mesmo quando
-        outro arquivo já estava ativo anteriormente."""
+        outro arquivo já estava ativo anteriormente, com resultados deliberadamente distintos."""
         fname_a = "file_A.wav"
         fname_b = "file_B.wav"
         self.window.loaded_files[fname_a] = self.sample_wav
@@ -656,22 +661,49 @@ class TestCharacterization(unittest.TestCase):
 
         params = DEFAULT_ALGO_PARAMS.copy()
 
-        # 1. Analisa e ativa o Arquivo A
-        self.window.pipeline.run_analysis(fname_a, params, render=True)
-        self.assertEqual(self.window.ctx.active_filename, fname_a)
-        heavy_a = self.window.ctx.active_heavy_data
+        # Obtém uma tupla real completa do CricketAnalyzer para servir de base estrutural
+        real_tuple = CricketAnalyzer.analyze(self.sample_wav, params)
 
-        # 2. Analisa o Arquivo B com render=True (deve comutar atomicamente TODO o estado)
-        self.window.pipeline.run_analysis(fname_b, params, render=True)
-        self.assertEqual(self.window.ctx.active_filename, fname_b)
-        self.assertIs(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[fname_b])
-        self.assertIsNot(self.window.ctx.active_heavy_data, heavy_a)
-        self.assertEqual(self.window.ctx.peaks_detected, self.window.ctx.analysis_cache[fname_b]["peaks_detected"])
-        self.assertEqual(self.window.ctx.peaks_user_verified, self.window.ctx.analysis_cache[fname_b]["peaks_user_verified"])
-        self.assertEqual(self.window.ctx.pulse_metadata, self.window.ctx.analysis_cache[fname_b]["pulse_metadata"])
+        # Configura resultado analítico deliberadamente distinto para o Arquivo A
+        list_a = list(real_tuple)
+        list_a[4] = [100, 200]    # peaks
+        list_a[15] = 4500.0       # carrier_freq
+        res_a = tuple(list_a)
+
+        # Configura resultado analítico deliberadamente distinto para o Arquivo B
+        list_b = list(real_tuple)
+        list_b[4] = [500, 700]    # peaks
+        list_b[15] = 6200.0       # carrier_freq
+        res_b = tuple(list_b)
+
+        # Mocka CricketAnalyzer.analyze retornando res_a no 1º run_analysis e res_b no 2º
+        with patch.object(CricketAnalyzer, "analyze", side_effect=[res_a, res_b]):
+            # 1. Analisa e ativa o Arquivo A
+            self.window.pipeline.run_analysis(fname_a, params, render=True)
+            self.assertEqual(self.window.ctx.active_filename, fname_a)
+            self.assertEqual(self.window.ctx.peaks_detected, [100, 200])
+            self.assertEqual(self.window.ctx.peaks_user_verified, [100, 200])
+            self.assertAlmostEqual(self.window.ctx.active_heavy_data["carrier_freq"], 4500.0)
+
+            # 2. Analisa o Arquivo B com render=True (deve comutar atomicamente TODO o estado)
+            self.window.pipeline.run_analysis(fname_b, params, render=True)
+
+            # Validações estritas comprovando que todo o estado ativo pertence a B e NADA a A
+            self.assertEqual(self.window.ctx.active_filename, fname_b)
+            self.assertIs(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[fname_b])
+
+            self.assertEqual(self.window.ctx.peaks_detected, [500, 700])
+            self.assertNotEqual(self.window.ctx.peaks_detected, [100, 200])
+
+            self.assertEqual(self.window.ctx.peaks_user_verified, [500, 700])
+            self.assertNotEqual(self.window.ctx.peaks_user_verified, [100, 200])
+
+            self.assertAlmostEqual(self.window.ctx.active_heavy_data["carrier_freq"], 6200.0)
+            self.assertNotAlmostEqual(self.window.ctx.active_heavy_data["carrier_freq"], 4500.0)
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

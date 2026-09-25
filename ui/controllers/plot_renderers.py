@@ -167,8 +167,13 @@ class PlotRenderers:
 
         # Ativa atomicamente todo o estado analítico do arquivo no SessionContext
         ctx = self.session_context
-        if filename and filename in ctx.analysis_cache:
-            ctx.activate_cached_file(filename)
+        if filename:
+            if filename in ctx.analysis_cache:
+                ctx.activate_cached_file(filename)
+            elif filename != ctx.active_filename:
+                # Arquivo não analisado ou inexistente no cache: interrompe renderização
+                # para evitar apresentar dados de outro arquivo com rótulo incorreto
+                return
         d = ctx.active_heavy_data
 
         if not d:
