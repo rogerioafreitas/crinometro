@@ -1007,83 +1007,21 @@ class MainWindow(QMainWindow):
             panel.canvas.mpl_connect("motion_notify_event", self.on_motion)
             panel.canvas.mpl_connect("axes_leave_event", self.on_axes_leave)
 
-        # CONTROLES DE REPRODUÇÃO — velocidade à esquerda, play no centro, volume à direita
-        self.playback_card = QFrame()
-        self.playback_card.setObjectName("playbackCard")
-        self.playback_card.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        root_play = QVBoxLayout(self.playback_card)
-        root_play.setContentsMargins(14, 5, 14, 5)
-        root_play.setSpacing(0)
-        row = QHBoxLayout()
-        row.setContentsMargins(0,0,0,0)
-        row.setSpacing(12)
-        row.addStretch(2)
-
-        self.btn_speed = self._transport_button("1×", "Reduzir velocidade de reprodução")
-        self.btn_speed.setObjectName("speedButton")
-        self.btn_speed.setFixedSize(50, 38)
-        self.btn_speed.clicked.connect(self.cycle_playback_speed)
-        row.addWidget(self.btn_speed, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        center = QWidget()
-        center.setObjectName("playCenter")
-        center.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        center_l = QVBoxLayout(center)
-        center_l.setContentsMargins(0,0,0,0)
-        center_l.setSpacing(0)
-        center_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.btn_play = self._transport_button("", "Reproduzir", play=True)
-        self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_play.setAutoDefault(False)
-        self.btn_play.setDefault(False)
-        self.btn_play.setFlat(True)
-        self.btn_play.setFixedSize(46,46)
-        self.btn_play.setIconSize(QSize(19,19))
-        self.btn_play.clicked.connect(self.toggle_playback)
-        center_l.addWidget(self.btn_play,0,Qt.AlignmentFlag.AlignCenter)
-        self.lbl_elapsed = QLabel("00:00.00 / 00:00.00")
-        self.lbl_elapsed.setObjectName("elapsedLabel")
-        self.lbl_elapsed.setFixedWidth(138)
-        self.lbl_elapsed.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        center_l.addWidget(self.lbl_elapsed,0,Qt.AlignmentFlag.AlignCenter)
-        row.addWidget(center,0,Qt.AlignmentFlag.AlignVCenter)
-
-        self.volume_cluster = QWidget()
-        self.volume_cluster.setObjectName("volumeCluster")
-        self.volume_cluster.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        vol_l = QHBoxLayout(self.volume_cluster)
-        vol_l.setContentsMargins(0,0,0,0)
-        vol_l.setSpacing(6)
-        self.lbl_volume = QLabel()
-        self.lbl_volume.setObjectName("volumeLabel")
-        self.lbl_volume.setPixmap(make_ui_icon("volume", size=16).pixmap(16,16))
-        self.lbl_volume.setFixedSize(18,18)
-        vol_l.addWidget(self.lbl_volume)
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
-        self.volume_slider.setObjectName("volumeSlider")
-        self.volume_slider.setRange(0,100)
-        self.volume_slider.setValue(80)
-        self.volume_slider.setFixedWidth(120)
-        self.volume_slider.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.volume_slider.valueChanged.connect(lambda val: self.audio_output.setVolume(val / 100.0))
-        vol_l.addWidget(self.volume_slider)
-        row.addWidget(self.volume_cluster,0,Qt.AlignmentFlag.AlignVCenter)
-        row.addStretch(2)
-        root_play.addLayout(row)
-
-        # CONTÊINER ÚNICO: controles + cursor/timeline do áudio
-        self.transport_timeline_card = QFrame()
-        self.transport_timeline_card.setObjectName("transportTimelineCard")
-        self.transport_timeline_card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.transport_timeline_card.setAutoFillBackground(True)
-        transport_timeline_layout = QVBoxLayout(self.transport_timeline_card)
-        transport_timeline_layout.setContentsMargins(8, 8, 8, 8)
-        transport_timeline_layout.setSpacing(2)
-        transport_timeline_layout.addWidget(self.playback_card)
-
-        self.timeline = TimelineWidget(self.set_position)
-        transport_timeline_layout.addWidget(self.timeline)
-        right_layout.addWidget(self.transport_timeline_card)
+        from ui.panels import AudioTransportPanel
+        self.transport_panel = AudioTransportPanel()
+        self.transport_panel.play_toggled.connect(self.toggle_playback)
+        self.transport_panel.speed_cycled.connect(self.cycle_playback_speed)
+        self.transport_panel.volume_changed.connect(lambda val: self.audio_output.setVolume(val / 100.0))
+        self.transport_panel.position_seeked.connect(self.set_position)
+        
+        # Manter compatibilidade com a MainWindow acessando os controles
+        self.btn_play = self.transport_panel.btn_play
+        self.lbl_elapsed = self.transport_panel.lbl_elapsed
+        self.btn_speed = self.transport_panel.btn_speed
+        self.timeline = self.transport_panel.timeline
+        self.volume_slider = self.transport_panel.volume_slider
+        
+        right_layout.addWidget(self.transport_panel)
 
         self.left_panel.setMinimumWidth(220)
         self.left_panel.setMaximumWidth(450)
@@ -1103,16 +1041,6 @@ class MainWindow(QMainWindow):
         
         # Sincroniza labels e botões de IA agora que todos estão criados
         self._update_ml_toggle_ui()
-
-    def _transport_button(self, text, tooltip, play=False, checkable=False):
-        b = QPushButton(text)
-        b.setObjectName("playButton" if play else "transport")
-        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        b.setFixedSize(44 if not play else 46, 44 if not play else 46)
-        b.setToolTip(tooltip)
-        b.setCheckable(checkable)
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        return b
 
     @staticmethod
     def _file_icon():

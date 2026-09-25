@@ -1417,6 +1417,43 @@ class TestCharacterization(unittest.TestCase):
         self.assertIn("active_filename", categories)
         self.assertIn("use_machine_learning", categories)
 
+
+    def test_35_audio_transport_panel_integration(self):
+        print("\nFASE 6: Comprova a extração da AudioTransportPanel e o roteamento de seus sinais visuais...")
+        from ui.panels import AudioTransportPanel
+        
+        # 1. Verifica se a MainWindow instanciou o painel isolado
+        self.assertTrue(hasattr(self.window, "transport_panel"))
+        self.assertIsInstance(self.window.transport_panel, AudioTransportPanel)
+        
+        # 2. Verifica se os aliases (propriedades) continuam válidos e mapeados
+        self.assertIs(self.window.btn_play, self.window.transport_panel.btn_play)
+        self.assertIs(self.window.btn_speed, self.window.transport_panel.btn_speed)
+        self.assertIs(self.window.lbl_elapsed, self.window.transport_panel.lbl_elapsed)
+        self.assertIs(self.window.volume_slider, self.window.transport_panel.volume_slider)
+        self.assertIs(self.window.timeline, self.window.transport_panel.timeline)
+        # 3. Verifica a fiação de sinais da interface com emissões reais
+        events = []
+        
+        self.window.transport_panel.play_toggled.connect(lambda: events.append('play'))
+        self.window.transport_panel.speed_cycled.connect(lambda: events.append('speed'))
+        self.window.transport_panel.volume_changed.connect(lambda v: events.append(f'vol:{v}'))
+        self.window.transport_panel.position_seeked.connect(lambda pos, final: events.append(f'seek:{pos}:{final}'))
+        
+        # Dispara as ações reais nos widgets encapsulados
+        self.window.transport_panel.btn_play.clicked.emit()
+        self.window.transport_panel.btn_speed.clicked.emit()
+        self.window.transport_panel.volume_slider.setValue(42)
+        self.window.transport_panel._on_timeline_seek(150.0, True)
+        
+        # Verifica se as emissões alcançaram o exterior do painel
+        self.assertIn('play', events)
+        self.assertIn('speed', events)
+        self.assertIn('vol:42', events)
+        self.assertIn('seek:150.0:True', events)
+
+        
+        
 if __name__ == '__main__':
     unittest.main()
 

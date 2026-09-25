@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
     QDoubleSpinBox, QSpinBox, QSlider, QComboBox, QAbstractSpinBox, QCheckBox
 )
-from PyQt6.QtCore import Qt, QSize, QPointF
+from PyQt6.QtCore import Qt, QSize, QPointF, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPolygonF, QPen
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -1669,3 +1669,126 @@ class TimelineWidget(QWidget):
         return f"{minutes:02d}:{secs:05.2f}"
 
 
+
+
+class AudioTransportPanel(QFrame):
+    """Painel de controles de transporte de áudio (Play, Velocidade, Volume e Timeline). FASE 6."""
+    
+    play_toggled = pyqtSignal()
+    speed_cycled = pyqtSignal()
+    volume_changed = pyqtSignal(int)
+    position_seeked = pyqtSignal(float, bool)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("transportTimelineCard")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setSpacing(2)
+        
+        # CONTROLES DE REPRODUÇÃO
+        self.playback_card = QFrame()
+        self.playback_card.setObjectName("playbackCard")
+        self.playback_card.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        root_play = QVBoxLayout(self.playback_card)
+        root_play.setContentsMargins(14, 5, 14, 5)
+        root_play.setSpacing(0)
+        
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        row.addStretch(2)
+
+        self.btn_speed = self._transport_button("1×", "Reduzir velocidade de reprodução")
+        self.btn_speed.setObjectName("speedButton")
+        self.btn_speed.setFixedSize(50, 38)
+        self.btn_speed.clicked.connect(self.speed_cycled.emit)
+        row.addWidget(self.btn_speed, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        center = QWidget()
+        center.setObjectName("playCenter")
+        center.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        center_l = QVBoxLayout(center)
+        center_l.setContentsMargins(0, 0, 0, 0)
+        center_l.setSpacing(0)
+        center_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.btn_play = self._transport_button("", "Reproduzir", play=True)
+        self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_play.setAutoDefault(False)
+        self.btn_play.setDefault(False)
+        self.btn_play.setFlat(True)
+        self.btn_play.setFixedSize(46, 46)
+        self.btn_play.setIconSize(QSize(19, 19))
+        self.btn_play.clicked.connect(self.play_toggled.emit)
+        center_l.addWidget(self.btn_play, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        self.lbl_elapsed = QLabel("00:00.00 / 00:00.00")
+        self.lbl_elapsed.setObjectName("elapsedLabel")
+        self.lbl_elapsed.setFixedWidth(138)
+        self.lbl_elapsed.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_l.addWidget(self.lbl_elapsed, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        row.addWidget(center, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.volume_cluster = QWidget()
+        self.volume_cluster.setObjectName("volumeCluster")
+        self.volume_cluster.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        vol_l = QHBoxLayout(self.volume_cluster)
+        vol_l.setContentsMargins(0, 0, 0, 0)
+        vol_l.setSpacing(6)
+        
+        self.lbl_volume = QLabel()
+        self.lbl_volume.setObjectName("volumeLabel")
+        self.lbl_volume.setPixmap(make_ui_icon("volume", size=16).pixmap(16, 16))
+        self.lbl_volume.setFixedSize(18, 18)
+        vol_l.addWidget(self.lbl_volume)
+        
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setObjectName("volumeSlider")
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(80)
+        self.volume_slider.setFixedWidth(120)
+        self.volume_slider.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.volume_slider.valueChanged.connect(self.volume_changed.emit)
+        vol_l.addWidget(self.volume_slider)
+        
+        row.addWidget(self.volume_cluster, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addStretch(2)
+        root_play.addLayout(row)
+
+        self.layout.addWidget(self.playback_card)
+        
+        self.timeline = TimelineWidget(self._on_timeline_seek)
+        self.layout.addWidget(self.timeline)
+
+    def _transport_button(self, text, tooltip, play=False, checkable=False):
+        b = QPushButton(text)
+        b.setObjectName("playButton" if play else "transport")
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setToolTip(tooltip)
+        if checkable:
+            b.setCheckable(True)
+        if not play:
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        return b
+        
+    def _on_timeline_seek(self, position_ms, is_final=False):
+        self.position_seeked.emit(position_ms, is_final)
+        
+    def set_play_icon(self, icon_name, icon_color):
+        self.btn_play.setIcon(make_ui_icon(icon_name, color=icon_color, size=19))
+        self.btn_play.setToolTip("Pausar" if icon_name == "pause" else "Reproduzir")
+        
+    def set_speed_text(self, text, tooltip):
+        self.btn_speed.setText(text)
+        self.btn_speed.setToolTip(tooltip)
+        
+    def set_elapsed_text(self, text):
+        self.lbl_elapsed.setText(text)
+        
+    def set_play_enabled(self, enabled):
+        self.btn_play.setEnabled(enabled)

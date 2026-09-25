@@ -87,6 +87,7 @@ def run_gate():
         "core/session_context.py",
         "core/engines.py",
         "ui/main_window.py",
+        "ui/panels.py",
         "docs/STATE_CONTRACT_v4.5.0.md",
         "docs/ROADMAP_v4.5.0_ARCH_AND_EXPORTS_REV2.md"
     ]
