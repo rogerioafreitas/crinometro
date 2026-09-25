@@ -597,13 +597,20 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(self.window.ctx.peaks_user_verified, [100])
         self.assertEqual(self.window.ctx.pulse_metadata, {100: {"idx": 100, "freq": 4500.0}})
 
-        # 2. Renderiza Arquivo B (deve alternar todo o estado atômico)
+        # 2. Renderiza Arquivo B (deve alternar todo o estado atômico e emitir state_changed)
+        emitted_signals = []
+        self.window.ctx.state_changed.connect(emitted_signals.append)
+
         pr.render_file(fname_b)
         self.assertEqual(self.window.ctx.active_filename, fname_b)
         self.assertIs(self.window.ctx.active_heavy_data, data_b)
         self.assertEqual(self.window.ctx.peaks_detected, [500, 700])
         self.assertEqual(self.window.ctx.peaks_user_verified, [700])
         self.assertEqual(self.window.ctx.pulse_metadata, {700: {"idx": 700, "freq": 6000.0}})
+
+        # Comprova emissão estrita dos sinais de mudança de estado da sessão
+        for expected_category in ["active_filename", "active_heavy_data", "peaks_detected", "peaks_user_verified", "pulse_metadata"]:
+            self.assertIn(expected_category, emitted_signals, f"Sinal state_changed('{expected_category}') não foi emitido na ativação.")
 
         # 3. Comprova que os marcadores visuais no painel pertencem estritamente a B
         # e nenhum marcador de A permanece no canvas
@@ -635,8 +642,37 @@ class TestCharacterization(unittest.TestCase):
                 f"Tempo proibido de A ({pa_time}) ainda presente nos marcadores plotados: {plotted_x}"
             )
 
+    def test_17_run_analysis_render_switches_complete_active_state(self):
+        """FASE 3: Comprova que run_analysis(render=True) utiliza atomicamente
+
+        activate_cached_file(), sincronizando todo o estado ativo mesmo quando
+        outro arquivo já estava ativo anteriormente."""
+        fname_a = "file_A.wav"
+        fname_b = "file_B.wav"
+        self.window.loaded_files[fname_a] = self.sample_wav
+        self.window.loaded_files[fname_b] = self.sample_wav
+        self.window.ctx.loaded_files[fname_a] = self.sample_wav
+        self.window.ctx.loaded_files[fname_b] = self.sample_wav
+
+        params = DEFAULT_ALGO_PARAMS.copy()
+
+        # 1. Analisa e ativa o Arquivo A
+        self.window.pipeline.run_analysis(fname_a, params, render=True)
+        self.assertEqual(self.window.ctx.active_filename, fname_a)
+        heavy_a = self.window.ctx.active_heavy_data
+
+        # 2. Analisa o Arquivo B com render=True (deve comutar atomicamente TODO o estado)
+        self.window.pipeline.run_analysis(fname_b, params, render=True)
+        self.assertEqual(self.window.ctx.active_filename, fname_b)
+        self.assertIs(self.window.ctx.active_heavy_data, self.window.ctx.analysis_cache[fname_b])
+        self.assertIsNot(self.window.ctx.active_heavy_data, heavy_a)
+        self.assertEqual(self.window.ctx.peaks_detected, self.window.ctx.analysis_cache[fname_b]["peaks_detected"])
+        self.assertEqual(self.window.ctx.peaks_user_verified, self.window.ctx.analysis_cache[fname_b]["peaks_user_verified"])
+        self.assertEqual(self.window.ctx.pulse_metadata, self.window.ctx.analysis_cache[fname_b]["pulse_metadata"])
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

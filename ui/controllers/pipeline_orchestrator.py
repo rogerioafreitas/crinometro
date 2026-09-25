@@ -270,11 +270,11 @@ class PipelineOrchestrator(QObject):
         heavy_data = self._apply_analysis_results(filename, res, params=params)
 
         if render:
-            self.ctx.active_heavy_data = heavy_data
-            self.ctx.active_filename = filename
+            self.ctx.activate_cached_file(filename)
             self.analysis_completed.emit(filename)
 
         return heavy_data
+
 
     # ------------------------------------------------------------------ #
     # 5. Execução em Lote Assíncrona (run_batch_analysis)                #

@@ -85,10 +85,12 @@ def check_ast_syntax_and_symbols(filepath):
 def run_gate():
     files_to_check = [
         "core/session_context.py",
+        "core/engines.py",
         "ui/main_window.py",
         "docs/STATE_CONTRACT_v4.5.0.md",
         "docs/ROADMAP_v4.5.0_ARCH_AND_EXPORTS_REV2.md"
     ]
+
     if os.path.exists("ui/controllers/pipeline_orchestrator.py"):
         files_to_check.append("ui/controllers/pipeline_orchestrator.py")
     if os.path.exists("ui/controllers/plot_renderers.py"):
