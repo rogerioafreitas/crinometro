@@ -1,4 +1,14 @@
 MODERN_DIALOG_THEME = """
+QPushButton#linkButton {
+    background: transparent;
+    border: none;
+    color: #3B82F6;
+    padding: 2px 8px;
+}
+QPushButton#linkButton:hover {
+    text-decoration: underline;
+    background: transparent;
+}
 QDialog {
     background-color: #18181B;
 }
@@ -58,7 +68,10 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
-    /* Set custom arrow if desired */
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQTFBMUFBIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);
+    width: 12px;
+    height: 12px;
+    margin-right: 8px;
 }
 
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
@@ -76,6 +89,7 @@ QCheckBox::indicator {
 QCheckBox::indicator:checked {
     background-color: #3B82F6;
     border: 1px solid #3B82F6;
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIj48L3BvbHlsaW5lPjwvc3ZnPg==);
 }
 
 QRadioButton { 
@@ -188,5 +202,10 @@ QTabBar::tab:selected {
     background: #18181B;
     color: #E4E4E7;
     border-bottom: 2px solid #3B82F6;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #1E3A8A;
+    color: #71717A;
 }
 """
