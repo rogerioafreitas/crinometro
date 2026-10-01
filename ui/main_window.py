@@ -1991,7 +1991,6 @@ class MainWindow(QMainWindow):
                 elif action == 'pdf_modular':
                     self._generate_pdf_report_modular(self.get_checked_files(), args)
             else:
-                from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "Falha na Análise", "Não foi possível gerar o relatório pois alguns arquivos falharam na análise.")
             return
 
@@ -2119,7 +2118,6 @@ class MainWindow(QMainWindow):
                 live_view['ylim'] = ax.get_ylim()
                 live_view['spec_unit'] = getattr(self.plot_renderers.panel_spec, 'spec_unit', 'kHz')
             except Exception:
-                from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "Aviso", "Não foi possível ler a vista atual do espectrograma para o recorte 'Específico'.")
                 pass
 

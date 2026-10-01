@@ -125,13 +125,15 @@ class ExportGraphDialog(QDialog):
         grp_app = QGroupBox("Aparência")
         app_layout = QVBoxLayout(grp_app)
 
-        row_grid = QHBoxLayout()
+        from PyQt6.QtWidgets import QGridLayout
+        grid_chk = QGridLayout()
         self._chk_grid = QCheckBox("Mostrar grade")
         self._chk_markers = QCheckBox("Mostrar marcadores de pulsos")
         self._chk_markers.setChecked(False)
-        row_grid.addWidget(self._chk_grid)
-        row_grid.addWidget(self._chk_markers)
-        app_layout.addLayout(row_grid)
+        grid_chk.addWidget(self._chk_grid, 0, 0)
+        grid_chk.addWidget(self._chk_markers, 0, 1)
+        grid_chk.setColumnStretch(2, 1)
+        app_layout.addLayout(grid_chk)
 
         row_bg = QHBoxLayout()
         row_bg.addWidget(QLabel("Fundo:"))

@@ -156,7 +156,10 @@ QPushButton#primaryButton:hover {
     background-color: #1D4ED8;
 }
 
+QTabWidget { background: transparent; }
+
 QTabWidget::pane {
+    top: -1px;
     border: 1px solid #27272A;
     background: #18181B;
     border-radius: 4px;
