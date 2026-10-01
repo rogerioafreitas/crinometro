@@ -19,7 +19,7 @@ QGroupBox::title {
     font-weight: bold;
 }
 
-QLabel, QCheckBox, QRadioButton {
+QLabel, QCheckBox {
     color: #E4E4E7;
 }
 
@@ -27,7 +27,7 @@ QLabel#secondary {
     color: #A1A1AA;
 }
 
-QLineEdit, QComboBox, QSpinBox {
+QLineEdit, QSpinBox {
     background-color: #27272A;
     border: 1px solid #3F3F46;
     border-radius: 4px;
@@ -35,11 +35,32 @@ QLineEdit, QComboBox, QSpinBox {
     color: #E4E4E7;
 }
 
+QComboBox {
+    min-width: 140px;
+    min-height: 28px;
+    background-color: #27272A;
+    border: 1px solid #3F3F46;
+    border-radius: 4px;
+    padding: 2px 28px 2px 8px;
+    color: #F4F4F5;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
+    border-left: none;
+}
+
+QComboBox::down-arrow {
+    /* Set custom arrow if desired */
+}
+
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
     border: 1px solid #3B82F6;
 }
 
-QCheckBox::indicator, QRadioButton::indicator {
+QCheckBox::indicator {
     width: 16px;
     height: 16px;
     border: 1px solid #52525B;
@@ -47,17 +68,29 @@ QCheckBox::indicator, QRadioButton::indicator {
     background-color: #18181B;
 }
 
-QRadioButton::indicator {
-    border-radius: 8px;
-}
-
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+QCheckBox::indicator:checked {
     background-color: #3B82F6;
     border: 1px solid #3B82F6;
 }
 
-/* Add a visual checkmark (basic trick) or just rely on OS if not using images, 
-but since it's colored blue, it looks checked */
+QRadioButton { 
+    background: transparent; 
+    color: #E4E4E7; 
+    spacing: 8px; 
+}
+
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    border: 1px solid #52525B;
+    background: #18181B;
+}
+
+QRadioButton::indicator:checked {
+    border: 1px solid #3B82F6;
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.4, fx:0.5, fy:0.5, stop:0 #3B82F6, stop:1 #3B82F6);
+}
 
 QTableWidget {
     background-color: #18181B;
@@ -67,14 +100,32 @@ QTableWidget {
     color: #E4E4E7;
 }
 
+QTableWidget::item {
+    padding: 6px;
+}
+
 QHeaderView::section {
-    background-color: #27272A;
-    color: #A1A1AA;
+    background-color: #1E1E24;
+    color: #D4D4D8;
     border: none;
-    border-right: 1px solid #3F3F46;
-    border-bottom: 1px solid #3F3F46;
+    border-right: 1px solid #27272A;
+    border-bottom: 1px solid #27272A;
     padding: 4px;
     font-weight: bold;
+}
+
+QTableCornerButton::section {
+    background-color: #1E1E24;
+    border: 1px solid #27272A;
+}
+
+QTableWidget QLineEdit {
+    background-color: #121214;
+    color: #F4F4F5;
+    border: 1px solid #3B82F6;
+    border-radius: 0px;
+    padding: 2px 4px;
+    margin: 0px;
 }
 
 QPushButton {
@@ -125,6 +176,6 @@ QTabBar::tab {
 QTabBar::tab:selected {
     background: #18181B;
     color: #E4E4E7;
-    border-bottom: 2px solid #3B82F6; /* Accent highlight on selected tab */
+    border-bottom: 2px solid #3B82F6;
 }
 """

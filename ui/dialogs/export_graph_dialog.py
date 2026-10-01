@@ -17,9 +17,9 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QRadioButton, QLabel, QPushButton, QButtonGroup,
-    QFileDialog, QMessageBox, QComboBox, QProgressBar, QFrame, QWidget,
+    QFileDialog, QMessageBox, QComboBox, QProgressBar, QFrame, QWidget, QFormLayout
 )
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
 
 from ui.figure_factory import ExportConfig
 from ui.dialogs.theme import MODERN_DIALOG_THEME

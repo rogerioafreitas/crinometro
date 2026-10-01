@@ -35,6 +35,7 @@ class ExportReportDialog(QDialog):
         # Campos Globais
         group_global = QGroupBox("Metadados Globais (Gravação / Contexto)")
         global_layout = QFormLayout(group_global)
+        global_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self.txt_location = QLineEdit()
         self.txt_temp = QLineEdit()
         self.txt_equip = QLineEdit()
@@ -59,6 +60,7 @@ class ExportReportDialog(QDialog):
         self.table_files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table_files.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table_files.setAlternatingRowColors(True)
+        self.table_files.verticalHeader().setVisible(False)
 
         for i, fname in enumerate(self.checked_files):
             item_file = QTableWidgetItem(fname)
