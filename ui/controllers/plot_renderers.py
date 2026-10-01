@@ -346,6 +346,8 @@ class PlotRenderers:
             ax_color="#94A3B8" if getattr(win, "theme_mode", "dark") == "dark" else "#64748B",
             text_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155", 
             annotation_color="#FFFFFF" if getattr(win, "theme_mode", "dark") == "dark" else "#0F172A",
+            xlabel_psd=f"Frequency ({unit})",
+            ylabel_psd="Power (dB/Hz)"
         )
         draw_psd(ax3, f_psd, Pxx_db, rate=rate_psd,
                  carrier_freq_hz=carrier_freq_hz, cfg=_psd_cfg)
@@ -379,6 +381,8 @@ class PlotRenderers:
             ax_color="#94A3B8" if getattr(win, "theme_mode", "dark") == "dark" else "#64748B",
             text_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155", 
             annotation_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155",
+            xlabel_spec="seconds",
+            ylabel_spec=unit
         )
         draw_spectrogram(
             ax4, Sxx_db, t_spec, f_spec,
