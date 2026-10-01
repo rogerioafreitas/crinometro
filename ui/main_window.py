@@ -2264,7 +2264,7 @@ class MainWindow(QMainWindow):
             return
 
         from ui.dialogs.export_report_dialog import ExportReportDialog
-        dlg = ExportReportDialog(self.ctx, parent=self)
+        dlg = ExportReportDialog(self.ctx, checked_files=checked_files, parent=self)
         if dlg.exec():
             config = dlg.config
             unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]

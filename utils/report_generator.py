@@ -304,8 +304,16 @@ def generate_pdf_report(output_filepath, config: ReportConfig, selected_cache, a
     # 2. METADADOS INSTITUCIONAIS E DA PESQUISA
     inst = report_params.get('institution', '').strip() or "Não informada"
     name = report_params.get('researcher_name', '').strip() or "Não informado"
-    species = report_params.get('species', '').strip() or "Não informada"
-    specimen = report_params.get('specimen', '').strip() or "Não informado"
+    file_meta = report_params.get('file_meta', {})
+    if len(selected_cache) == 1:
+        fname = list(selected_cache.keys())[0]
+        meta = file_meta.get(fname, {})
+        species = meta.get('species', '').strip() or "Não informada"
+        specimen = meta.get('specimen', '').strip() or "Não informado"
+    else:
+        unique_sp = sorted(list(set(m.get('species', '').strip() for m in file_meta.values() if m.get('species', '').strip())))
+        species = ", ".join(unique_sp) if unique_sp else "Não informada"
+        specimen = "Diversos (Vide Tabela)"
     location = report_params.get('location', '').strip() or "Não informada"
     temp = report_params.get('temperature', '').strip() or "Não informada"
     equip = report_params.get('equipment', '').strip() or "Não informado"
@@ -354,10 +362,16 @@ def generate_pdf_report(output_filepath, config: ReportConfig, selected_cache, a
         # Agrupamento de gravações pertencentes ao mesmo espécime
         specimens_dict = {}
         for fname, d in selected_cache.items():
-            spec_id = extract_specimen_id(fname)
-            if spec_id not in specimens_dict:
-                specimens_dict[spec_id] = []
-            specimens_dict[spec_id].append((fname, d))
+            meta = report_params.get('file_meta', {}).get(fname, {})
+            sp_name = meta.get('species', '').strip()
+            spec_id = meta.get('specimen', '').strip() or extract_specimen_id(fname)
+            
+            # Label for grouping
+            group_key = f"{sp_name} - {spec_id}" if sp_name else spec_id
+            
+            if group_key not in specimens_dict:
+                specimens_dict[group_key] = []
+            specimens_dict[group_key].append((fname, d))
 
         for spec_id, audio_list in specimens_dict.items():
             n_audios = len(audio_list)
@@ -462,7 +476,12 @@ def generate_pdf_report(output_filepath, config: ReportConfig, selected_cache, a
         dens_chirps = (total_chirps / duration) if duration > 0 else 0.0
         dens_pulses = (total_pulses / duration) if duration > 0 else 0.0
 
-        audio_elements.append(Paragraph(f"<b>Arquivo:</b> {fname}", section_h1))
+        f_meta = report_params.get('file_meta', {}).get(fname, {})
+        f_sp = f_meta.get('species', '').strip()
+        f_spec = f_meta.get('specimen', '').strip()
+        subtitle = f" | <b>Espécie:</b> {f_sp}" if f_sp else ""
+        subtitle += f" | <b>Espécime:</b> {f_spec}" if f_spec else ""
+        audio_elements.append(Paragraph(f"<b>Arquivo:</b> {fname}<font size='10'>{subtitle}</font>", section_h1))
         audio_elements.append(HRFlowable(width="100%", thickness=0.8, color=colors.HexColor("#CBD5E1"), spaceAfter=6))
 
         # Tabela de Métricas Globais
