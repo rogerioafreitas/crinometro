@@ -111,7 +111,7 @@ class ExportGraphDialog(QDialog):
         row_dpi = QHBoxLayout()
         row_dpi.addWidget(QLabel("DPI:"))
         self._spn_dpi = QSpinBox()
-        self._spn_dpi.setRange(72, 1200)
+        self._spn_dpi.setRange(72, 1800)
         self._spn_dpi.setValue(300)
         self._spn_dpi.setSingleStep(50)
         row_dpi.addWidget(self._spn_dpi)
