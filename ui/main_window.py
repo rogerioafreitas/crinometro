@@ -1571,9 +1571,9 @@ class MainWindow(QMainWindow):
                         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
                         for fname in list(self.ctx.analysis_cache.keys()):
                             if fname != curr_name:
-                                self.pipeline.run_analysis(fname, self.ctx.algo_params, render=False)
+                                self.ctx.analysis_cache.pop(fname, None)
                         if curr_name and curr_name in self.ctx.loaded_files:
-                            self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
+                            self.pipeline.force_reanalyze(curr_name)
 
     def export_training_model(self):
         """Abre caixa de diálogo para salvar o arquivo com o treinamento ativo."""
@@ -1636,7 +1636,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
                 if reply == QMessageBox.StandardButton.Yes:
-                    self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
+                    self.pipeline.force_reanalyze(curr_name)
             else:
                 QMessageBox.information(self, I18N[self.lang]["success"], msg)
 
@@ -1701,7 +1701,7 @@ class MainWindow(QMainWindow):
                 curr = self.list_widget.currentItem()
                 curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
                 if curr_name and curr_name in self.ctx.loaded_files:
-                    self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
+                    self.pipeline.force_reanalyze(curr_name)
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao resetar a IA:\n{e}")
 
@@ -1744,7 +1744,7 @@ class MainWindow(QMainWindow):
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
         if curr_name and curr_name in self.ctx.loaded_files:
             self.ctx.analysis_cache.clear()
-            self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
+            self.pipeline.force_reanalyze(curr_name)
         else:
             self.ctx.analysis_cache.clear()
 
@@ -2110,8 +2110,22 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Aviso", "Não foi possível ler a vista atual do espectrograma para o recorte 'Específico'.")
                 pass
 
-        dlg = ExportGraphDialog(self.session_context, live_view=live_view, parent=self)
+        dlg = ExportGraphDialog(self.ctx, live_view=live_view, parent=self)
         dlg.exec()
+
+
+    def _start_batch_for_export(self, unprocessed):
+        for fname in unprocessed:
+            w = self._get_item_widget_by_name(fname)
+            if w and hasattr(w, "set_loading"):
+                w.set_loading(True)
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setEnabled(False)
+        from ui.widgets import ButtonSpinner
+        spinner = ButtonSpinner(self.btn_export_main, "Analisando pendentes...")
+        spinner.start()
+        self._batch_spinner = spinner
+        self.pipeline.run_batch_analysis(unprocessed, self.ctx.algo_params)
 
     def action_save_txt(self):
         checked_files = self.get_checked_files()
@@ -2125,12 +2139,14 @@ class MainWindow(QMainWindow):
 
         # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
         unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
-        for f in unprocessed:
-            try:
-                self.pipeline.run_analysis(f, self.ctx.algo_params, render=False)
-            except Exception as exc:
-                print(f"Aviso ao processar {f} para relatório: {exc}")
+        if unprocessed:
+            self._pending_export_action = ('txt', None)
+            self._start_batch_for_export(unprocessed)
+            return
 
+        self._generate_txt_report(checked_files)
+
+    def _generate_txt_report(self, checked_files):
         selected_cache = {
             fname: self.ctx.analysis_cache[fname]
             for fname in checked_files
@@ -2240,12 +2256,14 @@ class MainWindow(QMainWindow):
 
         # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
         unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
-        for f in unprocessed:
-            try:
-                self.pipeline.run_analysis(f, self.ctx.algo_params, render=False)
-            except Exception as exc:
-                print(f"Aviso ao processar {f} para relatório PDF: {exc}")
+        if unprocessed:
+            self._pending_export_action = ('pdf', include_chirp_list)
+            self._start_batch_for_export(unprocessed)
+            return
 
+        self._generate_pdf_report(checked_files, include_chirp_list)
+
+    def _generate_pdf_report(self, checked_files, include_chirp_list):
         selected_cache = {
             fname: self.ctx.analysis_cache[fname]
             for fname in checked_files
