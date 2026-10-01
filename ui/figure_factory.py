@@ -104,10 +104,23 @@ def draw_waveform(
     wave_lines: Dict[str, Any] = {}
     time_sec = np.arange(len(data)) / rate
 
+    # Subset dos dados se houver limite X (Apenas para exportação de Específico)
+    if not interactive and cfg.spec_xmin is not None and cfg.spec_xmax is not None:
+        idx_min = max(0, int(cfg.spec_xmin * rate))
+        idx_max = min(len(data), int(cfg.spec_xmax * rate) + 1)
+        plot_data = data[idx_min:idx_max]
+        plot_env = env[idx_min:idx_max] if env is not None else None
+        plot_time = time_sec[idx_min:idx_max]
+    else:
+        plot_data = data
+        plot_env = env
+        plot_time = time_sec
+
     # 1. Sinal bruto filtrado
-    dec_raw = max(1, len(data) // 20000)
+    # Na exportação estática de zoom (Específico), reduz a decimação para máxima fidelidade
+    dec_raw = max(1, len(plot_data) // 20000) if interactive else max(1, len(plot_data) // 100000)
     line_raw, = ax.plot(
-        time_sec[::dec_raw], data[::dec_raw],
+        plot_time[::dec_raw], plot_data[::dec_raw],
         color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
         label="Sinal Bruto Filtrado",
     )
@@ -115,10 +128,10 @@ def draw_waveform(
     wave_lines['raw'] = line_raw
 
     # 2. Envoltória de Hilbert suavizada
-    if env is not None:
-        dec_env = max(1, len(env) // 8000)
+    if plot_env is not None:
+        dec_env = max(1, len(plot_env) // 8000) if interactive else max(1, len(plot_env) // 50000)
         line_env, = ax.plot(
-            time_sec[::dec_env], env[::dec_env],
+            plot_time[::dec_env], plot_env[::dec_env],
             color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
             label="Envoltória de Hilbert Suavizada",
         )
@@ -254,9 +267,20 @@ def draw_spectrogram(
     if interactive and spectro_engine is not None:
         spectro_engine.render_high_detail()
     else:
-        # Exportação de alta fidelidade: sem decimação restritiva
+        # Subset para Específico não renderizar matriz gigantesca fora da view
+        if cfg.spec_xmin is not None and cfg.spec_xmax is not None:
+            import numpy as np
+            t_mask = (t_spec >= cfg.spec_xmin) & (t_spec <= cfg.spec_xmax)
+            t_plot = t_spec[t_mask]
+            S_plot = Sxx_db[:, t_mask]
+        else:
+            t_plot = t_spec
+            S_plot = Sxx_db
+            
+        # Exportação de alta fidelidade: sem decimação restritiva temporal
         # rasterized=True evita que PDFs fiquem gigantes e lentos, mantendo os eixos vetoriais em alta resolução
-        ax.pcolormesh(t_spec, f_spec / scale, Sxx_db, shading='gouraud', cmap='magma', rasterized=True)
+        if len(t_plot) > 0:
+            ax.pcolormesh(t_plot, f_spec / scale, S_plot, shading='gouraud', cmap='magma', rasterized=True)
 
 
 def draw_histogram(

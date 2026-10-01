@@ -113,7 +113,7 @@ class ExportGraphDialog(QDialog):
         scope_layout.setContentsMargins(0, 0, 0, 0)
         scope_layout.addWidget(QLabel("Escopo do Espectrograma:"))
         self._cmb_scope = QComboBox()
-        self._cmb_scope.addItems(["Focal (Portadora)", "10k (0-10 kHz)", "Total (Completo)", "Específico (Visão Atual)"])
+        self._cmb_scope.addItems(["Focal", "10k", "Total", "Específico"])
         scope_layout.addWidget(self._cmb_scope)
         scope_layout.addStretch()
         app_layout.addWidget(self._widget_scope)
