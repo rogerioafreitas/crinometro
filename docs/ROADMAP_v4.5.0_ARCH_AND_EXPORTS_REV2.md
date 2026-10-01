@@ -591,5 +591,5 @@ Persistência segura do modelo
 **Status:** Plano revisado para execução da v4.5.0.  
 **Base arquitetural:** `ui/main_window.py` atual e ROADMAP anterior.  
 **Escopo central:** desacoplamento seguro da `MainWindow`, preservação de comportamento, exportação científica modular e critérios explícitos de validação.  
-**Fases concluídas e validadas:** FASES 0, 1, 2, 3, 4, 5, 6, 7 (100% auditadas).
-**Próximo marco de implementação:** executar a **FASE 8 - FigureFactory e Exportação Off-screen**.
+**Fases concluídas e validadas:** FASES 0, 1, 2, 3, 4, 5, 6, 7, 8 (100% auditadas).
+**Próximo marco de implementação:** executar a **FASE 9 - Relatório PDF modular**.

@@ -1704,5 +1704,33 @@ class TestCharacterization(unittest.TestCase):
             f"Vazamento de figuras detectado: {figs_after - figs_before} figure(s) não foram liberadas")
 
 
+
+    def test_48_export_dialog_snapshot(self):
+        """Verifica se _SnapshotCtx captura os dados imutaveis corretamente."""
+        from ui.dialogs.export_graph_dialog import _SnapshotCtx
+        heavy = {"data": [1,2,3]}
+        algo = {"param": 10}
+        name = "teste.wav"
+        snap = _SnapshotCtx(dict(heavy), dict(algo), name)
+        
+        assert snap.active_heavy_data == heavy
+        assert snap.algo_params == algo
+        assert snap.active_filename == name
+        
+        heavy["data"] = [4,5,6]
+        assert snap.active_heavy_data == {"data": [1,2,3]}
+
+    def test_49_export_worker_cancel(self):
+        """Verifica se a flag is_cancelled cancela o worker sem terminar abruptamente."""
+        from ui.dialogs.export_graph_dialog import _ExportWorker, _SnapshotCtx
+        from ui.figure_factory import ExportConfig
+        snap = _SnapshotCtx({}, {}, "")
+        cfg = ExportConfig()
+        worker = _ExportWorker(snap, "out.pdf", cfg)
+        assert worker._should_cancel() == False
+        worker.cancel()
+        assert worker._should_cancel() == True
+
+
 if __name__ == '__main__':
     unittest.main()
