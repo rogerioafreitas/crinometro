@@ -2203,6 +2203,10 @@ class MainWindow(QMainWindow):
         act_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
         act_txt.triggered.connect(self.action_save_txt)
+        
+        menu.addSeparator()
+        act_graphs = menu.addAction(make_ui_icon("export", color="#10B981", size=15), "📊 Exportar Gráficos (PNG/PDF)…")
+        act_graphs.triggered.connect(self.open_export_graph_dialog)
 
         def _on_close():
             self._export_menu_open = False

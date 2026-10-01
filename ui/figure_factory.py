@@ -53,7 +53,7 @@ class ExportConfig:
     spec_ymax: float = 10.0
 
     # DPI e tamanho
-    dpi: int = 150
+    dpi: int = 300
     fig_width: float = 10.0     # polegadas
 
     # Tema de cores
@@ -247,12 +247,9 @@ def draw_spectrogram(
     if interactive and spectro_engine is not None:
         spectro_engine.render_high_detail()
     else:
-        # Decimação adaptativa para exportação: limita a ~800 colunas de tempo
-        MAX_COLS = 800
-        step_t = max(1, len(t_spec) // MAX_COLS)
-        t_d = t_spec[::step_t]
-        S_d = Sxx_db[:, ::step_t]
-        ax.pcolormesh(t_d, f_spec / scale, S_d, shading='gouraud', cmap='magma')
+        # Exportação de alta fidelidade: sem decimação restritiva
+        # rasterized=True evita que PDFs fiquem gigantes e lentos, mantendo os eixos vetoriais em alta resolução
+        ax.pcolormesh(t_spec, f_spec / scale, Sxx_db, shading='gouraud', cmap='magma', rasterized=True)
 
 
 def draw_histogram(
@@ -296,6 +293,12 @@ def draw_histogram(
 
     bars = ax.bar(ks, vs, color=colors_list, edgecolor='none', zorder=2)
     ax.set_xticks(ks)
+    
+    # Anotações de contagem exata no topo das barras
+    max_v = max(vs) if vs else 1
+    for k, v in zip(ks, vs):
+        ax.text(k, v + max_v * 0.015, str(v), ha='center', va='bottom', 
+                color=cfg.text_color, fontsize=10, fontweight='bold', zorder=4)
 
     # Duração média (eixo secundário)
     ax2 = ax.twinx()
@@ -308,8 +311,16 @@ def draw_histogram(
             dur_ms.append(float(np.mean(spans)))
         else:
             dur_ms.append(0.0)
+            
     ax2.plot(ks, dur_ms, 'o--', color='#F97316', linewidth=1.4,
              markersize=5, zorder=3, label="Dur. média (ms)")
+             
+    # Anotações de duração em ms
+    max_d = max(dur_ms) if any(dur_ms) else 1
+    for k, d in zip(ks, dur_ms):
+        if d > 0:
+            ax2.text(k, d + max_d * 0.02, f"{d:.1f} ms", ha='center', va='bottom', 
+                     color='#EA580C', fontsize=9, fontweight='bold', zorder=4)
     ax2.set_ylabel("Duração Média (ms)", color='#F97316')
     ax2.tick_params(axis='y', colors='#F97316')
 
