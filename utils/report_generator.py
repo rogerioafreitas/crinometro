@@ -7,7 +7,7 @@ import datetime
 import numpy as np
 import scipy.stats
 
-from utils.constants import APP_VERSION
+from utils.constants import APP_VERSION, APP_VERSION_LABEL
 
 try:
     from reportlab.lib.pagesizes import letter, A4
@@ -53,7 +53,7 @@ if REPORTLAB_AVAILABLE:
 
             # Texto do rodapé
             now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-            self.drawString(36, 26, f"Crinômetro v{APP_VERSION} • Bioacústica Computacional • Emitido em {now_str}")
+            self.drawString(36, 26, f"Crinômetro v{APP_VERSION_LABEL} • Bioacústica Computacional • Emitido em {now_str}")
             self.drawRightString(559, 26, f"Página {self._pageNumber} de {total_pages}")
             self.restoreState()
 else:
@@ -277,7 +277,7 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     # 1. TÍTULO E CABEÇALHO DO DOCUMENTO
     report_tag = "COMPLETO" if include_chirp_list else "SIMPLIFICADO"
     story.append(Paragraph(f"🦗 CRINÔMETRO — RELATÓRIO BIOACÚSTICO ({report_tag})", title_style))
-    story.append(Paragraph(f"Bioacústica Computacional e Análise Estridulatória Automatizada (v{APP_VERSION})", subtitle_style))
+    story.append(Paragraph(f"Bioacústica Computacional e Análise Estridulatória Automatizada (v{APP_VERSION_LABEL})", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284C7"), spaceAfter=10))
 
     # 2. METADADOS INSTITUCIONAIS E DA PESQUISA

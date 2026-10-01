@@ -1531,5 +1531,178 @@ class TestCharacterization(unittest.TestCase):
             win.panel_wave.btn_toggle_raw.setChecked(not current)
             self.assertTrue(len(calls) > 0, "Toggle de raw wave deve emitir wave_visibility_changed")
 
+    # =========================================================================
+    # FASE 8 — FigureFactory e Exportação
+    # =========================================================================
+
+    def test_41_app_version_is_parseable(self):
+        """FASE 8: APP_VERSION deve ser uma string SemVer pura sem sufixos de texto."""
+        from utils.constants import APP_VERSION, APP_VERSION_LABEL
+        from utils.helpers import parse_version_tuple
+        tup = parse_version_tuple(APP_VERSION)
+        self.assertNotEqual(tup, (0, 0, 0),
+            f"parse_version_tuple('{APP_VERSION}') devolveu (0,0,0) — sufixo de texto "
+            "impediu o parse. Mantenha APP_VERSION numérico e use APP_VERSION_LABEL para exibição.")
+        self.assertIn("beta", APP_VERSION_LABEL,
+            "APP_VERSION_LABEL deve conter 'beta' enquanto estamos na branch de desenvolvimento.")
+
+    def test_42_export_config_defaults(self):
+        """FASE 8: ExportConfig deve ter valores padrão sensatos para exportação."""
+        from ui.figure_factory import ExportConfig
+        cfg = ExportConfig()
+        self.assertIn("waveform", cfg.panels)
+        self.assertIn("psd", cfg.panels)
+        self.assertIn("spectrogram", cfg.panels)
+        self.assertIn("histogram", cfg.panels)
+        self.assertEqual(cfg.bg_color, "#FFFFFF", "Fundo padrão deve ser branco (papel)")
+        self.assertNotEqual(cfg.annotation_color, "white",
+            "annotation_color não pode ser 'white' hardcoded — some em papel branco")
+        self.assertGreater(cfg.dpi, 0)
+
+    def test_43_figure_factory_waveform_pure(self):
+        """FASE 8: create_waveform_figure deve retornar Figure isolada sem tocar em widgets Qt."""
+        import numpy as np
+        from ui.figure_factory import create_waveform_figure, ExportConfig
+
+        # Cria SessionContext sintético mínimo
+        ctx = type("Ctx", (), {})()
+        rate = 22050
+        data = np.sin(np.linspace(0, 2 * np.pi * 440, rate)).astype(np.float32)
+        env  = np.abs(data)
+        ctx.active_heavy_data = {
+            "data": data, "rate": rate, "env": env,
+            "chirp_peaks_list": [[100, 200, 300], [500, 600]],
+        }
+
+        cfg = ExportConfig(show_raw=True, show_env=True, show_markers=True, grid=True)
+        fig, ax = create_waveform_figure(ctx, cfg)
+
+        from matplotlib.figure import Figure
+        self.assertIsInstance(fig, Figure, "create_waveform_figure deve devolver uma Figure")
+        self.assertGreater(len(ax.lines), 0, "Deve haver ao menos uma linha desenhada")
+        # Verifica que tight_layout foi aplicado (fig tem margins setadas)
+        self.assertIsNotNone(fig.get_axes())
+
+    def test_44_figure_factory_all_panels(self):
+        """FASE 8: Todos os 4 create_*_figure devem funcionar com contexto sintético."""
+        import numpy as np
+        from ui.figure_factory import (
+            create_waveform_figure, create_psd_figure,
+            create_spectrogram_figure, create_histogram_figure,
+            ExportConfig,
+        )
+        from matplotlib.figure import Figure
+
+        rate = 16000
+        n = rate
+        data = np.random.randn(n).astype(np.float32) * 0.5
+        env  = np.abs(data)
+        f_spec = np.linspace(0, rate / 2, 64)
+        t_spec = np.linspace(0, 1.0, 128)
+        Sxx_db = np.random.randn(len(f_spec), len(t_spec)).astype(np.float32) - 40
+
+        ctx = type("Ctx", (), {})()
+        ctx.active_heavy_data = {
+            "data": data, "rate": rate, "env": env,
+            "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db,
+            "f_psd": f_spec, "Pxx_db": np.random.randn(len(f_spec)) - 30,
+            "carrier_freq": 4000.0,
+            "chirp_peaks_list": [[100, 200], [400, 500, 600], [800, 900]],
+        }
+
+        cfg = ExportConfig()
+        for factory, name in [
+            (create_waveform_figure,    "waveform"),
+            (create_psd_figure,         "psd"),
+            (create_spectrogram_figure, "spectrogram"),
+            (create_histogram_figure,   "histogram"),
+        ]:
+            with self.subTest(panel=name):
+                fig, ax = factory(ctx, cfg)
+                self.assertIsInstance(fig, Figure, f"create_{name}_figure deve devolver Figure")
+                fig.clf()
+                del fig
+
+    def test_45_figure_factory_empty_context(self):
+        """FASE 8: create_*_figure com active_heavy_data vazio não deve levantar exceção."""
+        from ui.figure_factory import (
+            create_waveform_figure, create_psd_figure,
+            create_spectrogram_figure, create_histogram_figure, ExportConfig,
+        )
+        ctx = type("Ctx", (), {"active_heavy_data": None})()
+        cfg = ExportConfig()
+        for factory in [create_waveform_figure, create_psd_figure,
+                        create_spectrogram_figure, create_histogram_figure]:
+            with self.subTest(factory=factory.__name__):
+                fig, _ = factory(ctx, cfg)
+                fig.clf()
+                del fig
+
+    def test_46_export_png_writes_file(self):
+        """FASE 8: export_figures_png deve escrever arquivos no disco e liberar memória."""
+        import os, tempfile, gc
+        import numpy as np
+        from ui.figure_factory import export_figures_png, ExportConfig
+
+        rate = 8000
+        data = np.sin(np.linspace(0, np.pi * 2, rate)).astype(np.float32)
+        ctx = type("Ctx", (), {})()
+        ctx.active_heavy_data = {
+            "data": data, "rate": rate, "env": np.abs(data),
+            "chirp_peaks_list": [[100, 200]],
+            "f_psd": np.linspace(0, 4000, 50),
+            "Pxx_db": np.random.randn(50) - 30,
+            "carrier_freq": 440.0,
+            "f_spec": np.linspace(0, 4000, 32),
+            "t_spec": np.linspace(0, 1.0, 64),
+            "Sxx_db": np.random.randn(32, 64).astype(np.float32) - 40,
+        }
+
+        cfg = ExportConfig(panels=["waveform", "psd"], dpi=72, fmt="png")
+        with tempfile.TemporaryDirectory() as tmp:
+            base = os.path.join(tmp, "test_export.png")
+            written = export_figures_png(ctx, base, cfg)
+            self.assertEqual(len(written), 2, "Deve escrever 1 PNG por painel selecionado")
+            for p in written:
+                self.assertTrue(os.path.exists(p), f"Arquivo {p} não foi criado")
+                self.assertGreater(os.path.getsize(p), 100, "PNG não pode estar vazio")
+
+    def test_47_export_pdf_multipage_no_leak(self):
+        """FASE 8: export_figures_pdf deve criar PDF multipágina sem vazamento de figuras."""
+        import os, tempfile, gc
+        import numpy as np
+        from matplotlib._pylab_helpers import Gcf
+        from ui.figure_factory import export_figures_pdf, ExportConfig
+
+        rate = 8000
+        data = np.sin(np.linspace(0, np.pi * 2, rate)).astype(np.float32)
+        ctx = type("Ctx", (), {})()
+        ctx.active_heavy_data = {
+            "data": data, "rate": rate, "env": np.abs(data),
+            "chirp_peaks_list": [[100, 200], [300, 400, 500]],
+            "f_psd": np.linspace(0, 4000, 50),
+            "Pxx_db": np.random.randn(50) - 30,
+            "carrier_freq": 440.0,
+            "f_spec": np.linspace(0, 4000, 32),
+            "t_spec": np.linspace(0, 1.0, 64),
+            "Sxx_db": np.random.randn(32, 64).astype(np.float32) - 40,
+        }
+
+        # Lote repetido: exporta 3 vezes e verifica que figuras são liberadas
+        cfg = ExportConfig(panels=["waveform", "histogram", "psd", "spectrogram"],
+                           dpi=72, fmt="pdf")
+        figs_before = len(Gcf.get_all_fig_managers())
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(3):
+                path = os.path.join(tmp, f"out_{i}.pdf")
+                out = export_figures_pdf(ctx, path, cfg)
+                self.assertTrue(os.path.exists(out))
+                self.assertGreater(os.path.getsize(out), 100)
+        gc.collect()
+        figs_after = len(Gcf.get_all_fig_managers())
+        self.assertEqual(figs_before, figs_after,
+            f"Vazamento de figuras detectado: {figs_after - figs_before} figure(s) não foram liberadas")
+
+
 if __name__ == '__main__':
     unittest.main()

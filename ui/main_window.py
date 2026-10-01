@@ -24,7 +24,7 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 
 
-from utils.constants import APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
+from utils.constants import APP_VERSION, APP_VERSION_LABEL, CONFIG_FILE, DEFAULT_ALGO_PARAMS
 from utils.i18n import I18N
 from utils.icons import get_app_icon, make_ui_icon
 from utils.styles import get_modern_stylesheet
@@ -36,6 +36,7 @@ from core.learner import PulseLearner
 
 from ui.widgets import ButtonSpinner, ThemeToggle, AudioListItemWidget
 from ui.panels import PlotPanel
+from ui.dialogs.export_graph_dialog import ExportGraphDialog
 from ui.dialogs import (
     AlgoSettingsDialog, GeneralSettingsDialog,
     AboutDialog
@@ -311,7 +312,13 @@ class MainWindow(QMainWindow):
         self.action_export_pdf_simple.setIcon(make_ui_icon("export", color="#0284C7", size=16))
         self.action_export_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
         self.export_submenu.addAction(self.action_export_pdf_simple)
+        self.export_submenu.addSeparator()
+        self.action_export_graphs = QAction("Exportar Gráficos (PNG/PDF)…", self)
+        self.action_export_graphs.setIcon(make_ui_icon("export", color="#10B981", size=16))
+        self.action_export_graphs.triggered.connect(self.open_export_graph_dialog)
+        self.export_submenu.addAction(self.action_export_graphs)
         
+
         self.settings_menu = self.app_menu.addMenu(I18N[self.lang]["settings"])
         self.action_algo_config = QAction(I18N[self.lang]["algo_settings"], self)
         self.action_algo_config.triggered.connect(self.open_algo_settings)
@@ -441,7 +448,7 @@ class MainWindow(QMainWindow):
         brand.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         brand.setAutoFillBackground(False)
         nav_l.addWidget(brand)
-        version = QLabel(f"v{APP_VERSION}")
+        version = QLabel(f"v{APP_VERSION_LABEL}")
         version.setObjectName("version")
         version.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         version.setAutoFillBackground(False)
@@ -1774,7 +1781,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(
                     self,
                     "Crinômetro Atualizado",
-                    f"Você já está executando a versão mais recente do Crinômetro (v{APP_VERSION})!"
+                    f"Você já está executando a versão mais recente do Crinômetro (v{APP_VERSION_LABEL})!"
                 )
 
         def _on_error(err_msg):
@@ -2089,6 +2096,12 @@ class MainWindow(QMainWindow):
         self.transport_panel.timeline.set_position(0)
 
     # ---------- exportação ----------
+    def open_export_graph_dialog(self):
+        """Abre o diálogo de exportação de gráficos (Fase 8)."""
+        from ui.dialogs.export_graph_dialog import ExportGraphDialog
+        dlg = ExportGraphDialog(self.ctx, parent=self)
+        dlg.exec()
+
     def action_save_txt(self):
         checked_files = self.get_checked_files()
         if not checked_files:

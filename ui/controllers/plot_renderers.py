@@ -16,6 +16,7 @@ isolando navegação, hover e blitting de forma desacoplada.
 
 import weakref
 import numpy as np
+from ui.figure_factory import draw_waveform, draw_psd, draw_spectrogram, ExportConfig
 from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine
 
 
@@ -295,49 +296,30 @@ class PlotRenderers:
         show_lod = getattr(self.panel_wave, "show_lod", False)
         show_peaks = getattr(self.panel_wave, "show_peaks", True)
 
-        # 1. Sinal Bruto Filtrado (Amostras Reais — Linha cinza em segundo plano)
-        dec_raw = max(1, len(data) // 20000)
-        line_raw, = ax1.plot(
-            time_sec[::dec_raw], data[::dec_raw],
-            color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
-            label="Sinal Bruto Filtrado",
-        )
-        line_raw.set_visible(bool(show_raw))
-        self.wave_lines['raw'] = line_raw
-
-        # 2. Envoltória de Hilbert Suavizada (Curva azul nítida em destaque)
-        dec_env = max(1, len(env) // 8000)
-        line_env, = ax1.plot(
-            time_sec[::dec_env], env[::dec_env],
-            color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
-            label="Envoltória de Hilbert Suavizada",
-        )
-        line_env.set_visible(bool(show_env))
-        self.wave_lines['env'] = line_env
-
-        # Obtém callback de atualização de background (NavigationController ou MainWindow)
+        # Obtem callback de atualizacao de background
         nav = self.nav_controller
-        if nav is not None and hasattr(nav, "capture_backgrounds"):
-            bg_cb = nav.capture_backgrounds
-        else:
-            bg_cb = None
+        bg_cb = nav.capture_backgrounds if nav is not None and hasattr(nav, "capture_backgrounds") else None
 
-        # 3. Decimação Min-Max LOD (Linha Laranja dinâmica com preservação de picos)
+        # Instancia o line engine interativo
         self.line_engine = HighPerfLineEngine(
             ax1, time_sec, data, base_color='#F97316',
             update_bg_callback=bg_cb,
         )
-        self.line_engine.render_high_detail()
-        if self.line_engine.line:
-            self.line_engine.line.set_zorder(2)
-            self.line_engine.line.set_linewidth(1.1)
-            self.line_engine.line.set_visible(bool(show_lod))
-            self.wave_lines['lod'] = self.line_engine.line
 
-        ax1.set_xlabel("seconds")
-        ax1.set_ylabel("Amplitude")
-        ax1.set_xlim(time_sec[0], time_sec[-1])
-        ax1.set_ylim(-1.05, 1.05)
+        # Delega o desenho puro para o FigureFactory
+        _gui_cfg = ExportConfig(
+            show_raw=show_raw, show_env=show_env,
+            bg_color="none", ax_color="#94A3B8",
+            text_color="#CBD5E1", annotation_color="#CBD5E1",
+        )
+        self.wave_lines = draw_waveform(
+            ax1, data, rate, env=env,
+            cfg=_gui_cfg,
+            interactive=True,
+            line_engine=self.line_engine
+        )
+        if 'lod' in self.wave_lines:
+            self.wave_lines['lod'].set_visible(bool(show_lod))
 
         # ── HIST ──────────────────────────────────────────────────────────
         # Fixo, sem drag/zoom, com índice de cores/pulsos no rodapé
@@ -352,38 +334,15 @@ class PlotRenderers:
         unit = getattr(self.panel_spec, "spec_unit", "kHz")
         scale = 1000.0 if unit == "kHz" else 1.0
 
-        ax3.set_ylabel("Power (dB/Hz)")
-        ax3.set_xlabel(f"Frequency ({unit})")
-
-        if len(f_psd) > 0 and len(Pxx_db) > 0:
-            ax3.plot(f_psd / scale, Pxx_db, color='#8B5CF6', linewidth=1.5, zorder=2)
-
-            # Highlight carrier peak
-            carrier_freq_hz = self.session_context.active_heavy_data.get("carrier_freq", 0.0)
-            if carrier_freq_hz > 0:
-                idx_c = np.argmin(np.abs(f_psd - carrier_freq_hz))
-                carrier_x = f_psd[idx_c] / scale
-                carrier_y = Pxx_db[idx_c]
-            else:
-                idx_max = np.argmax(Pxx_db)
-                carrier_x = f_psd[idx_max] / scale
-                carrier_y = Pxx_db[idx_max]
-
-            ax3.plot(carrier_x, carrier_y, 'ro', markersize=6, zorder=3)
-            ax3.annotate(
-                f"{carrier_x:.2f} {unit}",
-                xy=(carrier_x, carrier_y), xytext=(5, 5),
-                textcoords='offset points', color='white',
-                fontsize=9, zorder=4,
-            )
-
-            # Limite superior para focar na banda acústica relevante de insetos (ou Nyquist)
-            rate_psd = self.session_context.active_heavy_data.get("rate", 44100)
-            max_khz = min(15.0, rate_psd / 2000.0)
-            ax3.set_xlim(0.0, max_khz if unit == "kHz" else max_khz * 1000.0)
-
-            y_range = np.ptp(Pxx_db) if len(Pxx_db) > 0 else 10
-            ax3.set_ylim(np.min(Pxx_db) - y_range * 0.1, np.max(Pxx_db) + y_range * 0.1)
+        carrier_freq_hz = self.session_context.active_heavy_data.get("carrier_freq", 0.0)
+        rate_psd = self.session_context.active_heavy_data.get("rate", 44100)
+        _psd_cfg = ExportConfig(
+            spec_unit=unit,
+            bg_color="none", ax_color="#94A3B8",
+            text_color="#CBD5E1", annotation_color="#FFFFFF",
+        )
+        draw_psd(ax3, f_psd, Pxx_db, rate=rate_psd,
+                 carrier_freq_hz=carrier_freq_hz, cfg=_psd_cfg)
 
         # Nota histórica: HighPerfFreqEngine permanece não instanciado nesta fase;
         # freq_engine continua None, preservando estritamente o comportamento legado da MainWindow.
@@ -403,16 +362,21 @@ class PlotRenderers:
             if hasattr(self.panel_spec, "spin_spec_ymax")
             else (10.0 if unit == "kHz" else 10000.0)
         )
-        ax4.set_ylabel(unit)
-        ax4.set_xlabel("seconds")
-        ax4.set_xlim(t_spec[0], t_spec[-1])
-        ax4.set_ylim(ymin, ymax)
         self.spectro_engine = HighPerfSpectrogramEngine(
             ax4, Sxx_db, t_spec, f_spec,
             update_bg_callback=bg_cb,
             unit=unit,
         )
-        self.spectro_engine.render_high_detail()
+        _spec_cfg = ExportConfig(
+            spec_unit=unit, spec_ymin=ymin, spec_ymax=ymax,
+            bg_color="none", ax_color="#94A3B8",
+            text_color="#CBD5E1", annotation_color="#CBD5E1",
+        )
+        draw_spectrogram(
+            ax4, Sxx_db, t_spec, f_spec,
+            cfg=_spec_cfg,
+            interactive=True, spectro_engine=self.spectro_engine
+        )
 
         # Atualiza mapa de eixos independente da posição atual.
         if nav is not None and hasattr(nav, "setup_cursor_lines"):

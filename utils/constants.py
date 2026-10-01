@@ -2,7 +2,8 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.5.0 beta"
+APP_VERSION = "4.5.0"          # versão numérica pura — usada por parse_version_tuple, updater e learner
+APP_VERSION_LABEL = "4.5.0 beta"  # rótulo de exibição — usado pela UI, título de janela e relatórios
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
@@ -19,6 +20,13 @@ DEFAULT_ALGO_PARAMS = {
 
 # Resumo simplificado e objetivo para exibição interna no diálogo Sobre / Notas de Atualização
 CHANGELOG_SUMMARY = {
+    "4.5.0": [
+        "Arquitetura 4.5: extração de PlotRenderers, NavigationController, EditorController e AudioTransportPanel da MainWindow (Fases 3–7).",
+        "FigureFactory: exportação de gráficos independente da janela em PNG e PDF multipágina (Fase 8).",
+        "Diálogo de Exportação de Gráficos: escolha de painel, grade, marcadores, DPI e formato.",
+        "Sinais PyQt desacoplados: UI comunica com controllers via sinais, eliminando chamadas diretas a métodos privados.",
+        "Correção do ícone Play: inicialização garantida na criação do botão e atualização correta ao mudar tema.",
+    ],
     "4.4.1": [
         "Correção Crítica do Auto-Updater: eliminação definitiva de travamento na mensagem 'Instalando'.",
         "Script em PowerShell Nativo: suporte completo a caminhos Unicode com acentuação e UTF-8 com BOM.",

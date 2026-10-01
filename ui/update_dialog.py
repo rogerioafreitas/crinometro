@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 
-from utils.constants import APP_VERSION
+from utils.constants import APP_VERSION, APP_VERSION_LABEL
 from core.updater import UpdateDownloaderThread, launch_windows_updater
 
 
@@ -47,7 +47,7 @@ class UpdateDialog(QDialog):
         lbl_title.setObjectName("lbl_update_title")
         lbl_title.setStyleSheet("font-size: 19px; font-weight: bold; color: #3B82F6;")
 
-        lbl_sub = QLabel(f"Versão atual: <b>v{APP_VERSION}</b>  ➜  Nova versão: <b style='color:#10B981;'>v{self.new_version}</b>")
+        lbl_sub = QLabel(f"Versão atual: <b>v{APP_VERSION_LABEL}</b>  ➜  Nova versão: <b style='color:#10B981;'>v{self.new_version}</b>")
         lbl_sub.setStyleSheet("font-size: 13px; color: #94A3B8;")
 
         header_l.addWidget(lbl_title)

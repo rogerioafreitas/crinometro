@@ -1,11 +1,11 @@
 """
 Crinômetro - Internacionalização (Português / Inglês).
 """
-from utils.constants import APP_VERSION
+from utils.constants import APP_VERSION, APP_VERSION_LABEL
 
 I18N = {
     "pt": {
-        "app_title": f"Crinômetro - {APP_VERSION}",
+        "app_title": f"Crinômetro - {APP_VERSION_LABEL}",
         "file": "Arquivo",
         "load": "Carregar .wav",
         "export": "Exportar Relatório (.txt)",
@@ -49,7 +49,7 @@ I18N = {
         "import_training": "Carregar Treinamento (.pkl)...",
     },
     "en": {
-        "app_title": f"Crinometer - {APP_VERSION}",
+        "app_title": f"Crinometer - {APP_VERSION_LABEL}",
         "file": "File",
         "load": "Load .wav",
         "export": "Export Report (.txt)",
