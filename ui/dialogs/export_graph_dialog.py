@@ -22,7 +22,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from ui.figure_factory import ExportConfig
-from ui.dialogs.theme import MODERN_DIALOG_THEME, export_figures_png, export_figures_pdf
+from ui.dialogs.theme import MODERN_DIALOG_THEME
+from ui.figure_factory import export_figures_png, export_figures_pdf
 
 
 # ---------------------------------------------------------------------------
