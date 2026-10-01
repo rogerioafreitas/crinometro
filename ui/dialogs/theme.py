@@ -158,11 +158,14 @@ QPushButton#primaryButton:hover {
 
 QTabWidget { background: transparent; }
 
+QTabWidget {
+    background: transparent;
+}
+
 QTabWidget::pane {
-    top: -1px;
     border: 1px solid #27272A;
-    background: #18181B;
-    border-radius: 4px;
+    background: transparent;
+    top: -1px;
 }
 
 QTabBar::tab {
@@ -170,7 +173,7 @@ QTabBar::tab {
     color: #A1A1AA;
     padding: 8px 16px;
     border: 1px solid #27272A;
-    border-bottom: none;
+    border-bottom: 1px solid #27272A;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
     margin-right: 2px;

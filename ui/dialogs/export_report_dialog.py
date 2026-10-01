@@ -17,7 +17,7 @@ class ExportReportDialog(QDialog):
         self.session_context = session_context
         self.checked_files = checked_files or []
         self.setWindowTitle("Exportar Relatório Científico (PDF)")
-        self.resize(600, 500)
+        self.resize(600, 680)
         self.config = None
 
         self._build_ui()
