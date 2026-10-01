@@ -193,15 +193,16 @@ class ExportGraphDialog(QDialog):
         if scope.startswith("Específico"):
             # Pega exatamente a visao da interface atual
             try:
-                ax = win.plot_renderers.panel_spectrogram.ax
+                ax = win.plot_renderers.panel_spec.ax
                 xmin, xmax = ax.get_xlim()
                 ymin, ymax = ax.get_ylim()
                 # se a interface estiver em Hz mas a exportacao em kHz, converte
-                if getattr(win.plot_renderers.panel_spectrogram, "spec_unit", "kHz") == "Hz" and unit == "kHz":
+                if getattr(win.plot_renderers.panel_spec, "spec_unit", "kHz") == "Hz" and unit == "kHz":
                     ymin, ymax = ymin / 1000.0, ymax / 1000.0
-                elif getattr(win.plot_renderers.panel_spectrogram, "spec_unit", "kHz") == "kHz" and unit == "Hz":
+                elif getattr(win.plot_renderers.panel_spec, "spec_unit", "kHz") == "kHz" and unit == "Hz":
                     ymin, ymax = ymin * 1000.0, ymax * 1000.0
-            except Exception:
+            except Exception as e:
+                import traceback; traceback.print_exc()
                 pass # fallback silencioso se der erro
         elif scope.startswith("10k"):
             ymin, ymax = 0.0, 10.0 if unit == "kHz" else 10000.0
