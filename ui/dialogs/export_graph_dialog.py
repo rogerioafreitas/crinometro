@@ -84,7 +84,7 @@ class ExportGraphDialog(QDialog):
         self._chk_psd  = QCheckBox("Espectro de Potência (PSD)")
         self._chk_spec = QCheckBox("Espectrograma")
         for chk in (self._chk_wave, self._chk_hist, self._chk_psd, self._chk_spec):
-            chk.setChecked(True)
+            chk.setChecked(False)
             panels_layout.addWidget(chk)
         root.addWidget(grp_panels)
 
@@ -95,7 +95,7 @@ class ExportGraphDialog(QDialog):
         row_grid = QHBoxLayout()
         self._chk_grid = QCheckBox("Mostrar grade")
         self._chk_markers = QCheckBox("Mostrar marcadores de pulsos")
-        self._chk_markers.setChecked(True)
+        self._chk_markers.setChecked(False)
         row_grid.addWidget(self._chk_grid)
         row_grid.addWidget(self._chk_markers)
         app_layout.addLayout(row_grid)
