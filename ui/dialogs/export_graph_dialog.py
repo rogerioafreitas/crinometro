@@ -108,6 +108,14 @@ class ExportGraphDialog(QDialog):
         row_spec.addStretch()
         app_layout.addLayout(row_spec)
 
+        row_scope = QHBoxLayout()
+        row_scope.addWidget(QLabel("Escopo do Espectrograma:"))
+        self._cmb_scope = QComboBox()
+        self._cmb_scope.addItems(["Focal (Portadora)", "10k (0-10 kHz)", "Total (Completo)", "Específico (Visão Atual)"])
+        row_scope.addWidget(self._cmb_scope)
+        row_scope.addStretch()
+        app_layout.addLayout(row_scope)
+
         row_dpi = QHBoxLayout()
         row_dpi.addWidget(QLabel("DPI:"))
         self._spn_dpi = QSpinBox()
@@ -167,11 +175,56 @@ class ExportGraphDialog(QDialog):
         if self._chk_spec.isChecked():
             panels.append("spectrogram")
 
+        # Calcula limites do espectrograma
+        xmin = xmax = None
+        ymin, ymax = 0.0, 10.0
+        
+        scope = self._cmb_scope.currentText()
+        win = self.parent()
+        unit = self._cmb_unit.currentText()
+        rate = self._ctx.active_heavy_data.get("rate", 44100) if self._ctx.active_heavy_data else 44100
+        
+        if scope.startswith("Específico"):
+            # Pega exatamente a visao da interface atual
+            try:
+                ax = win.plot_renderers.panel_spectrogram.ax
+                xmin, xmax = ax.get_xlim()
+                ymin, ymax = ax.get_ylim()
+                # se a interface estiver em Hz mas a exportacao em kHz, converte
+                if getattr(win.plot_renderers.panel_spectrogram, "spec_unit", "kHz") == "Hz" and unit == "kHz":
+                    ymin, ymax = ymin / 1000.0, ymax / 1000.0
+                elif getattr(win.plot_renderers.panel_spectrogram, "spec_unit", "kHz") == "kHz" and unit == "Hz":
+                    ymin, ymax = ymin * 1000.0, ymax * 1000.0
+            except Exception:
+                pass # fallback silencioso se der erro
+        elif scope.startswith("10k"):
+            ymin, ymax = 0.0, 10.0 if unit == "kHz" else 10000.0
+        elif scope.startswith("Total"):
+            ymax = (rate / 2000.0) if unit == "kHz" else (rate / 2.0)
+            ymin = 0.0
+        elif scope.startswith("Focal"):
+            carrier = self._ctx.active_heavy_data.get("carrier_freq", 0.0) if self._ctx.active_heavy_data else 0.0
+            tol_val = float(self._ctx.algo_params.get("carrier_tolerance", 700.0))
+            if carrier > 0:
+                y_min_hz = max(0.0, carrier - tol_val)
+                y_max_hz = carrier + tol_val
+                ymin = y_min_hz / 1000.0 if unit == "kHz" else y_min_hz
+                ymax = y_max_hz / 1000.0 if unit == "kHz" else y_max_hz
+            else:
+                b1_min = float(self._ctx.algo_params.get("b1_min", 3200))
+                b1_max = float(self._ctx.algo_params.get("b1_max", 6000))
+                ymin = b1_min / 1000.0 if unit == "kHz" else b1_min
+                ymax = b1_max / 1000.0 if unit == "kHz" else b1_max
+
         return ExportConfig(
             panels=panels,
             show_markers=self._chk_markers.isChecked(),
             grid=self._chk_grid.isChecked(),
-            spec_unit=self._cmb_unit.currentText(),
+            spec_unit=unit,
+            spec_xmin=xmin,
+            spec_xmax=xmax,
+            spec_ymin=ymin,
+            spec_ymax=ymax,
             dpi=self._spn_dpi.value(),
             fmt="pdf" if self._rdo_pdf.isChecked() else "png",
             # Tema claro (papel branco)

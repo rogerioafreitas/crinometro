@@ -49,6 +49,8 @@ class ExportConfig:
 
     # Espectrograma
     spec_unit: str = "kHz"      # "kHz" ou "Hz"
+    spec_xmin: Optional[float] = None
+    spec_xmax: Optional[float] = None
     spec_ymin: float = 0.0
     spec_ymax: float = 10.0
 
@@ -150,7 +152,10 @@ def draw_waveform(
     ylabel = cfg.ylabel_wave or "Amplitude"
     ax.set_xlabel(xlabel, color=cfg.text_color)
     ax.set_ylabel(ylabel, color=cfg.text_color)
-    ax.set_xlim(time_sec[0], time_sec[-1])
+    
+    xmin = cfg.spec_xmin if cfg.spec_xmin is not None else time_sec[0]
+    xmax = cfg.spec_xmax if cfg.spec_xmax is not None else time_sec[-1]
+    ax.set_xlim(xmin, xmax)
     ax.set_ylim(-1.05, 1.05)
     ax.tick_params(colors=cfg.ax_color)
     for spine in ax.spines.values():
@@ -238,7 +243,9 @@ def draw_spectrogram(
     xlabel = cfg.xlabel_spec or "Tempo (s)"
     ax.set_ylabel(unit, color=cfg.text_color)
     ax.set_xlabel(xlabel, color=cfg.text_color)
-    ax.set_xlim(t_spec[0], t_spec[-1])
+    xmin = cfg.spec_xmin if cfg.spec_xmin is not None else t_spec[0]
+    xmax = cfg.spec_xmax if cfg.spec_xmax is not None else t_spec[-1]
+    ax.set_xlim(xmin, xmax)
     ax.set_ylim(cfg.spec_ymin, cfg.spec_ymax)
     ax.tick_params(colors=cfg.ax_color)
     for spine in ax.spines.values():
