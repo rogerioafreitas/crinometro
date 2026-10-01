@@ -80,7 +80,6 @@ class ExportConfig:
 
 
 def _new_fig(cfg: ExportConfig, height: float = 3.5):
-    from matplotlib.figure import Figure
     fig = Figure(figsize=(cfg.fig_width, height), dpi=cfg.dpi)
     fig.patch.set_facecolor(cfg.bg_color)
     fig.patch.set_alpha(1.0 if cfg.bg_color != "none" else 0.0)
@@ -342,7 +341,7 @@ def draw_spectrogram(
 
     xlabel = cfg.xlabel_spec or "Tempo (s)"
     ax.set_ylabel(cfg.ylabel_spec or unit, color=cfg.text_color)
-    ax.set_xlabel(cfg.xlabel_spec or xlabel, color=cfg.text_color)
+    ax.set_xlabel(xlabel, color=cfg.text_color)
     xmin = cfg.spec_xmin if cfg.spec_xmin is not None else t_spec[0]
     xmax = cfg.spec_xmax if cfg.spec_xmax is not None else t_spec[-1]
     ax.set_xlim(xmin, xmax)
@@ -365,7 +364,7 @@ def draw_spectrogram(
             S_plot = Sxx_db
         # rasterized=True evita que PDFs fiquem gigantes e lentos, mantendo os eixos vetoriais em alta resolução
         if len(t_plot) > 0:
-            mesh = ax.pcolormesh(t_plot, f_spec / scale, S_plot, shading='auto', cmap='magma', rasterized=True)
+            mesh = ax.pcolormesh(t_plot, f_spec / scale, S_plot, shading='gouraud', cmap='magma', rasterized=True)
             if not interactive:
                 cbar = ax.figure.colorbar(mesh, ax=ax, pad=0.01)
                 cbar.set_label("Potência (dB)", color=cfg.text_color)
@@ -583,7 +582,7 @@ def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
     base, _ = os.path.splitext(path)
     written = []
 
-    import os
+
     suf = png_set_suffix(base, cfg.panels)
     
     for panel in cfg.panels:

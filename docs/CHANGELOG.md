@@ -195,3 +195,25 @@ Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre**
 - Lançamento da nova identidade visual com suporte integral a Temas Escuro e Claro.
 - Sistema de análise em lote com marcação seletiva de arquivos.
 - Dicas interativas (*tooltips*) em marcadores de eventos acústicos.
+
+## [4.5.0] - Exportação e Múltiplos Painéis (Fase 8)
+### Adicionado
+- Fábrica de gráficos independentes (ui/figure_factory.py) para Oscilograma, Histograma Bivariado, PSD e Espectrograma.
+- Exportação de lotes de gráficos para PNG ou relatório multipágina em PDF.
+- Opção de selecionar limites de escopo (Total, 10k, Focal, Específico) na exportação.
+- Decimação inteligente de dados usando mínimo/máximo por bloco em séries muito longas (forma de onda) para preservar picos.
+- Escolha de resolução DPI (150, 300, 600) em combobox visual.
+- Diálogo seguro com cancelamento interativo e alertas de sobrescrita de arquivo (PNGs) baseados num snapshot Thread-Safe dos dados.
+
+### Modificado
+- As cores do tema ao vivo (Claro e Escuro) afetam os arquivos exportados quando bg_color = 'none'.
+- Renderização de Espectrogramas gigantes foi limitada pela tag rasterized e shading='auto', diminuindo custos de memória.
+- Limpeza drástica: O projeto agora tem .gitignore restrito e arquivos pesados/pessoais (crinometro_config.json, modelo_treinado.pkl) banidos de submissões acidentais.
+
+## [4.5.0] - Correcoes Finais da Exportacao e Desacoplamento (Fase 8)
+### Corrigido
+- Falha grave de sintaxe e identacao no export_graph_dialog.py resolvida.
+- Sobrescrita de arquivos agora prevenida corretamente com unique_path e suffix generator para PNGs.
+- Vazamento e crashes devido ao uso forcado de terminate() na thread bloqueados.
+- Qualidade cientifica do Espectrograma (shading, colorbar) e do Oscilograma (decimacao por picos min/max) garantidas.
+- Nomes importados no pacote ui sanitizados (quality gate atualizado).

@@ -16,11 +16,10 @@ atual da janela.
 import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
-    QRadioButton, QSpinBox, QLabel, QPushButton, QButtonGroup,
+    QRadioButton, QLabel, QPushButton, QButtonGroup,
     QFileDialog, QMessageBox, QComboBox, QProgressBar, QFrame, QWidget,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import QThread, pyqtSignal
 
 from ui.figure_factory import ExportConfig, export_figures_png, export_figures_pdf
 
@@ -232,7 +231,6 @@ class ExportGraphDialog(QDialog):
 
 
     def _build_config(self) -> ExportConfig:
-        from ui.figure_factory import ExportConfig
         panels = []
         if self._chk_wave.isChecked(): panels.append("waveform")
         if self._chk_hist.isChecked(): panels.append("histogram")
@@ -322,7 +320,6 @@ class ExportGraphDialog(QDialog):
                                 self.tr("Selecione ao menos um painel para exportar."))
             return
 
-        import os
         base_name = os.path.splitext(
             os.path.basename(getattr(self._ctx, "active_filename", "exportacao") or "exportacao")
         )[0]
