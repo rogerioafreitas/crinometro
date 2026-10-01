@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QLineEdit, QGroupBox, QFormLayout, QFileDialog, QTabWidget, QWidget, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt
+from ui.dialogs.theme import MODERN_DIALOG_THEME
 from utils.report_generator import ReportConfig, ReportSectionFlags, extract_specimen_id
 
 class ExportReportDialog(QDialog):
@@ -74,6 +75,7 @@ class ExportReportDialog(QDialog):
         files_layout.addWidget(self.table_files)
 
         btn_apply_all = QPushButton("Aplicar Espécie do 1º áudio aos demais")
+        btn_apply_all.setToolTip("Copia a espécie da primeira linha para as demais")
         btn_apply_all.clicked.connect(self._apply_species_to_all)
         files_layout.addWidget(btn_apply_all)
 
@@ -113,6 +115,8 @@ class ExportReportDialog(QDialog):
         self.btn_cancel = QPushButton("Cancelar")
         self.btn_export = QPushButton("Gerar Relatório")
         self.btn_export.setDefault(True)
+        self.btn_export.setObjectName("primaryButton")
+        btn_layout.setContentsMargins(0, 16, 0, 0)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addWidget(self.btn_export)
@@ -121,6 +125,7 @@ class ExportReportDialog(QDialog):
         # Conexões
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_export.clicked.connect(self._on_export)
+        self.setStyleSheet(MODERN_DIALOG_THEME)
 
     def _apply_species_to_all(self):
         if self.table_files.rowCount() > 0:

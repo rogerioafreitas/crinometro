@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from ui.figure_factory import ExportConfig, export_figures_png, export_figures_pdf
+from ui.figure_factory import ExportConfig
+from ui.dialogs.theme import MODERN_DIALOG_THEME, export_figures_png, export_figures_pdf
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +209,7 @@ class ExportGraphDialog(QDialog):
         self._btn_export = QPushButton("Exportar…")
         self._btn_export.setDefault(True)
         self._btn_export.clicked.connect(self._on_export)
+        self.setStyleSheet(MODERN_DIALOG_THEME)
         btn_row.addWidget(self._btn_cancel)
         btn_row.addWidget(self._btn_export)
         root.addLayout(btn_row)
