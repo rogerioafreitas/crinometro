@@ -37,30 +37,41 @@ class _SnapshotCtx:
         self.active_filename = name
 
 class _ExportWorker(QThread):
-    done_export = pyqtSignal(list)   # lista de caminhos escritos
+    done_export = pyqtSignal(list)
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
-    def __init__(self, ctx, path: str, cfg: ExportConfig):
+    def __init__(self, ctx, path: str, cfg):
         super().__init__()
         self._ctx = ctx
         self._path = path
         self._cfg = cfg
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def _should_cancel(self):
+        return self._is_cancelled
 
     def run(self):
         try:
+            from ui.figure_factory import export_figures_pdf, export_figures_png
             if self._cfg.fmt == "pdf":
-                out = export_figures_pdf(self._ctx, self._path, self._cfg)
-                self.finished.emit([out])
+                out = export_figures_pdf(self._ctx, self._path, self._cfg, should_cancel=self._should_cancel)
+                if self._is_cancelled:
+                    self.cancelled.emit()
+                else:
+                    self.done_export.emit([out])
             else:
-                outs = export_figures_png(self._ctx, self._path, self._cfg)
-                self.finished.emit(outs)
+                outs = export_figures_png(self._ctx, self._path, self._cfg, should_cancel=self._should_cancel)
+                if self._is_cancelled:
+                    self.cancelled.emit()
+                else:
+                    self.done_export.emit(outs)
         except Exception as exc:
-            self.error.emit(str(exc))
-
-
-# ---------------------------------------------------------------------------
-# Diálogo principal
-# ---------------------------------------------------------------------------
+            if not self._is_cancelled:
+                self.error.emit(str(exc))
 
 class ExportGraphDialog(QDialog):
     """
@@ -71,9 +82,10 @@ class ExportGraphDialog(QDialog):
         dlg.exec()
     """
 
-    def __init__(self, ctx, parent=None):
+    def __init__(self, ctx, parent=None, live_view=None):
         super().__init__(parent)
         self._ctx = ctx
+        self._live_view = live_view or {}
         self._worker: _ExportWorker | None = None
 
         self.setWindowTitle("Exportar Gráficos")
@@ -93,6 +105,19 @@ class ExportGraphDialog(QDialog):
         for chk in (self._chk_wave, self._chk_hist, self._chk_psd, self._chk_spec):
             chk.setChecked(False)
             panels_layout.addWidget(chk)
+
+        # Sub-opções do oscilograma (visíveis quando wave marcado)
+        self._chk_raw = QCheckBox("  Sinal bruto")
+        self._chk_raw.setChecked(True)
+        self._chk_env = QCheckBox("  Envoltória de Hilbert")
+        self._chk_env.setChecked(True)
+        panels_layout.addWidget(self._chk_raw)
+        panels_layout.addWidget(self._chk_env)
+        self._chk_wave.toggled.connect(self._chk_raw.setVisible)
+        self._chk_wave.toggled.connect(self._chk_env.setVisible)
+        self._chk_raw.setVisible(False)
+        self._chk_env.setVisible(False)
+
         root.addWidget(grp_panels)
 
         # ---- Aparência ----
@@ -107,6 +132,14 @@ class ExportGraphDialog(QDialog):
         row_grid.addWidget(self._chk_markers)
         app_layout.addLayout(row_grid)
 
+        row_bg = QHBoxLayout()
+        row_bg.addWidget(QLabel("Fundo:"))
+        self._cmb_bg = QComboBox()
+        self._cmb_bg.addItems(["Branco (papel)", "Tema atual da janela"])
+        row_bg.addWidget(self._cmb_bg)
+        row_bg.addStretch()
+        app_layout.addLayout(row_bg)
+
         row_spec = QHBoxLayout()
         row_spec.addWidget(QLabel("Unidade do espectrograma:"))
         self._cmb_unit = QComboBox()
@@ -116,15 +149,20 @@ class ExportGraphDialog(QDialog):
         app_layout.addLayout(row_spec)
 
         self._widget_scope = QWidget()
-        scope_layout = QHBoxLayout(self._widget_scope)
+        scope_layout = QVBoxLayout(self._widget_scope)
         scope_layout.setContentsMargins(0, 0, 0, 0)
-        scope_layout.addWidget(QLabel("Escopo do Espectrograma:"))
+        row_scope = QHBoxLayout()
+        row_scope.addWidget(QLabel("Escopo do Espectrograma:"))
         self._cmb_scope = QComboBox()
         self._cmb_scope.addItems(["Focal", "10k", "Total", "Específico"])
-        scope_layout.addWidget(self._cmb_scope)
-        scope_layout.addStretch()
+        row_scope.addWidget(self._cmb_scope)
+        row_scope.addStretch()
+        scope_layout.addLayout(row_scope)
+        self._chk_apply_x = QCheckBox("Aplicar recorte de tempo ao oscilograma")
+        self._chk_apply_x.setChecked(True)
+        scope_layout.addWidget(self._chk_apply_x)
         app_layout.addWidget(self._widget_scope)
-        
+
         # Oculta inicialmente e vincula o estado do checkbox
         self._widget_scope.setVisible(self._chk_spec.isChecked())
         self._chk_spec.toggled.connect(self._widget_scope.setVisible)
@@ -178,142 +216,174 @@ class ExportGraphDialog(QDialog):
     # ------------------------------------------------------------------
 
     def reject(self):
-        if hasattr(self, "_worker") and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._btn_cancel.setEnabled(False)
+            return
         super().reject()
-        
+
     def closeEvent(self, event):
-        if hasattr(self, "_worker") and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._btn_cancel.setEnabled(False)
+            event.ignore()
+            return
         super().closeEvent(event)
 
-    def _build_config(self) -> ExportConfig:
-        panels = []
-        if self._chk_wave.isChecked():
-            panels.append("waveform")
-        if self._chk_hist.isChecked():
-            panels.append("histogram")
-        if self._chk_psd.isChecked():
-            panels.append("psd")
-        if self._chk_spec.isChecked():
-            panels.append("spectrogram")
 
-        # Calcula limites do espectrograma
+    def _build_config(self) -> ExportConfig:
+        from ui.figure_factory import ExportConfig
+        panels = []
+        if self._chk_wave.isChecked(): panels.append("waveform")
+        if self._chk_hist.isChecked(): panels.append("histogram")
+        if self._chk_psd.isChecked(): panels.append("psd")
+        if self._chk_spec.isChecked(): panels.append("spectrogram")
+
         xmin = xmax = None
         ymin, ymax = 0.0, 10.0
         
         scope = self._cmb_scope.currentText()
-        win = self.parent()
         unit = self._cmb_unit.currentText()
         rate = self._ctx.active_heavy_data.get("rate", 44100) if self._ctx.active_heavy_data else 44100
         
-        if scope.startswith("Específico"):
-            # Pega exatamente a visao da interface atual
-            try:
-                ax = win.plot_renderers.panel_spec.ax
-                xmin, xmax = ax.get_xlim()
-                ymin, ymax = ax.get_ylim()
-                # se a interface estiver em Hz mas a exportacao em kHz, converte
-                if getattr(win.plot_renderers.panel_spec, "spec_unit", "kHz") == "Hz" and unit == "kHz":
-                    ymin, ymax = ymin / 1000.0, ymax / 1000.0
-                elif getattr(win.plot_renderers.panel_spec, "spec_unit", "kHz") == "kHz" and unit == "Hz":
-                    ymin, ymax = ymin * 1000.0, ymax * 1000.0
-            except Exception as e:
-                import traceback; traceback.print_exc()
-                pass # fallback silencioso se der erro
-        elif scope.startswith("10k"):
-            ymin, ymax = 0.0, 10.0 if unit == "kHz" else 10000.0
-        elif scope.startswith("Total"):
-            ymax = (rate / 2000.0) if unit == "kHz" else (rate / 2.0)
-            ymin = 0.0
-        elif scope.startswith("Focal"):
-            carrier = self._ctx.active_heavy_data.get("carrier_freq", 0.0) if self._ctx.active_heavy_data else 0.0
-            tol_val = float(self._ctx.algo_params.get("carrier_tolerance", 700.0))
-            if carrier > 0:
-                y_min_hz = max(0.0, carrier - tol_val)
-                y_max_hz = carrier + tol_val
-                ymin = y_min_hz / 1000.0 if unit == "kHz" else y_min_hz
-                ymax = y_max_hz / 1000.0 if unit == "kHz" else y_max_hz
-            else:
-                b1_min = float(self._ctx.algo_params.get("b1_min", 3200))
-                b1_max = float(self._ctx.algo_params.get("b1_max", 6000))
-                ymin = b1_min / 1000.0 if unit == "kHz" else b1_min
-                ymax = b1_max / 1000.0 if unit == "kHz" else b1_max
+        if self._widget_scope.isVisible():
+            if scope.startswith("Específico"):
+                xmin = self._live_view.get("xlim", (None, None))[0]
+                xmax = self._live_view.get("xlim", (None, None))[1]
+                lymin, lymax = self._live_view.get("ylim", (0.0, 10.0))
+                lunit = self._live_view.get("spec_unit", "kHz")
+                if lunit == "Hz" and unit == "kHz":
+                    ymin, ymax = lymin / 1000.0, lymax / 1000.0
+                elif lunit == "kHz" and unit == "Hz":
+                    ymin, ymax = lymin * 1000.0, lymax * 1000.0
+                else:
+                    ymin, ymax = lymin, lymax
+            elif scope.startswith("10k"):
+                ymin, ymax = 0.0, 10.0 if unit == "kHz" else 10000.0
+            elif scope.startswith("Total"):
+                ymax = (rate / 2000.0) if unit == "kHz" else (rate / 2.0)
+                ymin = 0.0
+            elif scope.startswith("Focal"):
+                carrier = self._ctx.active_heavy_data.get("carrier_freq", 0.0) if self._ctx.active_heavy_data else 0.0
+                algo_params = self._ctx.algo_params or {}
+                tol_val = float(algo_params.get("freq_tolerance_hz", 700.0))
+                if carrier > 0:
+                    y_min_hz = max(0.0, carrier - tol_val)
+                    y_max_hz = carrier + tol_val
+                    ymin = y_min_hz / 1000.0 if unit == "kHz" else y_min_hz
+                    ymax = y_max_hz / 1000.0 if unit == "kHz" else y_max_hz
+                else:
+                    ymin = 3.2 if unit == "kHz" else 3200.0
+                    ymax = 6.0 if unit == "kHz" else 6000.0
+        
+        if not self._chk_apply_x.isChecked():
+            xmin = xmax = None
+            
+        is_light = getattr(self.parent(), "theme_mode", "dark") == "light"
+        if self._cmb_bg.currentIndex() == 0:
+            bg_color = "#FFFFFF"
+            ax_color = "#000000"
+            text_color = "#000000"
+            ann_color = "#000000"
+        else:
+            bg_color = "#FFFFFF" if is_light else "#0F172A"
+            ax_color = "#475569" if is_light else "#94A3B8"
+            text_color = "#0F172A" if is_light else "#CBD5E1"
+            ann_color = "#0F172A" if is_light else "#F8FAFC"
 
         return ExportConfig(
             panels=panels,
+            show_raw=self._chk_raw.isChecked(),
+            show_env=self._chk_env.isChecked(),
             show_markers=self._chk_markers.isChecked(),
             grid=self._chk_grid.isChecked(),
+            fmt="pdf" if self._rdo_pdf.isChecked() else "png",
             spec_unit=unit,
             spec_xmin=xmin,
             spec_xmax=xmax,
             spec_ymin=ymin,
             spec_ymax=ymax,
             dpi=int(self._cmb_dpi.currentText().split()[0]),
-            fmt="pdf" if self._rdo_pdf.isChecked() else "png",
-            # Tema claro (papel branco)
-            bg_color="#FFFFFF",
-            ax_color="#334155",
-            text_color="#1E293B",
-            annotation_color="#1E293B",
+            bg_color=bg_color,
+            ax_color=ax_color,
+            text_color=text_color,
+            annotation_color=ann_color
         )
 
     def _on_export(self):
         if not self._ctx or not self._ctx.active_heavy_data:
-            QMessageBox.warning(self, "Sem dados",
-                                "Nenhum arquivo analisado está ativo. Abra e analise um arquivo antes de exportar.")
+            QMessageBox.warning(self, self.tr("Sem dados"),
+                                self.tr("Nenhum arquivo analisado está ativo. Abra e analise um arquivo antes de exportar."))
             return
 
         cfg = self._build_config()
         if not cfg.panels:
-            QMessageBox.warning(self, "Nenhum painel",
-                                "Selecione ao menos um painel para exportar.")
+            QMessageBox.warning(self, self.tr("Nenhum painel"),
+                                self.tr("Selecione ao menos um painel para exportar."))
             return
 
-        # Determina filtro e extensão
-        if cfg.fmt == "pdf":
-            flt = "PDF Files (*.pdf)"
-            default_ext = ".pdf"
-        else:
-            flt = "PNG Files (*.png)"
-            default_ext = ".png"
-
+        import os
         base_name = os.path.splitext(
-            os.path.basename(self._ctx.active_filename or "exportacao")
+            os.path.basename(getattr(self._ctx, "active_filename", "exportacao") or "exportacao")
         )[0]
-        default_name = f"{base_name}_graficos{default_ext}"
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Salvar Gráfico", default_name, flt
-        )
+        is_pdf = self._rdo_pdf.isChecked()
+
+        
+        if is_pdf:
+            dlg = QFileDialog(self, "Salvar PDF", base_name + "_graficos.pdf", "PDF Files (*.pdf)")
+            dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+            dlg.setDefaultSuffix("pdf")
+            dlg.setOptions(QFileDialog.Option.DontConfirmOverwrite)
+            if dlg.exec() == QFileDialog.DialogCode.Accepted:
+                path = dlg.selectedFiles()[0]
+            else:
+                path = ""
+        else:
+            path = QFileDialog.getExistingDirectory(self, "Selecionar Pasta para PNGs")
+            if path:
+                path = os.path.join(path, base_name)
+
         if not path:
             return
 
         self._btn_export.setEnabled(False)
-        self._btn_cancel.setEnabled(False)
+        self._btn_cancel.setEnabled(True)
         self._progress.setVisible(True)
 
-        self._worker = _ExportWorker(self._ctx, path, cfg)
+        heavy_snap = dict(self._ctx.active_heavy_data) if getattr(self._ctx, "active_heavy_data", None) else {}
+        algo_snap = dict(self._ctx.algo_params) if getattr(self._ctx, "algo_params", None) else {}
+        name_snap = getattr(self._ctx, "active_filename", "")
+        snap_ctx = _SnapshotCtx(heavy_snap, algo_snap, name_snap)
+
+        self._worker = _ExportWorker(snap_ctx, path, cfg)
         self._worker.done_export.connect(self._on_finished)
         self._worker.error.connect(self._on_error)
+        self._worker.cancelled.connect(self._on_cancelled)
         self._worker.start()
 
     def _on_finished(self, paths: list):
         self._progress.setVisible(False)
         self._btn_cancel.setEnabled(True)
+        self._btn_export.setEnabled(True)
         n = len(paths)
         if n == 1:
             msg = f"Gráfico exportado com sucesso:\n{paths[0]}"
+        elif n > 1:
+            msg = f"{n} gráficos exportados com sucesso:\n" + "\n".join(paths)
         else:
-            msg = f"{n} arquivos exportados em:\n{os.path.dirname(paths[0])}"
-        QMessageBox.information(self, "Exportação concluída", msg)
+            msg = "Nenhum arquivo gravado."
+        QMessageBox.information(self, "Sucesso", msg)
         self.accept()
 
     def _on_error(self, msg: str):
         self._progress.setVisible(False)
-        self._btn_export.setEnabled(True)
         self._btn_cancel.setEnabled(True)
-        QMessageBox.critical(self, "Erro na exportação",
-                             f"Não foi possível exportar os gráficos:\n\n{msg}")
+        self._btn_export.setEnabled(True)
+        QMessageBox.critical(self, "Erro na Exportação", msg)
+
+    def _on_cancelled(self):
+        self._progress.setVisible(False)
+        self._btn_cancel.setEnabled(True)
+        self._btn_export.setEnabled(True)
+        QMessageBox.information(self, "Cancelado", "A exportação foi cancelada.")

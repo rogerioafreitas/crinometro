@@ -23,7 +23,6 @@ from typing import Optional, List, Dict, Any
 
 import numpy as np
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 
 # ---------------------------------------------------------------------------
@@ -56,24 +55,71 @@ class ExportConfig:
     dpi: int = 300
     fig_width: float = 10.0     # polegadas
 
+    # Rótulos de eixos (None = usar padrão com unidade)
+    xlabel_wave: str = "Tempo (s)"
+    ylabel_wave: str = "Amplitude"
+    xlabel_spec: str = "Tempo (s)"
+    ylabel_spec: Optional[str] = None   # None → usa spec_unit
+    xlabel_psd: Optional[str] = None    # None → f"Frequência ({spec_unit})"
+    ylabel_psd: Optional[str] = None    # None → "Potência (dB/Hz)"
+
     # Tema de cores
     bg_color: str = "#FFFFFF"      # fundo da figura (branco para papel)
     ax_color: str = "#1E293B"      # cor dos eixos e ticks
     text_color: str = "#1E293B"    # rótulos, títulos
     annotation_color: str = "#1E293B"  # anotações (portadora PSD etc.)
 
-    # Rótulos de eixos (None = usar padrão)
-    xlabel_wave: Optional[str] = None
-    ylabel_wave: Optional[str] = None
-    xlabel_spec: Optional[str] = None
-
     # Formato de saída (usado por save_figures)
     fmt: str = "png"    # "png" ou "pdf"
+
 
 
 # ---------------------------------------------------------------------------
 # Primitivas de desenho (recebem ax + dados brutos, sem contexto Qt)
 # ---------------------------------------------------------------------------
+
+
+def _new_fig(cfg: ExportConfig, height: float = 3.5):
+    from matplotlib.figure import Figure
+    fig = Figure(figsize=(cfg.fig_width, height), dpi=cfg.dpi)
+    fig.patch.set_facecolor(cfg.bg_color)
+    fig.patch.set_alpha(1.0 if cfg.bg_color != "none" else 0.0)
+    ax = fig.add_subplot(111)
+    ax.set_facecolor(cfg.bg_color)
+    if cfg.bg_color == "none":
+        ax.patch.set_alpha(0.0)
+    for spine in ax.spines.values():
+        spine.set_color(cfg.ax_color)
+    ax.tick_params(colors=cfg.ax_color)
+    ax.xaxis.label.set_color(cfg.text_color)
+    ax.yaxis.label.set_color(cfg.text_color)
+    if cfg.grid:
+        ax.grid(True, linestyle='--', alpha=0.3, color=cfg.ax_color)
+    return fig, ax
+
+
+def unique_path(path: str) -> str:
+    import os
+    if not os.path.exists(path):
+        return path
+    base, ext = os.path.splitext(path)
+    n = 1
+    while True:
+        new_path = f"{base} ({n}){ext}"
+        if not os.path.exists(new_path):
+            return new_path
+        n += 1
+
+def png_set_suffix(base: str, panels: list) -> str:
+    import os
+    # testa sufixo vazio
+    if not any(os.path.exists(f"{base}_{p}.png") for p in panels):
+        return ""
+    n = 1
+    while True:
+        if not any(os.path.exists(f"{base}_{p} ({n}).png") for p in panels):
+            return f" ({n})"
+        n += 1
 
 def draw_waveform(
     ax,
@@ -115,27 +161,33 @@ def draw_waveform(
         plot_time = time_sec
 
     # 1. Sinal bruto filtrado
-    # Na exportação, usar min/max decimation para preservar picos reais
-    num_points = 20000 if interactive else 100000
-    if len(plot_data) > num_points * 2:
-        block_size = len(plot_data) // num_points
-        data_reshaped = plot_data[:block_size * num_points].reshape(-1, block_size)
-        time_reshaped = plot_time[:block_size * num_points].reshape(-1, block_size)
-        
-        min_vals = data_reshaped.min(axis=1)
-        max_vals = data_reshaped.max(axis=1)
-        t_vals = time_reshaped[:, 0]
-        
-        plot_time_dec = np.empty(num_points * 2)
-        plot_time_dec[0::2] = t_vals
-        plot_time_dec[1::2] = t_vals
-        
-        plot_data_dec = np.empty(num_points * 2)
-        plot_data_dec[0::2] = min_vals
-        plot_data_dec[1::2] = max_vals
+    if not interactive and len(plot_data) > 200000:
+        block_size = len(plot_data) // 100000
+        limit = block_size * 100000
+        data_main = plot_data[:limit].reshape(-1, block_size)
+        time_main = plot_time[:limit].reshape(-1, block_size)
+
+        min_v = data_main.min(axis=1)
+        max_v = data_main.max(axis=1)
+
+        plot_data_dec = np.empty(200000)
+        plot_data_dec[0::2] = min_v
+        plot_data_dec[1::2] = max_v
+
+        t_v = time_main[:, 0]
+        plot_time_dec = np.empty(200000)
+        plot_time_dec[0::2] = t_v
+        plot_time_dec[1::2] = t_v
+
+        if limit < len(plot_data):
+            rem_data = plot_data[limit:]
+            rem_time = plot_time[limit:]
+            plot_data_dec = np.append(plot_data_dec, [rem_data.min(), rem_data.max()])
+            plot_time_dec = np.append(plot_time_dec, [rem_time[0], rem_time[-1]])
     else:
-        plot_time_dec = plot_time
-        plot_data_dec = plot_data
+        dec_raw = 1 if interactive else max(1, len(plot_data) // 200000)
+        plot_data_dec = plot_data[::dec_raw]
+        plot_time_dec = plot_time[::dec_raw]
 
     line_raw, = ax.plot(
         plot_time_dec, plot_data_dec,
@@ -147,18 +199,24 @@ def draw_waveform(
 
     # 2. Envoltória de Hilbert suavizada
     if plot_env is not None:
-        num_env_points = 8000 if interactive else 50000
-        if len(plot_env) > num_env_points * 2:
-            block_size = len(plot_env) // num_env_points
-            env_reshaped = plot_env[:block_size * num_env_points].reshape(-1, block_size)
-            time_env_reshaped = plot_time[:block_size * num_env_points].reshape(-1, block_size)
+        if not interactive and len(plot_env) > 50000:
+            block_size = len(plot_env) // 50000
+            limit = block_size * 50000
+            env_reshaped = plot_env[:limit].reshape(-1, block_size)
+            time_env_reshaped = plot_time[:limit].reshape(-1, block_size)
             max_env_vals = env_reshaped.max(axis=1)
             plot_env_dec = max_env_vals
             plot_time_env_dec = time_env_reshaped[:, 0]
+            if limit < len(plot_env):
+                rem_env = plot_env[limit:]
+                rem_time = plot_time[limit:]
+                plot_env_dec = np.append(plot_env_dec, [rem_env.max()])
+                plot_time_env_dec = np.append(plot_time_env_dec, [rem_time[0]])
         else:
-            plot_time_env_dec = plot_time
-            plot_env_dec = plot_env
-            
+            dec_env = 1 if interactive else max(1, len(plot_env) // 50000)
+            plot_env_dec = plot_env[::dec_env]
+            plot_time_env_dec = plot_time[::dec_env]
+
         line_env, = ax.plot(
             plot_time_env_dec, plot_env_dec,
             color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
@@ -178,9 +236,9 @@ def draw_waveform(
     # 4. Marcadores de pulsos (exportação)
     if not interactive and cfg.show_markers and chirp_peaks_list:
         marker_colors = {
-            1: '#F59E0B', 2: '#EC4899', 3: '#8B5CF6', 4: '#3B82F6',
-            5: '#10B981', 6: '#EF4444', 7: '#F97316', 8: '#06B6D4',
-            9: '#84CC16', 10: '#14B8A6',
+            2: '#2563EB', 3: '#8B5CF6', 4: '#F97316', 5: '#10B981',
+            6: '#EC4899', 7: '#06B6D4', 8: '#EAB308', 9: '#84CC16',
+            10: '#A855F7', 1: '#94A3B8',
         }
         extra_color = '#F43F5E'
         for cp in chirp_peaks_list:
@@ -224,8 +282,8 @@ def draw_psd(
     unit = cfg.spec_unit
     scale = 1000.0 if unit == "kHz" else 1.0
 
-    ax.set_ylabel("Potência (dB/Hz)", color=cfg.text_color)
-    ax.set_xlabel(f"Frequência ({unit})", color=cfg.text_color)
+    ax.set_ylabel(cfg.ylabel_psd or "Potência (dB/Hz)", color=cfg.text_color)
+    ax.set_xlabel(cfg.xlabel_psd or f"Frequência ({unit})", color=cfg.text_color)
     ax.tick_params(colors=cfg.ax_color)
     for spine in ax.spines.values():
         spine.set_edgecolor(cfg.ax_color)
@@ -283,8 +341,8 @@ def draw_spectrogram(
     scale = 1000.0 if unit == "kHz" else 1.0
 
     xlabel = cfg.xlabel_spec or "Tempo (s)"
-    ax.set_ylabel(unit, color=cfg.text_color)
-    ax.set_xlabel(xlabel, color=cfg.text_color)
+    ax.set_ylabel(cfg.ylabel_spec or unit, color=cfg.text_color)
+    ax.set_xlabel(cfg.xlabel_spec or xlabel, color=cfg.text_color)
     xmin = cfg.spec_xmin if cfg.spec_xmin is not None else t_spec[0]
     xmax = cfg.spec_xmax if cfg.spec_xmax is not None else t_spec[-1]
     ax.set_xlim(xmin, xmax)
@@ -296,30 +354,31 @@ def draw_spectrogram(
     if interactive and spectro_engine is not None:
         spectro_engine.render_high_detail()
     else:
-        # Subset para Específico não renderizar matriz gigantesca fora da view
         if cfg.spec_xmin is not None and cfg.spec_xmax is not None:
             t_mask = (t_spec >= cfg.spec_xmin) & (t_spec <= cfg.spec_xmax)
             t_plot = t_spec[t_mask]
             S_plot = Sxx_db[:, t_mask]
+            if len(t_plot) < 2:
+                raise ValueError("Recorte Específico muito estreito para o Espectrograma (menos de 2 colunas).")
         else:
             t_plot = t_spec
             S_plot = Sxx_db
-            
-        # Exportação de alta fidelidade: sem decimação restritiva temporal
         # rasterized=True evita que PDFs fiquem gigantes e lentos, mantendo os eixos vetoriais em alta resolução
         if len(t_plot) > 0:
             mesh = ax.pcolormesh(t_plot, f_spec / scale, S_plot, shading='auto', cmap='magma', rasterized=True)
             if not interactive:
                 cbar = ax.figure.colorbar(mesh, ax=ax, pad=0.01)
-                cbar.set_label('Potência (dB)', color=cfg.text_color)
+                cbar.set_label("Potência (dB)", color=cfg.text_color)
                 cbar.ax.yaxis.set_tick_params(color=cfg.ax_color, labelcolor=cfg.text_color)
                 for spine in cbar.ax.spines.values():
-                    spine.set_color(cfg.ax_color)
+                    spine.set_edgecolor(cfg.ax_color)
 
 
 def draw_histogram(
     ax,
-    chirps: List[Dict[str, Any]],
+    chirps: List[int],
+    chirp_peaks_list: List,
+    rate: float,
     cfg: Optional[ExportConfig] = None,
 ) -> None:
     """
@@ -340,60 +399,252 @@ def draw_histogram(
     if not chirps:
         return
 
-    from collections import Counter
-    import numpy as np
+    unique_pulses, counts = np.unique(chirps, return_counts=True)
     
-    counts = Counter(c['n_pulses'] for c in chirps)
-    if not counts:
-        return
-
-    ks = sorted(counts.keys())
-    vs = [counts[k] for k in ks]
     pulse_colors = {
         2: '#2563EB', 3: '#8B5CF6', 4: '#F97316', 5: '#10B981',
         6: '#EC4899', 7: '#06B6D4', 8: '#EAB308', 9: '#84CC16',
         10: '#A855F7', 1: '#94A3B8',
     }
     extra_pulse_color = '#F43F5E'
-    colors_list = [pulse_colors.get(k, extra_pulse_color) for k in ks]
+    colors_list = [pulse_colors.get(int(x), extra_pulse_color) for x in unique_pulses]
 
-    bars = ax.bar(ks, vs, color=colors_list, edgecolor='none', zorder=2)
-    ax.set_xticks(ks)
+    bars = ax.bar(unique_pulses, counts, color=colors_list, edgecolor='none', zorder=2, width=0.68)
+    ax.set_xticks(unique_pulses)
     
-    max_v = max(vs) if vs else 1
-    ax.set_ylim(0, max_v * 1.15) # Folga para o rótulo
+    max_count = int(max(counts)) if len(counts) > 0 else 1
+    ax.set_ylim(0, max_count * 1.25)
     
-    for k, v in zip(ks, vs):
-        ax.text(k, v + max_v * 0.02, str(v), ha='center', va='bottom', 
-                color=cfg.text_color, fontsize=10, fontweight='bold', zorder=4)
+    for bar in bars:
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + max_count * 0.025,
+            str(int(bar.get_height())),
+            ha='center', va='bottom',
+            color=cfg.text_color, fontsize=8.5, fontweight='bold', zorder=4
+        )
 
-    ax2 = ax.twinx()
-    ax2.tick_params(colors=cfg.ax_color)
-    dur_ms = []
-    
-    for k in ks:
-        spans = [(c['end_time'] - c['start_time']) * 1000.0 for c in chirps if c['n_pulses'] == k]
-        if spans:
-            dur_ms.append(float(np.mean(spans)))
-        else:
-            dur_ms.append(0.0)
-            
-    ax2.plot(ks, dur_ms, 'o--', color='#F97316', linewidth=1.4,
-             markersize=5, zorder=3, label="Duração Média (ms)")
-             
-    max_d = max(dur_ms) if any(dur_ms) else 1
-    ax2.set_ylim(0, max_d * 1.25) # Folga para o rótulo
-    
-    for k, d in zip(ks, dur_ms):
-        if d > 0:
-            ax2.text(k, d + max_d * 0.03, f"{d:.1f} ms", ha='center', va='bottom', 
-                     color='#EA580C', fontsize=9, fontweight='bold', zorder=4)
+    # Duração média
+    duration_by_class = {}
+    for cp in chirp_peaks_list:
+        n_pulses = len(cp)
+        if n_pulses >= 1 and rate > 0:
+            dur_ms = (cp[-1] - cp[0]) / rate * 1000.0
+            duration_by_class.setdefault(n_pulses, []).append(dur_ms)
 
-    ax2.set_ylabel("Duração Média (ms)", color=cfg.text_color)
-    
-    for spine in ax2.spines.values():
-        spine.set_edgecolor(cfg.ax_color)
+    avg_durations = {}
+    for n_p, durs in duration_by_class.items():
+        if n_p > 1: # Ignora a duração de 1 pulso (0ms) no gráfico de linha
+            avg_durations[n_p] = float(np.mean(durs))
+
+    if len(avg_durations) >= 1:
+        ax2 = ax.twinx()
+        ax2.tick_params(colors=cfg.ax_color)
         
-    ax2.legend(loc='upper left')
+        sorted_classes = sorted(avg_durations.keys())
+        x_pts = np.array(sorted_classes, dtype=float)
+        y_pts = np.array([avg_durations[k] for k in sorted_classes], dtype=float)
+        
+        ax2.plot(x_pts, y_pts, 'o--', color='#DC2626', linewidth=1.5,
+                 markersize=5, zorder=3, label="Duração (ms)")
+                 
+        max_d = max(y_pts) if len(y_pts) > 0 else 1
+        ax2.set_ylim(0, max_d * 1.25)
+        
+        for xv, yv in zip(x_pts, y_pts):
+            if yv > 0:
+                ax2.text(xv, yv + max_d * 0.03, f"{yv:.1f} ms", ha='center', va='bottom', 
+                         color='#EA580C', fontsize=8.5, fontweight='bold', zorder=4)
+
+        ax2.set_ylabel("Duração Média (ms)", color=cfg.text_color)
+        for spine in ax2.spines.values():
+            spine.set_edgecolor(cfg.ax_color)
+            
+        ax2.legend(loc='upper left', frameon=False, labelcolor=cfg.text_color)
+
+def create_waveform_figure(ctx, cfg: Optional[ExportConfig] = None) -> tuple:
+    """Retorna (Figure, ax) com o oscilograma pronto para exportar."""
+    if cfg is None:
+        cfg = ExportConfig()
+
+    fig, ax = _new_fig(cfg, height=3.5)
+    d = ctx.active_heavy_data
+    if not d:
+        return fig, ax
+
+    draw_waveform(
+        ax, d["data"], d["rate"],
+        env=d.get("env"),
+        chirp_peaks_list=d.get("chirp_peaks_list", []),
+        cfg=cfg,
+        interactive=False,
+    )
+    fig.tight_layout()
+    return fig, ax
 
 
+def create_psd_figure(ctx, cfg: Optional[ExportConfig] = None) -> tuple:
+    """Retorna (Figure, ax) com o espectro de potência pronto para exportar."""
+    if cfg is None:
+        cfg = ExportConfig()
+
+    fig, ax = _new_fig(cfg, height=3.5)
+    d = ctx.active_heavy_data
+    if not d:
+        return fig, ax
+
+    draw_psd(
+        ax,
+        np.asarray(d.get("f_psd", [])),
+        np.asarray(d.get("Pxx_db", [])),
+        rate=float(d.get("rate", 44100)),
+        carrier_freq_hz=float(d.get("carrier_freq", 0.0)),
+        cfg=cfg,
+    )
+    fig.tight_layout()
+    return fig, ax
+
+
+def create_spectrogram_figure(ctx, cfg: Optional[ExportConfig] = None) -> tuple:
+    """Retorna (Figure, ax) com o espectrograma pronto para exportar."""
+    if cfg is None:
+        cfg = ExportConfig()
+
+    fig, ax = _new_fig(cfg, height=4.0)
+    d = ctx.active_heavy_data
+    if not d:
+        return fig, ax
+
+    draw_spectrogram(
+        ax,
+        d["Sxx_db"], d["t_spec"], d["f_spec"],
+        cfg=cfg,
+        interactive=False,
+    )
+    fig.tight_layout()
+    return fig, ax
+
+
+def create_histogram_figure(ctx, cfg: Optional[ExportConfig] = None) -> tuple:
+    """Retorna (Figure, ax) com o histograma pronto para exportar."""
+    if cfg is None:
+        cfg = ExportConfig()
+
+    fig, ax = _new_fig(cfg, height=3.5)
+    d = ctx.active_heavy_data
+    if not d:
+        return fig, ax
+
+    chirps = d.get("chirps", [])
+    chirp_peaks_list = d.get("chirp_peaks_list", [])
+    rate = float(d.get("rate", 44100))
+
+    draw_histogram(
+        ax,
+        chirps,
+        chirp_peaks_list,
+        rate,
+        cfg=cfg,
+    )
+    fig.tight_layout()
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
+# Exportadores de alto nível
+# ---------------------------------------------------------------------------
+
+_PANEL_FACTORIES = {
+    "waveform":     create_waveform_figure,
+    "psd":          create_psd_figure,
+    "spectrogram":  create_spectrogram_figure,
+    "histogram":    create_histogram_figure,
+}
+
+_PANEL_TITLES = {
+    "waveform":    "Oscilograma",
+    "psd":         "Espectro de Potência (PSD)",
+    "spectrogram": "Espectrograma",
+    "histogram":   "Histograma de Chilreios",
+}
+
+
+def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None) -> List[str]:
+    """
+    Exporta cada painel selecionado em cfg.panels como arquivo PNG separado.
+
+    Nomes gerados: <base>_waveform.png, <base>_psd.png, etc.
+    Retorna lista dos caminhos escritos.
+    """
+    if cfg is None:
+        cfg = ExportConfig(fmt="png")
+
+    import os
+    base, _ = os.path.splitext(path)
+    written = []
+
+    import os
+    suf = png_set_suffix(base, cfg.panels)
+    
+    for panel in cfg.panels:
+        if should_cancel and should_cancel():
+            for w in written:
+                try: os.remove(w)
+                except Exception: pass
+            return []
+        
+        factory = _PANEL_FACTORIES.get(panel)
+        if factory is None:
+            continue
+            
+        fig, _ = factory(ctx, cfg)
+        try:
+            out = f"{base}_{panel}{suf}.png"
+            fig.savefig(out, dpi=cfg.dpi, bbox_inches="tight",
+                        facecolor=fig.get_facecolor())
+            written.append(out)
+        finally:
+            fig.clf()
+            del fig
+
+    return written
+
+
+def export_figures_pdf(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None) -> str:
+    """
+    Exporta todos os painéis selecionados em um único PDF multipágina.
+
+    Cada painel é uma página. Retorna o caminho do arquivo escrito.
+    """
+    if cfg is None:
+        cfg = ExportConfig(fmt="pdf")
+
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    import os
+    path = unique_path(path)
+    with PdfPages(path) as pdf:
+        for panel in cfg.panels:
+            if should_cancel and should_cancel():
+                break
+                
+            factory = _PANEL_FACTORIES.get(panel)
+            if factory is None:
+                continue
+                
+            fig, ax = factory(ctx, cfg)
+            try:
+                ax.set_title(_PANEL_TITLES.get(panel, panel),
+                             color=cfg.text_color, pad=8, fontsize=11)
+                pdf.savefig(fig, bbox_inches="tight",
+                            facecolor=fig.get_facecolor())
+            finally:
+                fig.clf()
+                del fig
+                
+    if should_cancel and should_cancel():
+        try: os.remove(path)
+        except Exception: pass
+        return ""
+        
+    return path

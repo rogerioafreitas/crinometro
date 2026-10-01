@@ -2097,9 +2097,20 @@ class MainWindow(QMainWindow):
 
     # ---------- exportação ----------
     def open_export_graph_dialog(self):
-        """Abre o diálogo de exportação de gráficos (Fase 8)."""
         from ui.dialogs.export_graph_dialog import ExportGraphDialog
-        dlg = ExportGraphDialog(self.ctx, parent=self)
+        live_view = {}
+        if hasattr(self, 'plot_renderers') and hasattr(self.plot_renderers, 'panel_spec') and self.plot_renderers.panel_spec and self.plot_renderers.panel_spec.ax:
+            try:
+                ax = self.plot_renderers.panel_spec.ax
+                live_view['xlim'] = ax.get_xlim()
+                live_view['ylim'] = ax.get_ylim()
+                live_view['spec_unit'] = getattr(self.plot_renderers.panel_spec, 'spec_unit', 'kHz')
+            except Exception:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Aviso", "Não foi possível ler a vista atual do espectrograma para o recorte 'Específico'.")
+                pass
+
+        dlg = ExportGraphDialog(self.session_context, live_view=live_view, parent=self)
         dlg.exec()
 
     def action_save_txt(self):
