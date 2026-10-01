@@ -40,7 +40,7 @@ class PlotTitleBar(QFrame):
 
     def _find_drop_target(self, global_pos, win):
         """Identifica qual painel ou host está sob o cursor."""
-        if not hasattr(win, "all_panels"):
+        if not getattr(win, "all_panels", None):
             return None
 
         # Verifica primeiro se está sobre o main_host / main_panel
@@ -131,6 +131,10 @@ class CompactCtrlBar(QFrame):
 
 
 class PlotPanel(QFrame):
+    undo_requested = pyqtSignal()
+    spectrogram_y_limits_changed = pyqtSignal(float, float, str)
+    freq_tolerance_changed = pyqtSignal(int, object)
+    wave_visibility_changed = pyqtSignal(bool, bool, bool, bool)
     """Mini janela / Card de gráfico com cantos arredondados e suporte a reordenação."""
     def __init__(self, title_key, lang, expand_callback, main=False):
         super().__init__()
@@ -206,10 +210,7 @@ class PlotPanel(QFrame):
         self.btn_pulse_undo = self._tool_button("↶", "Desfazer última edição de pulso")
         self.btn_pulse_undo.setObjectName("plotTool")
         self.btn_pulse_undo.setEnabled(False)
-        self.btn_pulse_undo.clicked.connect(
-            lambda: self.window()._undo_pulse_edit()
-            if hasattr(self.window(), "_undo_pulse_edit") else None
-        )
+        self.btn_pulse_undo.clicked.connect(self.undo_requested.emit)
         bar.addWidget(self.btn_pulse_undo)
 
         # Ações do gráfico: somente maximizar/restaurar, que possui comportamento real.
@@ -426,11 +427,7 @@ class PlotPanel(QFrame):
             self.show_env = self.btn_toggle_env.isChecked()
             self.show_lod = self.btn_toggle_lod.isChecked()
             self.show_peaks = self.btn_toggle_peaks.isChecked()
-            win = self.window()
-            if hasattr(win, "update_wave_visibility"):
-                win.update_wave_visibility(self.show_raw, self.show_env, self.show_lod, self.show_peaks)
-            elif hasattr(win, "plot_renderers") and win.plot_renderers:
-                win.plot_renderers.update_wave_visibility(self.show_raw, self.show_env, self.show_lod, self.show_peaks)
+            self.wave_visibility_changed.emit(self.show_raw, self.show_env, self.show_lod, self.show_peaks)
 
     def _apply_chip_style(self, btn, accent_color, checked):
         dark = True
@@ -703,9 +700,7 @@ class PlotPanel(QFrame):
 
         self._sync_y_slider_from_ymax(ymax)
 
-        win = self.window()
-        if hasattr(win, "apply_spectrogram_y_limits"):
-            win.apply_spectrogram_y_limits(ymin, ymax, getattr(self, "spec_unit", "kHz"))
+        self.spectrogram_y_limits_changed.emit(ymin, ymax, getattr(self, "spec_unit", "kHz"))
 
     def _on_spec_unit_combo_changed(self, new_unit):
         if not hasattr(self, "spin_spec_ymin") or not hasattr(self, "spin_spec_ymax"):
@@ -794,7 +789,7 @@ class PlotPanel(QFrame):
                 self.set_spec_limits(y_min, y_max, unit="Hz")
         else:
             win = self.window()
-            p = getattr(win, "active_heavy_data", {}).get("params", {})
+            p = (getattr(win.ctx, "active_heavy_data", {}) if getattr(win, "ctx", None) else {}).get("params", {})
             b1_min = float(p.get("b1_min", 3200))
             b1_max = float(p.get("b1_max", 6000))
             if getattr(self, "spec_unit", "kHz") == "kHz":
@@ -804,7 +799,7 @@ class PlotPanel(QFrame):
 
     def _preset_full_nyquist(self):
         win = self.window()
-        rate = float(getattr(win, "active_heavy_data", {}).get("rate", 44100.0))
+        rate = float((getattr(win.ctx, "active_heavy_data", {}) if getattr(win, "ctx", None) else {}).get("rate", 44100.0))
         nyq = rate / 2.0
         if getattr(self, "spec_unit", "kHz") == "kHz":
             self.set_spec_limits(0.0, round(nyq / 1000.0, 1), unit="kHz")
@@ -1402,9 +1397,7 @@ class PlotPanel(QFrame):
         self._notify_carrier_tol_changed(val)
 
     def _notify_carrier_tol_changed(self, val):
-        win = self.window()
-        if hasattr(win, "apply_realtime_freq_tolerance"):
-            win.apply_realtime_freq_tolerance(val, source_panel=self)
+        self.freq_tolerance_changed.emit(val, self)
 
     def set_carrier_info(self, carrier_freq, tol_hz=None):
         self._carrier_freq = float(carrier_freq) if carrier_freq else 0.0
@@ -1723,6 +1716,7 @@ class AudioTransportPanel(QFrame):
         self.btn_play.setFlat(True)
         self.btn_play.setFixedSize(46, 46)
         self.btn_play.setIconSize(QSize(19, 19))
+        self.btn_play.setIcon(make_ui_icon("play", color="#FFFFFF", size=19))
         self.btn_play.clicked.connect(self.play_toggled.emit)
         center_l.addWidget(self.btn_play, 0, Qt.AlignmentFlag.AlignCenter)
         

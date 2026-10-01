@@ -2,6 +2,7 @@
 Crinômetro - Interface Visual de Notificação e Download de Atualizações.
 """
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QTextBrowser, QMessageBox, QFrame
 )

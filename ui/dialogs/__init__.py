@@ -351,7 +351,7 @@ class ChangelogDialog(QDialog):
         btn_details.setObjectName("btn_details_github")
         btn_details.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_details.setToolTip("Abrir histórico detalhado com todas as alterações técnicas no GitHub")
-        btn_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/CHANGELOG.md")))
+        btn_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/docs/CHANGELOG.md")))
         btns_row.addWidget(btn_details)
 
         btns_row.addStretch()
@@ -476,7 +476,7 @@ class AboutDialog(QDialog):
         self.btn_more_details.setObjectName("btn_details_github")
         self.btn_more_details.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_more_details.setToolTip("Abrir CHANGELOG completo e detalhado no GitHub")
-        self.btn_more_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/CHANGELOG.md")))
+        self.btn_more_details.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rogerioafreitas/crinometro/blob/main/docs/CHANGELOG.md")))
         btns_layout.addWidget(self.btn_more_details)
 
         btns_layout.addStretch()

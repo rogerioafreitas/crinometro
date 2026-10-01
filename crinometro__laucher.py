@@ -654,7 +654,7 @@ def main():
 
     # Ícone do aplicativo
     base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    icon_candidate = os.path.join(base_dir, "grilinho.ico")
+    icon_candidate = os.path.join(base_dir, "assets", "grilinho.ico")
     if os.path.isfile(icon_candidate):
         app.setWindowIcon(QIcon(icon_candidate))
     else:

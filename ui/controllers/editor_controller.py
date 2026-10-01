@@ -102,7 +102,7 @@ class EditorController(QObject):
     @property
     def all_panels(self):
         win = self.main_window
-        if win is not None and hasattr(win, "all_panels"):
+        if win is not None:
             return win.all_panels
         pr = self.plot_renderers
         if pr is not None and hasattr(pr, "all_panels"):
@@ -389,12 +389,12 @@ class EditorController(QObject):
                 cache_entry["moda"] = 0.0
 
             if win is not None:
-                if hasattr(win, 'lbl_total'):
-                    win.lbl_total.setText("0")
-                if hasattr(win, 'lbl_metric_sub'):
-                    win.lbl_metric_sub.setText("Moda: —   |   Média: —")
-                if hasattr(win, 'timeline') and 'duration' in heavy:
-                    win.timeline.set_data(heavy.get('duration', 0.0), [])
+
+                win.lbl_total.setText("0")
+
+                win.lbl_metric_sub.setText("Moda: —   |   Média: —")
+                if 'duration' in heavy:
+                    win.transport_panel.timeline.set_data(heavy.get('duration', 0.0), [])
 
             metrics_payload = {
                 "total_chirps": 0,
@@ -435,10 +435,10 @@ class EditorController(QObject):
 
             win = self.main_window
             if win is not None:
-                if hasattr(win, 'lbl_total'):
-                    win.lbl_total.setText(str(len(chirps)))
-                if hasattr(win, 'lbl_metric_sub'):
-                    win.lbl_metric_sub.setText(f"Moda: {moda}   |   Média: {media:.2f}")
+
+                win.lbl_total.setText(str(len(chirps)))
+
+                win.lbl_metric_sub.setText(f"Moda: {moda}   |   Média: {media:.2f}")
 
             metrics_payload = {
                 "total_chirps": len(chirps),
@@ -504,8 +504,6 @@ class EditorController(QObject):
             pipe._adapt_advanced_params()
             return
         win = self.main_window
-        if win is not None and hasattr(win, "_adapt_advanced_params"):
-            win._adapt_advanced_params()
 
     def learn_from_corrections(self, filename: str = None, blocking: bool = False):
         """Coordena o retreinamento do classificador PulseLearner com base nas correções do usuário."""

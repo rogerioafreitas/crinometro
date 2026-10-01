@@ -2,7 +2,7 @@
 """
 Portão de Qualidade Arquitetural (Quality Gate) - Crinômetro v4.5.0
 Valida:
-1. Codificação (UTF-8 sem BOM, ausência de mojibake como Ã¡, Ã©, etc.)
+1. Codificacao (UTF-8 sem BOM, sem corrupcao de acentos)
 2. Análise estática por AST e Symtable (detecção real de NameError / variáveis indefinidas)
 3. Preservação de integridade estrutural
 """
@@ -83,26 +83,16 @@ def check_ast_syntax_and_symbols(filepath):
     return errors
 
 def run_gate():
-    files_to_check = [
-        "core/session_context.py",
-        "core/engines.py",
-        "ui/main_window.py",
-        "ui/panels.py",
-        "docs/STATE_CONTRACT_v4.5.0.md",
-        "docs/ROADMAP_v4.5.0_ARCH_AND_EXPORTS_REV2.md"
-    ]
+    import glob
+    files_to_check = []
+    for d in ["core", "ui", "utils", "scripts", "tests"]:
+        files_to_check.extend(glob.glob(f"{d}/**/*.py", recursive=True))
 
-    if os.path.exists("ui/controllers/pipeline_orchestrator.py"):
-        files_to_check.append("ui/controllers/pipeline_orchestrator.py")
-    if os.path.exists("ui/controllers/plot_renderers.py"):
-        files_to_check.append("ui/controllers/plot_renderers.py")
-    if os.path.exists("ui/controllers/navigation_controller.py"):
-        files_to_check.append("ui/controllers/navigation_controller.py")
-    if os.path.exists("ui/controllers/editor_controller.py"):
-        files_to_check.append("ui/controllers/editor_controller.py")
+
 
     all_errors = []
     for fp in files_to_check:
+        if "quality_gate.py" in fp: continue
         if os.path.exists(fp):
             all_errors.extend(check_file_encoding(fp))
             if fp.endswith(".py"):

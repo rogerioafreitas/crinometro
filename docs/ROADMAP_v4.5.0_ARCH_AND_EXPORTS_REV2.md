@@ -591,5 +591,5 @@ Persistência segura do modelo
 **Status:** Plano revisado para execução da v4.5.0.  
 **Base arquitetural:** `ui/main_window.py` atual e ROADMAP anterior.  
 **Escopo central:** desacoplamento seguro da `MainWindow`, preservação de comportamento, exportação científica modular e critérios explícitos de validação.  
-**Fases concluídas e validadas:** FASE 0, FASE 1, FASE 2, **FASE 3** (100% auditada: dual ownership eliminado via aliases, FP badge sincronizado, render_file e run_analysis integrados ao SessionContext via activate_cached_file, 18/18 testes de caracterização e 25/25 testes da suíte completa passando).  
-**Próximo marco de implementação:** executar a **FASE 4 — NavigationController** (isolamento de pan/zoom, sincronização horizontal, hover, cursor blitting e `capture_backgrounds`).
+**Fases concluídas e validadas:** FASES 0, 1, 2, 3, 4, 5, 6, 7 (100% auditadas).
+**Próximo marco de implementação:** executar a **FASE 8 - FigureFactory e Exportação Off-screen**.

@@ -70,7 +70,7 @@ class TestCharacterization(unittest.TestCase):
 
         # Atribuição via MainWindow property
         mock_data = {"rate": 44100, "dummy": True}
-        self.window.active_heavy_data = mock_data
+        self.window.ctx.active_heavy_data = mock_data
 
         # Fonte da verdade deve ser o contexto
         self.assertIs(self.window.ctx.active_heavy_data, mock_data)
@@ -79,7 +79,7 @@ class TestCharacterization(unittest.TestCase):
         # Atribuição direta no SessionContext também deve emitir sinal
         emitted_signals.clear()
         self.window.ctx.analysis_cache = {"file.wav": mock_data}
-        self.assertEqual(self.window.analysis_cache, {"file.wav": mock_data})
+        self.assertEqual(self.window.ctx.analysis_cache, {"file.wav": mock_data})
         self.assertIn("analysis_cache", emitted_signals)
 
     def test_01_pipeline_and_cache(self):
@@ -102,12 +102,12 @@ class TestCharacterization(unittest.TestCase):
 
         # 2. Aplicação na MainWindow e verificação das chaves obrigatórias do cache
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
-        self.window.active_filename = fname
-        self.window._apply_analysis_results(fname, res, params=params, render=False)
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.ctx.active_filename = fname
+        self.window.pipeline._apply_analysis_results(fname, res, params=params)
 
-        self.assertIn(fname, self.window.analysis_cache)
-        cached = self.window.analysis_cache[fname]
+        self.assertIn(fname, self.window.ctx.analysis_cache)
+        cached = self.window.ctx.analysis_cache[fname]
 
         required_keys = [
             "rate", "data", "data_b1", "env", "peaks", "chirps",
@@ -121,9 +121,9 @@ class TestCharacterization(unittest.TestCase):
             self.assertIn(key, cached, f"Chave essencial '{key}' ausente no cache de análise")
 
         # 3. Verificação de integridade dos arrays
-        self.assertIs(self.window.analysis_cache[fname]["f_psd"], f_psd)
-        self.assertEqual(self.window.active_filename, fname)
-        self.assertEqual(len(self.window.peaks_detected), len(peaks))
+        self.assertIs(self.window.ctx.analysis_cache[fname]["f_psd"], f_psd)
+        self.assertEqual(self.window.ctx.active_filename, fname)
+        self.assertEqual(len(self.window.ctx.peaks_detected), len(peaks))
 
     def test_02_cancelamento_cooperativo(self):
         """Verifica encerramento limpo de worker cooperativo sem deixar estado inconsistente."""
@@ -135,7 +135,7 @@ class TestCharacterization(unittest.TestCase):
             return True
 
         worker = GenericWorker(lambda: long_task(lambda: worker.abort_requested))
-        self.window._reanalyze_worker = worker
+        self.window.pipeline._reanalyze_worker = worker
         worker.start()
 
         # Aguarda thread iniciar execução
@@ -143,7 +143,7 @@ class TestCharacterization(unittest.TestCase):
         self.assertTrue(worker.isRunning())
 
         # Dispara aborto cooperativo da janela
-        self.window.abort_current_analysis()
+        self.window.pipeline.abort_current_analysis()
         self.assertTrue(worker.abort_requested)
 
         # Aguarda encerramento cooperativo
@@ -155,7 +155,7 @@ class TestCharacterization(unittest.TestCase):
         ax = self.window.panel_wave.ax
         ax.set_xlim(0.0, 1.0)
         ax.set_ylim(-1.0, 1.0)
-        self.window.active_heavy_data = {"rate": 44100, "duration": 1.0}
+        self.window.ctx.active_heavy_data = {"rate": 44100, "duration": 1.0}
 
         # 1. Teste de Pan via on_press (botão direito = 3)
         event_press = MouseEvent(
@@ -163,19 +163,19 @@ class TestCharacterization(unittest.TestCase):
             x=100, y=100, button=3, dblclick=False, guiEvent=None
         )
         event_press.inaxes = ax
-        self.window.on_press(event_press)
-        self.assertTrue(self.window.panning)
-        self.assertEqual(self.window.active_ax, ax)
-        self.assertEqual(self.window.start_xlim, (0.0, 1.0))
+        self.window.nav_controller.on_press(event_press)
+        self.assertTrue(self.window.nav_controller.panning)
+        self.assertEqual(self.window.nav_controller.active_ax, ax)
+        self.assertEqual(self.window.nav_controller.start_xlim, (0.0, 1.0))
 
         # 2. Teste de término de Pan via on_release
         event_release = MouseEvent(
             'button_release_event', self.window.panel_wave.canvas,
             x=100, y=100, button=3, dblclick=False, guiEvent=None
         )
-        self.window.on_release(event_release)
-        self.assertFalse(self.window.panning)
-        self.assertIsNone(self.window.active_ax)
+        self.window.nav_controller.on_release(event_release)
+        self.assertFalse(self.window.nav_controller.panning)
+        self.assertIsNone(self.window.nav_controller.active_ax)
 
         # 3. Teste de Zoom real via zoom_graph (scroll 'up' dá zoom in)
         event_zoom = MouseEvent(
@@ -187,78 +187,78 @@ class TestCharacterization(unittest.TestCase):
         event_zoom.ydata = 0.0
 
         orig_width = ax.get_xlim()[1] - ax.get_xlim()[0]
-        self.window.zoom_graph(event_zoom)
+        self.window.nav_controller.zoom_graph(event_zoom)
         new_width = ax.get_xlim()[1] - ax.get_xlim()[0]
 
         self.assertLess(new_width, orig_width, "Zoom 'up' deve aproximar reduzindo a largura da janela de tempo")
 
     def test_04_sincronizacao_eixos(self):
         """Verifica se a alteração do eixo X propaga aos painéis sincronizados."""
-        self.window.sync_throttle_time = 0.0
+        self.window.nav_controller.sync_throttle_time = 0.0
         self.window.panel_spec.isVisible = MagicMock(return_value=True)
-        self.window.spectro_engine = MagicMock()
+        self.window.plot_renderers.spectro_engine = MagicMock()
 
         with patch.object(self.window.panel_spec.ax, 'get_ylim', return_value=(0, 6000)):
-            self.window._sync_render([self.window.panel_spec], 0.05, 0.35)
-            self.window.spectro_engine.render_interactive.assert_called_once_with(
+            self.window.nav_controller._sync_render([self.window.panel_spec], 0.05, 0.35)
+            self.window.plot_renderers.spectro_engine.render_interactive.assert_called_once_with(
                 0.05, 0.35, 0, 6000, is_sync=True
             )
 
     def test_05_edicao_e_undo_pulsos(self):
         """Adicionar/remover/restaurar pulso atualiza marcadores e histórico."""
-        self.window.active_heavy_data = {
+        self.window.ctx.active_heavy_data = {
             "rate": 1000.0, 
             "env": np.zeros(1000), 
             "data_b1": np.zeros(1000),
             "peaks_detected": [10, 50, 100],
             "peaks_user_verified": [10, 50, 100]
         }
-        self.window.peaks_detected = [10, 50, 100]
-        self.window.peaks_user_verified = [10, 50, 100]
-        self.window._pulse_edit_history = []
+        self.window.ctx.peaks_detected = [10, 50, 100]
+        self.window.ctx.peaks_user_verified = [10, 50, 100]
+        self.window.editor_controller._pulse_edit_history = []
 
         # Remove pulso em t = 0.050s (índice 50)
-        self.window._toggle_peak_marker(0.051)
-        self.assertNotIn(50, self.window.peaks_user_verified)
-        self.assertEqual(len(self.window._pulse_edit_history), 1)
+        self.window.editor_controller.toggle_peak_marker(0.051)
+        self.assertNotIn(50, self.window.ctx.peaks_user_verified)
+        self.assertEqual(len(self.window.editor_controller._pulse_edit_history), 1)
 
         # Desfaz edição
-        self.window._undo_pulse_edit()
-        self.assertIn(50, self.window.peaks_user_verified)
-        self.assertEqual(len(self.window._pulse_edit_history), 0)
+        self.window.editor_controller.undo()
+        self.assertIn(50, self.window.ctx.peaks_user_verified)
+        self.assertEqual(len(self.window.editor_controller._pulse_edit_history), 0)
 
     def test_06_machine_learning_gate(self):
         """Verifica interceptação de CricketAnalyzer.analyze comprovando o gate de ML."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
 
         # Cenário 1: IA desativada (Modo DSP) -> CricketAnalyzer.analyze recebe pulse_learner=None
-        self.window.use_machine_learning = False
+        self.window.ctx.use_machine_learning = False
         with patch.object(CricketAnalyzer, 'analyze', wraps=CricketAnalyzer.analyze) as mock_analyze:
-            self.window.run_analysis(fname, params, render=False)
+            self.window.pipeline.run_analysis(fname, params)
             mock_analyze.assert_called_once()
             self.assertIsNone(mock_analyze.call_args.kwargs.get('pulse_learner'))
 
-        # Cenário 2: IA ativada -> CricketAnalyzer.analyze recebe self.window.pulse_learner
-        self.window.use_machine_learning = True
+        # Cenário 2: IA ativada -> CricketAnalyzer.analyze recebe self.window.ctx.pulse_learner
+        self.window.ctx.use_machine_learning = True
         with patch.object(CricketAnalyzer, 'analyze', wraps=CricketAnalyzer.analyze) as mock_analyze:
-            self.window.run_analysis(fname, params, render=False)
+            self.window.pipeline.run_analysis(fname, params)
             mock_analyze.assert_called_once()
-            self.assertIs(mock_analyze.call_args.kwargs.get('pulse_learner'), self.window.pulse_learner)
+            self.assertIs(mock_analyze.call_args.kwargs.get('pulse_learner'), self.window.ctx.pulse_learner)
 
     def test_07_exportacao_txt_e_pdf(self):
         """Verifica produção real de arquivos válidos TXT e PDF."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
-        self.window.active_filename = fname
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.ctx.active_filename = fname
         self.window.get_checked_files = MagicMock(return_value=[fname])
 
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
         res = CricketAnalyzer.analyze(self.sample_wav, params)
-        self.window._apply_analysis_results(fname, res, params=params, render=False)
+        self.window.pipeline._apply_analysis_results(fname, res, params=params)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # 1. Exportação TXT
@@ -300,11 +300,11 @@ class TestCharacterization(unittest.TestCase):
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
         res = CricketAnalyzer.analyze(self.sample_wav, params)
-        self.window._apply_analysis_results(fname, res, params=params, render=False)
+        self.window.pipeline._apply_analysis_results(fname, res, params=params)
 
         # Ativa os dados para simular o estado em exibição
-        self.window.active_filename = fname
-        self.window.active_heavy_data = self.window.analysis_cache[fname]
+        self.window.ctx.active_filename = fname
+        self.window.ctx.active_heavy_data = self.window.ctx.analysis_cache[fname]
         self.window.panel_wave.ax.set_xlim(0.05, 0.35)
         cur_xlim = self.window.panel_wave.ax.get_xlim()
 
@@ -312,14 +312,14 @@ class TestCharacterization(unittest.TestCase):
         self.window.pipeline.realtime_tolerance_updated.connect(lambda s: signals_emitted.append(s))
 
         # Aplica tolerância de 500 Hz
-        self.window.apply_realtime_freq_tolerance(500.0)
-        self.window._execute_realtime_freq_tolerance()
+        self.window.pipeline.apply_realtime_freq_tolerance(500.0)
+        self.window.pipeline._execute_realtime_freq_tolerance()
 
         # 1. Verifica emissão do sinal realtime_tolerance_updated
         self.assertIn(fname, signals_emitted)
         # 2. Verifica dados atualizados
-        self.assertIn("carrier_freq", self.window.active_heavy_data)
-        self.assertEqual(self.window.active_heavy_data["params"]["freq_tolerance_hz"], 500.0)
+        self.assertIn("carrier_freq", self.window.ctx.active_heavy_data)
+        self.assertEqual(self.window.ctx.active_heavy_data["params"]["freq_tolerance_hz"], 500.0)
         # 3. Verifica sincronização de tolerância visual no espectrograma
         if hasattr(self.window.panel_spec, "slider_carrier_tol"):
             self.assertEqual(self.window.panel_spec.slider_carrier_tol.value(), 500)
@@ -335,8 +335,8 @@ class TestCharacterization(unittest.TestCase):
         - Botão Abortar desaparece
         """
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
-        self.window.active_filename = fname
+        self.window.ctx.loaded_files[fname] = self.sample_wav
+        self.window.ctx.active_filename = fname
 
         # Inicializa com um dado antigo
         old_data = {"rate": 22050, "peaks": [1, 2], "carrier_freq": 1000.0, "params": {}}
@@ -347,7 +347,7 @@ class TestCharacterization(unittest.TestCase):
         self.assertFalse(self.window.btn_abort_analysis.isVisible())
 
         # Dispara reanálise
-        self.window.force_reanalyze()
+        self.window.pipeline.force_reanalyze(fname)
 
         # Botão Abortar deve estar visível durante execução
         self.assertTrue(self.window.btn_abort_analysis.isVisible())
@@ -376,7 +376,7 @@ class TestCharacterization(unittest.TestCase):
     def test_11_batch_analysis_and_progress(self):
         """Testa análise em lote e emissão dos sinais de lote de ponta a ponta sem corrida."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         
         progress_events = []
         item_events = []
@@ -410,15 +410,15 @@ class TestCharacterization(unittest.TestCase):
         file_a = "file_a.wav"
         file_b = "file_b.wav"
         file_c = "file_c.wav"
-        self.window.loaded_files[file_a] = self.sample_wav
-        self.window.loaded_files[file_b] = self.sample_wav
-        self.window.loaded_files[file_c] = self.sample_wav
+        self.window.ctx.loaded_files[file_a] = self.sample_wav
+        self.window.ctx.loaded_files[file_b] = self.sample_wav
+        self.window.ctx.loaded_files[file_c] = self.sample_wav
 
         params = DEFAULT_ALGO_PARAMS.copy()
         params.update({"dur_min": 5.0, "dur_max": 40.0, "min_p": 2})
 
         # 1. Usuário seleciona e analisa inicialmente o file_a (tornando-o ativo)
-        self.window.run_analysis(file_a, params, render=True)
+        self.window.pipeline.run_analysis(file_a, params, render=True)
         self.assertEqual(self.window.ctx.active_filename, file_a)
         initial_active_heavy = self.window.ctx.active_heavy_data
         self.assertIsNotNone(initial_active_heavy)
@@ -463,7 +463,7 @@ class TestCharacterization(unittest.TestCase):
 
         # 2. Executa análise real
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         params = DEFAULT_ALGO_PARAMS.copy()
         heavy_data = self.window.pipeline.run_analysis(fname, params, render=True)
@@ -476,12 +476,12 @@ class TestCharacterization(unittest.TestCase):
         self.assertIsInstance(pr.spectro_engine, HighPerfSpectrogramEngine)
 
         # 4. CRÍTICO: Eliminação de dual ownership (Solução A — aliases estritos)
-        self.assertIs(self.window.line_engine, pr.line_engine)
-        self.assertIs(self.window.spectro_engine, pr.spectro_engine)
-        self.assertIs(self.window.freq_engine, pr.freq_engine)
+        self.assertIs(self.window.plot_renderers.line_engine, pr.line_engine)
+        self.assertIs(self.window.plot_renderers.spectro_engine, pr.spectro_engine)
+        self.assertIs(self.window.plot_renderers.freq_engine, pr.freq_engine)
         self.assertIsNone(pr.freq_engine, "freq_engine permanece None por preservação de compatibilidade legada")
-        self.assertIs(self.window.wave_lines, pr.wave_lines)
-        self.assertIs(self.window._wave_user_markers, pr._wave_user_markers)
+        self.assertIs(self.window.plot_renderers.wave_lines, pr.wave_lines)
+        self.assertIs(self.window.plot_renderers._wave_user_markers, pr._wave_user_markers)
 
         # 5. Sincronização da Frequência Portadora (FP badge)
         badge_text = self.window.panel_spec.lbl_carrier_info.text()
@@ -495,7 +495,7 @@ class TestCharacterization(unittest.TestCase):
 
         (render_file, refresh_histogram, refresh_markers, refresh_all, update_wave_visibility, apply_spectrogram_y_limits)."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         params = DEFAULT_ALGO_PARAMS.copy()
         self.window.pipeline.run_analysis(fname, params, render=True)
@@ -529,7 +529,7 @@ class TestCharacterization(unittest.TestCase):
         pr.refresh_all()
         self.assertIsNotNone(pr.line_engine)
         self.assertIsNotNone(pr.spectro_engine)
-        self.assertIs(self.window.line_engine, pr.line_engine)
+        self.assertIs(self.window.plot_renderers.line_engine, pr.line_engine)
 
         # 6. render_file seleciona arquivo do cache e atualiza o estado ativo
         dummy_file = "dummy_other.wav"
@@ -552,7 +552,7 @@ class TestCharacterization(unittest.TestCase):
 
         consomem diretamente os engines HighPerf instanciados pelo PlotRenderers."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         params = DEFAULT_ALGO_PARAMS.copy()
         self.window.pipeline.run_analysis(fname, params, render=True)
@@ -566,10 +566,10 @@ class TestCharacterization(unittest.TestCase):
 
             self.window.panel_wave.setVisible(True)
             self.window.panel_spec.setVisible(True)
-            self.window.sync_throttle_time = 0.0
+            self.window.nav_controller.sync_throttle_time = 0.0
 
             # Invoca o caminho real de sincronização da navegação da MainWindow
-            self.window._sync_render([self.window.panel_wave, self.window.panel_spec], xmin=0.1, xmax=0.5)
+            self.window.nav_controller._sync_render([self.window.panel_wave, self.window.panel_spec], xmin=0.1, xmax=0.5)
 
             # Comprova que _sync_render acionou os engines reais do PlotRenderers
             spy_line.assert_called_once_with(0.1, 0.5, is_sync=True)
@@ -586,8 +586,8 @@ class TestCharacterization(unittest.TestCase):
 
         fname_a = "file_A.wav"
         fname_b = "file_B.wav"
-        self.window.loaded_files[fname_a] = self.sample_wav
-        self.window.loaded_files[fname_b] = self.sample_wav
+        self.window.ctx.loaded_files[fname_a] = self.sample_wav
+        self.window.ctx.loaded_files[fname_b] = self.sample_wav
         self.window.ctx.loaded_files[fname_a] = self.sample_wav
         self.window.ctx.loaded_files[fname_b] = self.sample_wav
 
@@ -667,8 +667,8 @@ class TestCharacterization(unittest.TestCase):
         outro arquivo já estava ativo anteriormente, com resultados deliberadamente distintos."""
         fname_a = "file_A.wav"
         fname_b = "file_B.wav"
-        self.window.loaded_files[fname_a] = self.sample_wav
-        self.window.loaded_files[fname_b] = self.sample_wav
+        self.window.ctx.loaded_files[fname_a] = self.sample_wav
+        self.window.ctx.loaded_files[fname_b] = self.sample_wav
         self.window.ctx.loaded_files[fname_a] = self.sample_wav
         self.window.ctx.loaded_files[fname_b] = self.sample_wav
 
@@ -725,23 +725,23 @@ class TestCharacterization(unittest.TestCase):
 
         # Validação de ownership único e compartilhamento de referências de estado
         nc = self.window.nav_controller
-        self.assertIs(self.window.cursor_lines, nc.cursor_lines)
-        self.assertIs(self.window.backgrounds, nc.backgrounds)
-        self.assertEqual(self.window.bg_cache_valid, nc.bg_cache_valid)
-        self.assertEqual(self.window.panning, nc.panning)
-        self.assertIs(self.window.pulse_hover_data, nc.pulse_hover_data)
-        self.assertIs(self.window._click_alignment_lines, nc._click_alignment_lines)
-        self.assertEqual(self.window.start_xlim, nc.start_xlim)
-        self.assertEqual(self.window.start_ylim, nc.start_ylim)
+        self.assertIs(self.window.nav_controller.cursor_lines, nc.cursor_lines)
+        self.assertIs(self.window.nav_controller.backgrounds, nc.backgrounds)
+        self.assertEqual(self.window.nav_controller.bg_cache_valid, nc.bg_cache_valid)
+        self.assertEqual(self.window.nav_controller.panning, nc.panning)
+        self.assertIs(self.window.nav_controller.pulse_hover_data, nc.pulse_hover_data)
+        self.assertIs(self.window.nav_controller._click_alignment_lines, nc._click_alignment_lines)
+        self.assertEqual(self.window.nav_controller.start_xlim, nc.start_xlim)
+        self.assertEqual(self.window.nav_controller.start_ylim, nc.start_ylim)
 
         # Mutação através de setters na MainWindow reflete no NavigationController
-        self.window.cursor_lines = ["dummy_line"]
+        self.window.nav_controller.cursor_lines = ["dummy_line"]
         self.assertEqual(nc.cursor_lines, ["dummy_line"])
-        self.window.cursor_lines = []
+        self.window.nav_controller.cursor_lines = []
 
-        self.window.panning = True
+        self.window.nav_controller.panning = True
         self.assertTrue(nc.panning)
-        self.window.panning = False
+        self.window.nav_controller.panning = False
         self.assertFalse(nc.panning)
 
         # Verificação da existência dos sinais do contrato §4.3
@@ -754,7 +754,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 4: Comprova o ciclo completo de pan (início, movimento com clamping, término)
         e a emissão correspondente de pan_started, pan_finished e viewport_changed."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -772,7 +772,7 @@ class TestCharacterization(unittest.TestCase):
         # 1. Inicia Pan com botão direito (button == 3)
         ev_press = MouseEvent('button_press_event', self.window.panel_wave.canvas, x=200, y=150, button=3)
         ev_press.inaxes = ax
-        self.window.on_press(ev_press)
+        self.window.nav_controller.on_press(ev_press)
 
         pan_started_spy.assert_called_once()
         self.assertTrue(nc.panning)
@@ -782,7 +782,7 @@ class TestCharacterization(unittest.TestCase):
         nc._last_pan_time = 0.0  # Reseta throttle para garantir execução
         ev_motion = MouseEvent('motion_notify_event', self.window.panel_wave.canvas, x=250, y=170, button=3)
         ev_motion.inaxes = ax
-        self.window.on_motion(ev_motion)
+        self.window.nav_controller.on_motion(ev_motion)
 
         viewport_spy.assert_called()
         call_xmin, call_xmax = viewport_spy.call_args[0]
@@ -791,7 +791,7 @@ class TestCharacterization(unittest.TestCase):
         # 3. Finalização do Pan
         ev_release = MouseEvent('button_release_event', self.window.panel_wave.canvas, x=250, y=170, button=3)
         ev_release.inaxes = ax
-        self.window.on_release(ev_release)
+        self.window.nav_controller.on_release(ev_release)
 
         pan_finished_spy.assert_called_once()
         self.assertFalse(nc.panning)
@@ -801,7 +801,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 4: Comprova zoom centrado no cursor, restrição por _clamp_bounds
         e sincronização entre eixos temporal wave e spec via NavigationController."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -820,7 +820,7 @@ class TestCharacterization(unittest.TestCase):
         ev_zoom_in.inaxes = ax_wave
         ev_zoom_in.xdata = 0.25
         ev_zoom_in.ydata = 0.0
-        self.window.zoom_graph(ev_zoom_in)
+        self.window.nav_controller.zoom_graph(ev_zoom_in)
 
         new_xlim = ax_wave.get_xlim()
         new_width = new_xlim[1] - new_xlim[0]
@@ -833,7 +833,7 @@ class TestCharacterization(unittest.TestCase):
         ev_zoom_out.inaxes = ax_wave
         ev_zoom_out.xdata = 0.25
         ev_zoom_out.ydata = 0.0
-        self.window.zoom_graph(ev_zoom_out)
+        self.window.nav_controller.zoom_graph(ev_zoom_out)
 
         # Ambos os eixos de tempo (wave e spec) devem ter recebido o mesmo xlim
         self.assertAlmostEqual(ax_wave.get_xlim()[0], ax_spec.get_xlim()[0], places=5)
@@ -851,7 +851,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 4: Comprova detecção de hover sobre marcadores de pulsos, formatação
         de coordenadas e emissão semântica de hover_changed."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -873,7 +873,7 @@ class TestCharacterization(unittest.TestCase):
         ev_hover.inaxes = ax
         ev_hover.xdata = t_pulse
         ev_hover.ydata = first_pulse["env_y"]
-        self.window.on_motion(ev_hover)
+        self.window.nav_controller.on_motion(ev_hover)
 
         # Valida emissão do sinal com o dicionário de metadados do pulso
         hover_spy.assert_called()
@@ -887,7 +887,7 @@ class TestCharacterization(unittest.TestCase):
         ev_away.inaxes = ax
         ev_away.xdata = t_pulse + 5.0
         ev_away.ydata = 0.9
-        self.window.on_motion(ev_away)
+        self.window.nav_controller.on_motion(ev_away)
 
         hover_spy.assert_called()
         self.assertIsNone(hover_spy.call_args[0][0])
@@ -896,14 +896,14 @@ class TestCharacterization(unittest.TestCase):
         self.window.panel_wave.coord_label.setVisible(True)
         ev_leave = MouseEvent('axes_leave_event', self.window.panel_wave.canvas, x=0, y=0)
         ev_leave.inaxes = ax
-        self.window.on_axes_leave(ev_leave)
+        self.window.nav_controller.on_axes_leave(ev_leave)
         self.assertFalse(self.window.panel_wave.coord_label.isVisible())
 
     def test_22_navigation_controller_background_blitting_and_cursor(self):
         """FASE 4: Comprova captura de backgrounds para blitting ultra-rápido,
         atualização do cursor de reprodução e preservação do cache de background."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -980,12 +980,12 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(self.window.nav_controller.pulse_edit_handler, ec.toggle_peak_marker)
 
         # Single ownership: MainWindow._pulse_edit_history reflete diretamente ec._pulse_edit_history
-        self.assertIs(self.window._pulse_edit_history, ec._pulse_edit_history)
+        self.assertIs(self.window.editor_controller._pulse_edit_history, ec._pulse_edit_history)
 
         # Modificação via setter da MainWindow afeta o EditorController
-        self.window._pulse_edit_history = [[100, 200]]
+        self.window.editor_controller._pulse_edit_history = [[100, 200]]
         self.assertEqual(ec._pulse_edit_history, [[100, 200]])
-        self.window._pulse_edit_history = []
+        self.window.editor_controller._pulse_edit_history = []
         self.assertEqual(ec._pulse_edit_history, [])
 
         # Verificação da existência dos sinais do contrato §5.3
@@ -1002,7 +1002,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5: Comprova alternância de picos (adição e remoção com snapping temporal e metadados)
         e a correta emissão de sinais semânticos pulse_added, pulse_removed e pulses_changed."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1022,21 +1022,21 @@ class TestCharacterization(unittest.TestCase):
         target_time = target_sample / rate
 
         # 1. Alterna pulso existente -> deve remover
-        self.window._toggle_peak_marker(target_time)
+        self.window.editor_controller.toggle_peak_marker(target_time)
         removed_spy.assert_called_once_with(target_sample)
         self.assertNotIn(target_sample, self.window.ctx.peaks_user_verified)
         changed_spy.assert_called()
 
         # 2. Alterna mesmo pulso novamente -> deve re-adicionar
         added_spy.reset_mock()
-        self.window._toggle_peak_marker(target_time)
+        self.window.editor_controller.toggle_peak_marker(target_time)
         added_spy.assert_called_once_with(target_sample)
         self.assertIn(target_sample, self.window.ctx.peaks_user_verified)
 
         # 3. Adiciona pulso novo manual com metadados de frequência e amplitude (dentro da duração de 0.4s)
         novel_time = 0.35
         novel_sample = int(round(novel_time * rate))
-        self.window._toggle_peak_marker(novel_time, f_click=5200.0, amp_click=0.75)
+        self.window.editor_controller.toggle_peak_marker(novel_time, f_click=5200.0, amp_click=0.75)
         self.assertIn(novel_sample, self.window.ctx.peaks_user_verified)
         self.assertIn(novel_sample, self.window.ctx.pulse_metadata)
         self.assertEqual(self.window.ctx.pulse_metadata[novel_sample]["freq"], 5200.0)
@@ -1046,7 +1046,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5: Comprova a pilha de desfeita (undo), integridade de estados anteriores,
         limite de histórico e sinalização de undo_availability_changed."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1099,7 +1099,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5: Comprova recálculo automático de chirps e métricas fisiológicas
         via CricketAnalyzer.regroup_chirps e sincronização no SessionContext e UI."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1128,7 +1128,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5: Comprova a integração do EditorController com PulseLearner, persistência
         de correções no arquivo de configuração e emissão dos sinais de ciclo de vida."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1153,7 +1153,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5 Loop 3: Comprova que o Undo restaura integralmente peaks_user_verified E pulse_metadata,
         eliminando metadados órfãos e recuperando metadados de pulsos removidos e restaurados."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1202,7 +1202,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5 Loop 3: Comprova que render_dashboard() preserva o histórico de Undo em re-renderizações
         normais do mesmo arquivo (ex: ajuste de tolerância), mas limpa em troca de arquivo ou reanálise."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1273,7 +1273,7 @@ class TestCharacterization(unittest.TestCase):
         """FASE 5 Loop 3: Comprova que learn_from_corrections() preserva metadados enriquecidos
         dos pulsos (freq/amp) em corrections_by_file e sincroniza a coerência com o arquivo ativo."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1314,7 +1314,7 @@ class TestCharacterization(unittest.TestCase):
         as métricas (chirps, media, moda) e os rótulos de UI são explicitamente limpos,
         evitando valores obsoletos em tela, e devidamente restaurados no undo."""
         fname = "sample_chirp.wav"
-        self.window.loaded_files[fname] = self.sample_wav
+        self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.pipeline.run_analysis(fname, DEFAULT_ALGO_PARAMS.copy(), render=True)
 
@@ -1426,12 +1426,12 @@ class TestCharacterization(unittest.TestCase):
         self.assertTrue(hasattr(self.window, "transport_panel"))
         self.assertIsInstance(self.window.transport_panel, AudioTransportPanel)
         
-        # 2. Verifica se os aliases (propriedades) continuam válidos e mapeados
-        self.assertIs(self.window.btn_play, self.window.transport_panel.btn_play)
-        self.assertIs(self.window.btn_speed, self.window.transport_panel.btn_speed)
-        self.assertIs(self.window.lbl_elapsed, self.window.transport_panel.lbl_elapsed)
-        self.assertIs(self.window.volume_slider, self.window.transport_panel.volume_slider)
-        self.assertIs(self.window.timeline, self.window.transport_panel.timeline)
+        # 2. Verifica se as referencias de compatibilidade aos widgets do AudioTransportPanel continuam validas
+        self.assertTrue(hasattr(self.window.transport_panel, "btn_play"))
+        self.assertTrue(hasattr(self.window.transport_panel, "btn_speed"))
+        self.assertTrue(hasattr(self.window.transport_panel, "lbl_elapsed"))
+        self.assertTrue(hasattr(self.window.transport_panel, "volume_slider"))
+        self.assertTrue(hasattr(self.window.transport_panel, "timeline"))
         # 3. Verifica a fiação de sinais da interface com emissões reais
         events = []
         
@@ -1454,11 +1454,82 @@ class TestCharacterization(unittest.TestCase):
 
         
         
+
+    def test_36_architectural_regression_guards(self):
+        """
+        FASE 7: Comprova que a MainWindow foi despojada de suas antigas delegacoes
+        e aliases dinamicos, garantindo que nao sejam reintroduzidos.
+        """
+        win = self.window
+        
+        extracted_methods = [
+            "run_analysis",
+            "render_dashboard",
+            "capture_backgrounds",
+            "zoom_graph",
+            "_toggle_peak_marker",
+            "_undo_pulse_edit",
+            "learn_from_corrections",
+            "_update_pulse_hover_data",
+            "_click_alignment_lines",
+            "_adapt_advanced_params"
+        ]
+        
+        for method in extracted_methods:
+            self.assertFalse(hasattr(win, method), f"MainWindow nao deve conter o metodo/estado legado '{method}'")
+
+        window_class_dict = type(win).__dict__
+        properties = [k for k, v in window_class_dict.items() if isinstance(v, property) and not k.startswith('__')]
+        
+        legacy_aliases = ['btn_play', 'btn_speed', 'lbl_elapsed', 'timeline', 'volume_slider']
+        for alias in legacy_aliases:
+            self.assertNotIn(alias, properties, f"'{alias}' nao deve ser uma @property na MainWindow (alias obsoleto)")
+
+
+    def test_37_panels_signals_undo(self):
+        """Comprova que clicar no botao de undo do painel emite o sinal para o controller."""
+        win = self.window
+        emitted = []
+        win.panel_spec.undo_requested.connect(lambda: emitted.append(True))
+        win.panel_spec.btn_pulse_undo.setEnabled(True)
+        win.panel_spec.btn_pulse_undo.click()
+        self.assertTrue(emitted, "Clicar no btn_pulse_undo deve emitir undo_requested")
+
+    def test_38_panels_signals_y_limits(self):
+        """Comprova que aplicar preset/spinners de Y-limits emite sinal."""
+        win = self.window
+        calls = []
+        win.panel_spec.spectrogram_y_limits_changed.connect(lambda ymin, ymax, unit: calls.append((ymin, ymax, unit)))
+        
+        # Simula a aplicacao de um preset de Y
+        if hasattr(win.panel_spec, '_preset_focal_band'):
+            win.panel_spec._preset_focal_band()
+        elif hasattr(win.panel_spec, '_preset_focal'):
+            win.panel_spec._preset_focal()
+        
+        self.assertTrue(len(calls) > 0, "Mudar o preset deve emitir spectrogram_y_limits_changed")
+
+    def test_39_panels_signals_freq_tolerance(self):
+        """Comprova que a alteracao de tolerancia de portadora emite sinal."""
+        win = self.window
+        calls = []
+        win.panel_spec.freq_tolerance_changed.connect(lambda val, p: calls.append(val))
+        
+        win.panel_spec.set_carrier_tolerance(150, notify=True)
+        
+        self.assertTrue(len(calls) > 0, "A alteracao de tolerancia deve emitir freq_tolerance_changed")
+        self.assertEqual(calls[0], 150)
+
+    def test_40_panels_signals_wave_visibility(self):
+        """Comprova que a visibilidade de waveform no painel emite sinal."""
+        win = self.window
+        calls = []
+        win.panel_wave.wave_visibility_changed.connect(lambda r, e, l, p: calls.append(True))
+        
+        if hasattr(win.panel_wave, "btn_toggle_raw"):
+            current = win.panel_wave.btn_toggle_raw.isChecked()
+            win.panel_wave.btn_toggle_raw.setChecked(not current)
+            self.assertTrue(len(calls) > 0, "Toggle de raw wave deve emitir wave_visibility_changed")
+
 if __name__ == '__main__':
     unittest.main()
-
-
-
-
-
-

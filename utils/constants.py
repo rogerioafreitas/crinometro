@@ -2,7 +2,7 @@
 Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
-APP_VERSION = "4.4.1"
+APP_VERSION = "4.5.0 beta"
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {

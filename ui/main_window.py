@@ -2,45 +2,43 @@
 Crinômetro - Janela Principal e Dashboard Científico (MainWindow).
 """
 import os
-import sys
+
 import time
 import datetime
 import json
-import re
-import copy
+
 import numpy as np
 import scipy.io.wavfile as wavfile
-from scipy.signal import spectrogram
+
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QLabel, QSplitter, QMessageBox, QPushButton,
-    QSlider, QFileDialog, QGridLayout, QFrame, QListWidgetItem,
-    QSizePolicy, QMenu, QCheckBox, QToolTip, QDialog
+    QSlider, QFileDialog, QFrame, QListWidgetItem,
+    QSizePolicy, QMenu, QCheckBox
 )
-from PyQt6.QtCore import Qt, QUrl, QTimer, QSize, QPointF, QRectF
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QColor, QPen, QCursor, QAction, QPainter
+from PyQt6.QtCore import Qt, QUrl, QTimer, QSize
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QAction, QPainter
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from matplotlib.figure import Figure
-from matplotlib.patches import Patch
 
-from utils.constants import APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS, CHANGELOG
+
+
+from utils.constants import APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
 from utils.i18n import I18N
-from utils.helpers import parse_version_tuple, is_version_newer
-from utils.icons import get_app_icon, make_ui_icon, make_spinner_icon
+from utils.icons import get_app_icon, make_ui_icon
 from utils.styles import get_modern_stylesheet
 
-from core.analyzer import CricketAnalyzer
-from core.learner import PulseLearner
-from core.engines import HighPerfLineEngine, HighPerfSpectrogramEngine, HighPerfFreqEngine
-from core.worker import GenericWorker
 
-from ui.widgets import ButtonSpinner, ThemeToggle, LoadingScreen, AudioListItemWidget
-from ui.panels import PlotPanel, TimelineWidget
+from core.learner import PulseLearner
+
+
+
+from ui.widgets import ButtonSpinner, ThemeToggle, AudioListItemWidget
+from ui.panels import PlotPanel
 from ui.dialogs import (
-    AlgoSettingsDialog, AdvancedAlgoSettingsDialog, GeneralSettingsDialog,
-    ChangelogDialog, AboutDialog
+    AlgoSettingsDialog, GeneralSettingsDialog,
+    AboutDialog
 )
 from core.updater import UpdateCheckerThread
 from ui.update_dialog import UpdateDialog
@@ -48,335 +46,53 @@ from core.session_context import SessionContext
 
 class MainWindow(QMainWindow):
     # --- PROPRIEDADES REDIRECIONADAS PARA O SESSIONCONTEXT ---
-    @property
-    def algo_params(self): return self.ctx.algo_params
-    @algo_params.setter
-    def algo_params(self, value): self.ctx.algo_params = value
 
-    @property
-    def _adaptive_overrides(self): return self.ctx._adaptive_overrides
-    @_adaptive_overrides.setter
-    def _adaptive_overrides(self, value): self.ctx._adaptive_overrides = value
 
-    @property
-    def report_params(self): return self.ctx.report_params
-    @report_params.setter
-    def report_params(self, value): self.ctx.report_params = value
 
-    @property
-    def pulse_learner(self): return self.ctx.pulse_learner
-    @pulse_learner.setter
-    def pulse_learner(self, value): self.ctx.pulse_learner = value
 
-    @property
-    def peaks_detected(self): return self.ctx.peaks_detected
-    @peaks_detected.setter
-    def peaks_detected(self, value): self.ctx.peaks_detected = value
 
-    @property
-    def peaks_user_verified(self): return self.ctx.peaks_user_verified
-    @peaks_user_verified.setter
-    def peaks_user_verified(self, value): self.ctx.peaks_user_verified = value
 
-    @property
-    def corrections_by_file(self): return self.ctx.corrections_by_file
-    @corrections_by_file.setter
-    def corrections_by_file(self, value): self.ctx.corrections_by_file = value
 
-    @property
-    def active_filename(self): return self.ctx.active_filename
-    @active_filename.setter
-    def active_filename(self, value): self.ctx.active_filename = value
 
-    @property
-    def analysis_cache(self): return self.ctx.analysis_cache
-    @analysis_cache.setter
-    def analysis_cache(self, value): self.ctx.analysis_cache = value
 
-    @property
-    def active_heavy_data(self): return self.ctx.active_heavy_data
-    @active_heavy_data.setter
-    def active_heavy_data(self, value): self.ctx.active_heavy_data = value
 
-    @property
-    def loaded_files(self): return self.ctx.loaded_files
-    @loaded_files.setter
-    def loaded_files(self, value): self.ctx.loaded_files = value
 
-    @property
-    def _reanalyze_worker(self): return getattr(self.pipeline, "_reanalyze_worker", None)
-    @_reanalyze_worker.setter
-    def _reanalyze_worker(self, value):
-        if hasattr(self, "pipeline"):
-            self.pipeline._reanalyze_worker = value
 
-    @property
-    def _batch_worker(self): return getattr(self.pipeline, "_batch_worker", None)
-    @_batch_worker.setter
-    def _batch_worker(self, value):
-        if hasattr(self, "pipeline"):
-            self.pipeline._batch_worker = value
 
-    @property
-    def _pending_carrier_tol(self): return getattr(self.pipeline, "_pending_carrier_tol", None)
-    @_pending_carrier_tol.setter
-    def _pending_carrier_tol(self, value):
-        if hasattr(self, "pipeline"):
-            self.pipeline._pending_carrier_tol = value
 
-    @property
-    def use_machine_learning(self): return self.ctx.use_machine_learning
-    @use_machine_learning.setter
-    def use_machine_learning(self, value): self.ctx.use_machine_learning = value
 
-    @property
-    def pulse_metadata(self): return self.ctx.pulse_metadata
-    @pulse_metadata.setter
-    def pulse_metadata(self, value): self.ctx.pulse_metadata = value
 
     # ---------- FASE 3: Aliases de compatibilidade para engines e estado de plot ----------
-    @property
-    def line_engine(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "line_engine", None) if pr else getattr(self, "_compat_line_engine", None)
-    @line_engine.setter
-    def line_engine(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers.line_engine = value
-        else:
-            self._compat_line_engine = value
 
-    @property
-    def spectro_engine(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "spectro_engine", None) if pr else getattr(self, "_compat_spectro_engine", None)
-    @spectro_engine.setter
-    def spectro_engine(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers.spectro_engine = value
-        else:
-            self._compat_spectro_engine = value
 
-    @property
-    def freq_engine(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "freq_engine", None) if pr else getattr(self, "_compat_freq_engine", None)
-    @freq_engine.setter
-    def freq_engine(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers.freq_engine = value
-        else:
-            self._compat_freq_engine = value
 
-    @property
-    def wave_lines(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "wave_lines", {}) if pr else getattr(self, "_compat_wave_lines", {})
-    @wave_lines.setter
-    def wave_lines(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers.wave_lines = value
-        else:
-            self._compat_wave_lines = value
 
-    @property
-    def _wave_user_markers(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "_wave_user_markers", []) if pr else getattr(self, "_compat_wave_user_markers", [])
-    @_wave_user_markers.setter
-    def _wave_user_markers(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers._wave_user_markers = value
-        else:
-            self._compat_wave_user_markers = value
 
-    @property
-    def _last_applied_spec_unit(self):
-        pr = getattr(self, "plot_renderers", None)
-        return getattr(pr, "_last_applied_spec_unit", None) if pr else getattr(self, "_compat_last_applied_spec_unit", None)
-    @_last_applied_spec_unit.setter
-    def _last_applied_spec_unit(self, value):
-        if hasattr(self, "plot_renderers") and self.plot_renderers is not None:
-            self.plot_renderers._last_applied_spec_unit = value
-        else:
-            self._compat_last_applied_spec_unit = value
 
     # ---------- FASE 4: Aliases de compatibilidade para NavigationController ----------
-    @property
-    def cursor_lines(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.cursor_lines if nc is not None else getattr(self, "_compat_cursor_lines", [])
-    @cursor_lines.setter
-    def cursor_lines(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.cursor_lines = value
-        else:
-            self._compat_cursor_lines = value
 
-    @property
-    def backgrounds(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.backgrounds if nc is not None else getattr(self, "_compat_backgrounds", [])
-    @backgrounds.setter
-    def backgrounds(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.backgrounds = value
-        else:
-            self._compat_backgrounds = value
 
-    @property
-    def bg_cache_valid(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.bg_cache_valid if nc is not None else getattr(self, "_compat_bg_cache_valid", False)
-    @bg_cache_valid.setter
-    def bg_cache_valid(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.bg_cache_valid = value
-        else:
-            self._compat_bg_cache_valid = value
 
-    @property
-    def panning(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.panning if nc is not None else getattr(self, "_compat_panning", False)
-    @panning.setter
-    def panning(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.panning = value
-        else:
-            self._compat_panning = value
 
-    @property
-    def active_ax(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.active_ax if nc is not None else getattr(self, "_compat_active_ax", None)
-    @active_ax.setter
-    def active_ax(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.active_ax = value
-        else:
-            self._compat_active_ax = value
 
-    @property
-    def pulse_hover_data(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.pulse_hover_data if nc is not None else getattr(self, "_compat_pulse_hover_data", [])
-    @pulse_hover_data.setter
-    def pulse_hover_data(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.pulse_hover_data = value
-        else:
-            self._compat_pulse_hover_data = value
 
-    @property
-    def _click_alignment_lines(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc._click_alignment_lines if nc is not None else getattr(self, "_compat_click_alignment_lines", [])
-    @_click_alignment_lines.setter
-    def _click_alignment_lines(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc._click_alignment_lines = value
-        else:
-            self._compat_click_alignment_lines = value
 
-    @property
-    def start_xlim(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.start_xlim if nc is not None else getattr(self, "_compat_start_xlim", (0.0, 1.0))
-    @start_xlim.setter
-    def start_xlim(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.start_xlim = value
-        else:
-            self._compat_start_xlim = value
 
-    @property
-    def start_ylim(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.start_ylim if nc is not None else getattr(self, "_compat_start_ylim", (0.0, 1.0))
-    @start_ylim.setter
-    def start_ylim(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.start_ylim = value
-        else:
-            self._compat_start_ylim = value
 
-    @property
-    def start_x(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.start_x if nc is not None else getattr(self, "_compat_start_x", 0.0)
-    @start_x.setter
-    def start_x(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.start_x = value
-        else:
-            self._compat_start_x = value
 
-    @property
-    def start_y(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.start_y if nc is not None else getattr(self, "_compat_start_y", 0.0)
-    @start_y.setter
-    def start_y(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.start_y = value
-        else:
-            self._compat_start_y = value
 
-    @property
-    def sync_throttle_time(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.sync_throttle_time if nc is not None else getattr(self, "_compat_sync_throttle_time", 0.0)
-    @sync_throttle_time.setter
-    def sync_throttle_time(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.sync_throttle_time = value
-        else:
-            self._compat_sync_throttle_time = value
 
-    @property
-    def last_draw_time(self):
-        nc = getattr(self, "nav_controller", None)
-        return nc.last_draw_time if nc is not None else getattr(self, "_compat_last_draw_time", 0.0)
-    @last_draw_time.setter
-    def last_draw_time(self, value):
-        nc = getattr(self, "nav_controller", None)
-        if nc is not None:
-            nc.last_draw_time = value
-        else:
-            self._compat_last_draw_time = value
 
     # ---------- FASE 5: Aliases de compatibilidade para EditorController ----------
-    @property
-    def _pulse_edit_history(self):
-        ec = getattr(self, "editor_controller", None)
-        return ec._pulse_edit_history if ec is not None else getattr(self, "_compat_pulse_edit_history", [])
-    @_pulse_edit_history.setter
-    def _pulse_edit_history(self, value):
-        ec = getattr(self, "editor_controller", None)
-        if ec is not None:
-            ec._pulse_edit_history = value
-        else:
-            self._compat_pulse_edit_history = value
 
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
+        self._swapping_panels = False
         
         from ui.controllers.pipeline_orchestrator import PipelineOrchestrator
         self.pipeline = PipelineOrchestrator(self.ctx, self)
+        self.pipeline.analysis_started.connect(self._on_analysis_started)
         self.pipeline.analysis_completed.connect(self._on_pipeline_completed)
         self.pipeline.analysis_failed.connect(self._on_pipeline_failed)
         self.pipeline.analysis_cancelled.connect(self._on_pipeline_cancelled)
@@ -390,28 +106,25 @@ class MainWindow(QMainWindow):
 
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
         # NÃO inclui sobreposições adaptativas (prominence, noise_floor adaptados).
-        self.algo_params = DEFAULT_ALGO_PARAMS.copy()
+        self.ctx.algo_params = DEFAULT_ALGO_PARAMS.copy()
         # Sobreposições adaptativas: aplicadas por _adapt_advanced_params() mas
         # NUNCA persistidas no JSON e limpas no reset.
-        self._adaptive_overrides = {}
-        self.report_params = {"lang": "pt", "institution": "", "researcher_name": "", "role": "", "level": ""}
+        self.ctx._adaptive_overrides = {}
+        self.ctx.report_params = {"lang": "pt", "institution": "", "researcher_name": "", "role": "", "level": ""}
 
 
         # Inicializa o idioma ANTES de qualquer rotina que possa usar I18N.
         # Isso evita AttributeError caso alguma ação seja disparada durante a inicialização.
         self.lang = "pt"
         self.theme_mode = "dark"
-        self.pulse_learner = PulseLearner(CONFIG_FILE)
-        self.peaks_detected = []
-        self.peaks_user_verified = []
-        self.corrections_by_file = {}
-        self.active_filename = None
-        self._pulse_edit_history = []
-        self._wave_user_markers = []
-        self._click_alignment_lines = []
-        self.use_machine_learning = False
+        self.ctx.pulse_learner = PulseLearner(CONFIG_FILE)
+        self.ctx.peaks_detected = []
+        self.ctx.peaks_user_verified = []
+        self.ctx.corrections_by_file = {}
+        self.ctx.active_filename = None
+        self.ctx.use_machine_learning = False
         self.load_settings()
-        self.lang = self.report_params.get("lang", "pt") or "pt"
+        self.lang = self.ctx.report_params.get("lang", "pt") or "pt"
 
         self.setWindowTitle(I18N[self.lang]["app_title"])
         self.setGeometry(80, 70, 1480, 900)
@@ -439,22 +152,12 @@ class MainWindow(QMainWindow):
         self.playback_timer.setInterval(10)
         self.playback_timer.timeout.connect(self._on_playback_timer_tick)
 
-        self.loaded_files = {}
+        self.ctx.loaded_files = {}
         self.last_audio_dir = ""
-        self.cursor_lines = []
-        self.backgrounds = []
-        self.bg_cache_valid = False
-        self.panning = False
-        self.active_ax = None
         self.expanded_panel = None
-        self.spectro_engine = None
-        self.line_engine = None
-        self.freq_engine = None
-        self.last_draw_time = 0
         self.last_pan_time = 0
-        self.sync_throttle_time = 0
-        self.analysis_cache = {}
-        self.active_heavy_data = {}
+        self.ctx.analysis_cache = {}
+        self.ctx.active_heavy_data = {}
         self.loop_enabled = False
         self.playback_speed = 1.0
         self.main_panel = None
@@ -504,12 +207,33 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.plot_renderers.set_editor_controller(self.editor_controller)
-        self.nav_controller.pulse_edit_handler = self.editor_controller.toggle_peak_marker
 
         # Início limpo: nenhum arquivo fictício é carregado automaticamente.
 
     # ---------- tema ----------
     # ---------- tema ----------
+        self.btn_abort_batch.clicked.connect(self.pipeline.abort_current_analysis)
+        self.btn_reanalisar_main.clicked.connect(lambda: self.pipeline.force_reanalyze(self._get_item_filename(self.list_widget.currentItem()) or getattr(self.ctx, "active_filename", None)))
+        self.btn_abort_analysis.clicked.connect(self.pipeline.abort_current_analysis)
+        self.btn_learn_corrections.clicked.connect(lambda: self.editor_controller.learn_from_corrections())
+        self.editor_controller.learning_failed.connect(lambda err: QMessageBox.critical(self, "Falha", err))
+        self.editor_controller.learning_completed.connect(lambda n, fn: QMessageBox.information(self, "Sucesso", f"IA treinada com {n} correcoes!"))
+        self.btn_sync.toggled.connect(self.nav_controller.on_sync_toggled)
+        self.nav_controller.pulse_edit_handler = self.editor_controller.toggle_peak_marker
+
+        for panel in self.all_panels:
+            panel.undo_requested.connect(self.editor_controller.undo)
+            panel.spectrogram_y_limits_changed.connect(self.plot_renderers.apply_spectrogram_y_limits)
+            panel.freq_tolerance_changed.connect(self.pipeline.apply_realtime_freq_tolerance)
+            panel.wave_visibility_changed.connect(self.plot_renderers.update_wave_visibility)
+            if panel is self.panel_hist:
+                continue
+            panel.canvas.mpl_connect('scroll_event', self.nav_controller.zoom_graph)
+            panel.canvas.mpl_connect('button_press_event', self.nav_controller.on_press)
+            panel.canvas.mpl_connect('button_release_event', self.nav_controller.on_release)
+            panel.canvas.mpl_connect('motion_notify_event', self.nav_controller.on_motion)
+            panel.canvas.mpl_connect('axes_leave_event', self.nav_controller.on_axes_leave)
+
     def apply_modern_styles(self):
         self.setStyleSheet(get_modern_stylesheet(self.theme_mode))
         for btn in self.findChildren(QPushButton):
@@ -535,7 +259,7 @@ class MainWindow(QMainWindow):
             self.btn_export_main.setIcon(make_ui_icon("export", color=sec_icon_col, size=14))
         if hasattr(self, "btn_sync") and not self.btn_sync.isChecked():
             self.btn_sync.setIcon(make_ui_icon("sync", color="#CBD5E1" if dark else "#475569", size=14))
-        if hasattr(self, "btn_play"):
+        if hasattr(self, "transport_panel"):
             self._update_play_icon()
 
     def set_theme_mode(self, mode):
@@ -547,9 +271,9 @@ class MainWindow(QMainWindow):
         for panel in getattr(self, "all_panels", []):
             panel.apply_dark_theme()
         self._update_theme_icons()
-        if self.active_heavy_data:
-            if hasattr(self, "active_filename") and self.active_filename:
-                self.render_dashboard(self.active_filename)
+        if self.ctx.active_heavy_data:
+            if self.ctx.active_filename:
+                self.plot_renderers.render_dashboard(self.ctx.active_filename)
             else:
                 self._refresh_all_canvases()
         else:
@@ -807,7 +531,6 @@ class MainWindow(QMainWindow):
         self.btn_abort_batch.setFixedHeight(28)
         self.btn_abort_batch.setToolTip("Cancelar a análise em lote em andamento")
         self.btn_abort_batch.setVisible(False)
-        self.btn_abort_batch.clicked.connect(self.abort_current_analysis)
         batch_btn_layout.addWidget(self.btn_abort_batch)
 
         left_layout.addLayout(batch_btn_layout)
@@ -859,7 +582,6 @@ class MainWindow(QMainWindow):
         self.btn_reanalisar_main.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reanalisar_main.setFixedHeight(26)
         self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
-        self.btn_reanalisar_main.clicked.connect(self.force_reanalyze)
         row_analysis.addWidget(self.btn_reanalisar_main)
 
         # Botão Abortar Análise (ao lado direto de Reanalisar, visível apenas durante análise)
@@ -869,7 +591,6 @@ class MainWindow(QMainWindow):
         self.btn_abort_analysis.setFixedHeight(26)
         self.btn_abort_analysis.setToolTip("Cancelar a análise em andamento")
         self.btn_abort_analysis.setVisible(False)
-        self.btn_abort_analysis.clicked.connect(self.abort_current_analysis)
         row_analysis.addWidget(self.btn_abort_analysis)
 
         row_analysis.addStretch()
@@ -888,7 +609,6 @@ class MainWindow(QMainWindow):
         self.btn_learn_corrections.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_learn_corrections.setFixedHeight(26)
         self.btn_learn_corrections.setToolTip("Treinar classificador com base nas correções manuais de pulsos")
-        self.btn_learn_corrections.clicked.connect(self.learn_from_corrections)
         row_analysis.addWidget(self.btn_learn_corrections)
 
         actions_layout.addLayout(row_analysis)
@@ -907,7 +627,6 @@ class MainWindow(QMainWindow):
         self.btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_sync.setFixedSize(26, 26)
         self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
-        self.btn_sync.toggled.connect(self.on_sync_toggled)
         row_tools.addWidget(self.btn_sync)
 
         self.btn_export_main = QPushButton("Exportar ▾")
@@ -1001,11 +720,6 @@ class MainWindow(QMainWindow):
             # O histograma é deliberadamente fixo: sem drag e sem zoom.
             if panel is self.panel_hist:
                 continue
-            panel.canvas.mpl_connect("scroll_event", self.zoom_graph)
-            panel.canvas.mpl_connect("button_press_event", self.on_press)
-            panel.canvas.mpl_connect("button_release_event", self.on_release)
-            panel.canvas.mpl_connect("motion_notify_event", self.on_motion)
-            panel.canvas.mpl_connect("axes_leave_event", self.on_axes_leave)
 
         from ui.panels import AudioTransportPanel
         self.transport_panel = AudioTransportPanel()
@@ -1013,13 +727,6 @@ class MainWindow(QMainWindow):
         self.transport_panel.speed_cycled.connect(self.cycle_playback_speed)
         self.transport_panel.volume_changed.connect(lambda val: self.audio_output.setVolume(val / 100.0))
         self.transport_panel.position_seeked.connect(self.set_position)
-        
-        # Manter compatibilidade com a MainWindow acessando os controles
-        self.btn_play = self.transport_panel.btn_play
-        self.lbl_elapsed = self.transport_panel.lbl_elapsed
-        self.btn_speed = self.transport_panel.btn_speed
-        self.timeline = self.transport_panel.timeline
-        self.volume_slider = self.transport_panel.volume_slider
         
         right_layout.addWidget(self.transport_panel)
 
@@ -1040,7 +747,7 @@ class MainWindow(QMainWindow):
         self._on_playback_state(self.player.playbackState())
         
         # Sincroniza labels e botões de IA agora que todos estão criados
-        self._update_ml_toggle_ui()
+        self.update_ml_toggle_ui()
 
     @staticmethod
     def _file_icon():
@@ -1096,12 +803,12 @@ class MainWindow(QMainWindow):
         self._swapping_panels = True
         try:
             # Interrompe renderizações LOD pendentes antes de reparentar os canvases.
-            if self.line_engine is not None:
-                self.line_engine.debounce_timer.stop()
-            if self.spectro_engine is not None:
-                self.spectro_engine.debounce_timer.stop()
-            if self.freq_engine is not None:
-                self.freq_engine.debounce_timer.stop()
+            if self.plot_renderers.line_engine is not None:
+                self.plot_renderers.line_engine.debounce_timer.stop()
+            if self.plot_renderers.spectro_engine is not None:
+                self.plot_renderers.spectro_engine.debounce_timer.stop()
+            if self.plot_renderers.freq_engine is not None:
+                self.plot_renderers.freq_engine.debounce_timer.stop()
 
             old_stack_sizes = self.stack_splitter.sizes()
             old_main = self.main_panel
@@ -1133,7 +840,7 @@ class MainWindow(QMainWindow):
             try:
                 self.stack_panels[idx], self.stack_panels[new_idx] = self.stack_panels[new_idx], self.stack_panels[idx]
                 self._rebuild_panel_layout()
-                self._apply_plot_geometry()
+                self.apply_plot_geometry()
                 for p in self.all_panels:
                     p.canvas.draw_idle()
             finally:
@@ -1151,14 +858,13 @@ class MainWindow(QMainWindow):
             target_idx = self.stack_panels.index(target_panel)
             self.stack_panels.insert(target_idx, source_panel)
             self._rebuild_panel_layout()
-            self._apply_plot_geometry()
+            self.apply_plot_geometry()
             for p in self.all_panels:
                 p.canvas.draw_idle()
         finally:
             self._swapping_panels = False
 
     def _on_dashboard_splitter_moved(self, pos, index):
-        self.bg_cache_valid = False
         if not hasattr(self, "_dashboard_splitter_debounce_timer"):
             self._dashboard_splitter_debounce_timer = QTimer(self)
             self._dashboard_splitter_debounce_timer.setSingleShot(True)
@@ -1208,7 +914,7 @@ class MainWindow(QMainWindow):
                 self.stack_panels.append(old_main)
                 self.main_panel = next_main
                 self._rebuild_panel_layout()
-                self._apply_plot_geometry()
+                self.apply_plot_geometry()
                 self._refresh_all_canvases()
             else:
                 self.main_panel = None
@@ -1308,7 +1014,7 @@ class MainWindow(QMainWindow):
         self.stack_splitter.setSizes([total_h, 0, 0])
 
         QApplication.processEvents()
-        self._apply_plot_geometry()
+        self.apply_plot_geometry()
         self._schedule_focus_update()
         self._refresh_all_canvases()
         self._update_plot_menu_checks()
@@ -1355,9 +1061,9 @@ class MainWindow(QMainWindow):
         menu.popup(self.btn_plots_menu.mapToGlobal(self.btn_plots_menu.rect().bottomLeft()))
 
     def _fit_all_plots_to_layout(self):
-        if not self.active_heavy_data:
+        if not self.ctx.active_heavy_data:
             return
-        d=self.active_heavy_data; duration=max(0.001,float(d.get("duration",0.0))); p=d.get("params",{})
+        d=self.ctx.active_heavy_data; duration=max(0.001,float(d.get("duration",0.0))); p=d.get("params",{})
         self.panel_wave.ax.set_xlim(0.0,duration); self.panel_wave.ax.set_ylim(-1.05,1.05)
         if len(d.get("t_spec",[])):
             self.panel_spec.ax.set_xlim(float(d["t_spec"][0]),float(d["t_spec"][-1]))
@@ -1388,7 +1094,7 @@ class MainWindow(QMainWindow):
             vals=np.asarray(d["chirps"]); self.panel_hist.ax.set_xlim(float(vals.min())-0.65,float(vals.max())+0.65)
             ymax=max(1,int(np.bincount(vals.astype(int)).max()) if vals.size else 1); self.panel_hist.ax.set_ylim(0,ymax*1.20)
 
-    def _apply_plot_geometry(self):
+    def apply_plot_geometry(self):
         """Enquadra os gráficos de forma adaptativa ao tamanho real de cada canvas.
 
         Garante proporções perfeitas para mini janelinhas sem cortar rótulos, títulos nem ticks.
@@ -1456,9 +1162,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "nav_controller") and self.nav_controller is not None:
             self.nav_controller.reset()
         else:
-            self.cursor_lines = []
-            self.backgrounds = []
-            self.bg_cache_valid = False
+            pass
         for p in self.all_panels:
             p.ax.clear()
             p.apply_dark_theme()
@@ -1484,7 +1188,7 @@ class MainWindow(QMainWindow):
         self.panel_spec.ax.set_xlabel("seconds")
         self.panel_spec.ax.set_ylabel("Hz")
 
-        self._apply_plot_geometry()
+        self.apply_plot_geometry()
         for p in self.all_panels:
             p.canvas.draw_idle()
 
@@ -1500,13 +1204,13 @@ class MainWindow(QMainWindow):
             elif hasattr(self, "stack_layout"):
                 self.stack_layout.activate()
             self._fit_all_plots_to_layout()
-            self._apply_plot_geometry()
+            self.apply_plot_geometry()
             for panel in self.all_panels:
                 panel.canvas.updateGeometry()
                 panel.figure.set_constrained_layout(False)
                 panel.canvas.draw()
-            if self.active_heavy_data:
-                self.capture_backgrounds()
+            if self.ctx.active_heavy_data:
+                self.nav_controller.capture_backgrounds()
         finally:
             self.setUpdatesEnabled(True)
             self._refreshing_canvases = False
@@ -1646,7 +1350,7 @@ class MainWindow(QMainWindow):
             return
 
         # Desativa a ferramenta de edição caso esteja ativa
-        self._update_pulse_edit_buttons(None)
+        self.editor_controller.update_pulse_edit_buttons(None)
 
         for fname in checked_files:
             w = self._get_item_widget_by_name(fname)
@@ -1661,7 +1365,7 @@ class MainWindow(QMainWindow):
         self._batch_spinner = spinner
 
         # Delega inteiramente ao PipelineOrchestrator sem tocar no GenericWorker
-        self.pipeline.run_batch_analysis(checked_files, self.algo_params)
+        self.pipeline.run_batch_analysis(checked_files, self.ctx.algo_params)
 
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()
@@ -1673,14 +1377,14 @@ class MainWindow(QMainWindow):
     def remove_audio_by_name(self, fname):
         if not fname:
             return
-        if self.player.source().toLocalFile() == self.loaded_files.get(fname):
+        if self.player.source().toLocalFile() == self.ctx.loaded_files.get(fname):
             self.player.stop()
-            self.btn_play.setEnabled(False)
+            self.transport_panel.btn_play.setEnabled(False)
             self._update_play_icon()
             self.slider.setValue(0)
-        self.loaded_files.pop(fname, None)
-        self.analysis_cache.pop(fname, None)
-        self.corrections_by_file.pop(fname, None)
+        self.ctx.loaded_files.pop(fname, None)
+        self.ctx.analysis_cache.pop(fname, None)
+        self.ctx.corrections_by_file.pop(fname, None)
 
         # Remove o item da lista
         for i in range(self.list_widget.count()):
@@ -1693,16 +1397,16 @@ class MainWindow(QMainWindow):
         self._update_select_all_visibility()
 
         if self.list_widget.count() == 0:
-            self.active_heavy_data = {}
-            self.peaks_detected = []
-            self.peaks_user_verified = []
-            self.active_filename = ""
+            self.ctx.active_heavy_data = {}
+            self.ctx.peaks_detected = []
+            self.ctx.peaks_user_verified = []
+            self.ctx.active_filename = ""
             for p in self.all_panels:
                 p.ax.clear()
                 p.canvas.draw_idle()
             self._update_summary_placeholder()
         else:
-            if getattr(self, "active_filename", None) == fname:
+            if getattr(self.ctx, "active_filename", None) == fname:
                 first_item = self.list_widget.item(0)
                 if first_item:
                     self.list_widget.setCurrentItem(first_item)
@@ -1716,7 +1420,7 @@ class MainWindow(QMainWindow):
         files, _ = QFileDialog.getOpenFileNames(self, "Load Audio Files", start_dir, "WAV Files (*.wav)")
         for file_path in files:
             filename = os.path.basename(file_path)
-            self.loaded_files[filename] = file_path
+            self.ctx.loaded_files[filename] = file_path
             self._add_audio_file_item(filename, is_checked=False)
         if files:
             self.last_audio_dir = os.path.dirname(files[0])
@@ -1734,13 +1438,13 @@ class MainWindow(QMainWindow):
             file_path = url.toLocalFile()
             if file_path.lower().endswith('.wav'):
                 filename = os.path.basename(file_path)
-                self.loaded_files[filename] = file_path
+                self.ctx.loaded_files[filename] = file_path
                 self._add_audio_file_item(filename, is_checked=False)
                 loaded_any.append(filename)
         if loaded_any:
             first_name = loaded_any[0]
-            if first_name in self.loaded_files:
-                self.last_audio_dir = os.path.dirname(self.loaded_files[first_name])
+            if first_name in self.ctx.loaded_files:
+                self.last_audio_dir = os.path.dirname(self.ctx.loaded_files[first_name])
                 self.save_settings(silent=True)
             self.select_file_by_name(loaded_any[-1])
         event.acceptProposedAction()
@@ -1755,32 +1459,31 @@ class MainWindow(QMainWindow):
             return
         self.update_audio_list_active_states(filename)
         self.lbl_summary_file.setText(filename)
-        if filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
+        if filename not in self.ctx.loaded_files or not os.path.exists(self.ctx.loaded_files[filename]):
             self.player.stop()
-            self.btn_play.setEnabled(False)
+            self.transport_panel.btn_play.setEnabled(False)
             self._update_summary_placeholder(filename)
             return
         self.player.stop()
         self.playback_speed = 1.0
         self.player.setPlaybackRate(1.0)
-        self.btn_speed.setText("1×")
+        self.transport_panel.btn_speed.setText("1×")
         self._update_play_icon()
-        self.player.setSource(QUrl.fromLocalFile(self.loaded_files[filename]))
-        self.btn_play.setEnabled(True)
+        self.player.setSource(QUrl.fromLocalFile(self.ctx.loaded_files[filename]))
+        self.transport_panel.btn_play.setEnabled(True)
 
-        if filename in self.analysis_cache:
+        if filename in self.ctx.analysis_cache:
             self.btn_reanalisar_main.setText("Reanalisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
             self.ctx.activate_cached_file(filename)
-            self._pulse_edit_history = []
-            carrier_freq = float(self.active_heavy_data.get("carrier_freq", 0.0))
-            tol_val = float(self.algo_params.get("freq_tolerance_hz", 700.0))
+            carrier_freq = float(self.ctx.active_heavy_data.get("carrier_freq", 0.0))
+            tol_val = float(self.ctx.algo_params.get("freq_tolerance_hz", 700.0))
             if hasattr(self, "panel_spec"):
                 self.panel_spec.set_carrier_info(carrier_freq, tol_val)
             if hasattr(self, "panel_freq"):
                 self.panel_freq.set_carrier_info(carrier_freq, tol_val)
-            self.render_dashboard(filename)
+            self.plot_renderers.render_dashboard(filename)
         else:
             self.btn_reanalisar_main.setText("Analisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
@@ -1790,30 +1493,28 @@ class MainWindow(QMainWindow):
 
     def reset_audio_state(self, filename):
         """Reinicia atomicamente as variáveis de edição e picos para o arquivo especificado, prevenindo contaminação."""
-        self.active_filename = filename
-        self._pulse_edit_history = []
-        self._click_alignment_lines = []
-        stored = self.corrections_by_file.get(filename)
+        self.ctx.active_filename = filename
+        stored = self.ctx.corrections_by_file.get(filename)
         if stored is not None:
-            self.peaks_user_verified = list(stored)
+            self.ctx.peaks_user_verified = list(stored)
         else:
-            self.peaks_user_verified = []
+            self.ctx.peaks_user_verified = []
 
-        cached = self.analysis_cache.get(filename)
+        cached = self.ctx.analysis_cache.get(filename)
         if cached is not None:
-            self.peaks_detected = list(cached.get("peaks_detected", []))
-            self.active_heavy_data = cached
+            self.ctx.peaks_detected = list(cached.get("peaks_detected", []))
+            self.ctx.active_heavy_data = cached
         else:
-            self.peaks_detected = []
-            self.active_heavy_data = None
-            self._adaptive_overrides = {}
+            self.ctx.peaks_detected = []
+            self.ctx.active_heavy_data = None
+            self.ctx._adaptive_overrides = {}
 
-        if self.line_engine:
-            self.line_engine.debounce_timer.stop()
-        if self.spectro_engine:
-            self.spectro_engine.debounce_timer.stop()
+        if self.plot_renderers.line_engine:
+            self.plot_renderers.line_engine.debounce_timer.stop()
+        if self.plot_renderers.spectro_engine:
+            self.plot_renderers.spectro_engine.debounce_timer.stop()
         if getattr(self, "freq_engine", None):
-            self.freq_engine.debounce_timer.stop()
+            self.plot_renderers.freq_engine.debounce_timer.stop()
 
     def _get_item_widget_by_name(self, filename):
         for i in range(self.list_widget.count()):
@@ -1826,17 +1527,17 @@ class MainWindow(QMainWindow):
     def _update_summary_ready_for_analysis(self, filename):
         self.lbl_summary_file.setText(filename)
         try:
-            rate, data = wavfile.read(self.loaded_files[filename])
+            rate, data = wavfile.read(self.ctx.loaded_files[filename])
             if len(data.shape) > 1:
                 data = data[:, 0]
             dur = len(data) / float(rate)
             mins = int(dur // 60)
             secs = dur % 60
             self.lbl_summary_meta.setText(f"Duração: {mins:02d}:{secs:04.1f}   •   Taxa: {int(rate):,} Hz   •   Pronto para análise")
-            self.timeline.set_data(dur, [])
+            self.transport_panel.timeline.set_data(dur, [])
         except Exception:
             self.lbl_summary_meta.setText("Áudio carregado • Clique em 'Analisar'")
-            self.timeline.set_data(0.0, [])
+            self.transport_panel.timeline.set_data(0.0, [])
         self.lbl_total.setText("--")
         self.lbl_metric_sub.setText("Moda: --   |   Média: --")
         for panel in self.all_panels:
@@ -1851,28 +1552,28 @@ class MainWindow(QMainWindow):
         d.exec()
 
     def open_algo_settings(self):
-        dialog = AlgoSettingsDialog(self.algo_params, self.lang, self)
+        dialog = AlgoSettingsDialog(self.ctx.algo_params, self.lang, self)
         if dialog.exec():
             new_params = dialog.get_params()
-            if new_params != self.algo_params:
-                self.algo_params = new_params
-                if self.analysis_cache:
+            if new_params != self.ctx.algo_params:
+                self.ctx.algo_params = new_params
+                if self.ctx.analysis_cache:
                     reply = QMessageBox.question(self, "Reanalisar?", "Configurações alteradas! Deseja refazer as análises no cache?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     if reply == QMessageBox.StandardButton.Yes:
                         curr = self.list_widget.currentItem()
                         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-                        for fname in list(self.analysis_cache.keys()):
+                        for fname in list(self.ctx.analysis_cache.keys()):
                             if fname != curr_name:
-                                self.run_analysis(fname, self.algo_params, render=False)
-                        if curr_name and curr_name in self.loaded_files:
-                            self.run_analysis(curr_name, self.algo_params, render=True)
+                                self.pipeline.run_analysis(fname, self.ctx.algo_params, render=False)
+                        if curr_name and curr_name in self.ctx.loaded_files:
+                            self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
 
     def export_training_model(self):
         """Abre caixa de diálogo para salvar o arquivo com o treinamento ativo."""
-        if not hasattr(self, "pulse_learner") or not self.pulse_learner:
+        if not hasattr(self, "pulse_learner") or not self.ctx.pulse_learner:
             QMessageBox.warning(self, "Sem Modelo", "Não há módulo de aprendizado ativo.")
             return
-        if not self.pulse_learner.is_trained() and len(self.pulse_learner.training_features) == 0:
+        if not self.ctx.pulse_learner.is_trained() and len(self.ctx.pulse_learner.training_features) == 0:
             QMessageBox.warning(self, "Sem Treinamento", "Não há nenhum treinamento de modelo realizado para salvar.")
             return
 
@@ -1886,7 +1587,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.pulse_learner.export_model_file(file_path)
+            self.ctx.pulse_learner.export_model_file(file_path)
             QMessageBox.information(
                 self,
                 I18N[self.lang]["success"],
@@ -1911,16 +1612,16 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.pulse_learner.import_model_file(file_path)
-            self._adapt_advanced_params()
+            self.ctx.pulse_learner.import_model_file(file_path)
+            self.editor_controller._adapt_advanced_params()
 
-            n_samples = len(self.pulse_learner.training_features)
+            n_samples = len(self.ctx.pulse_learner.training_features)
             msg = f"Treinamento carregado com sucesso!\n• Amostras de treino: {n_samples}\n• Classificador Random Forest (500 árvores) ativo."
 
             # Se houver arquivo carregado, pergunta se deseja reanalisar agora
             curr = self.list_widget.currentItem()
             curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-            if curr_name and curr_name in self.loaded_files:
+            if curr_name and curr_name in self.ctx.loaded_files:
                 reply = QMessageBox.question(
                     self,
                     "Reanalisar com Novo Treinamento?",
@@ -1928,7 +1629,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
                 if reply == QMessageBox.StandardButton.Yes:
-                    self.run_analysis(curr_name, self.algo_params, render=True)
+                    self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
             else:
                 QMessageBox.information(self, I18N[self.lang]["success"], msg)
 
@@ -1974,13 +1675,13 @@ class MainWindow(QMainWindow):
         
         if msg_box.clickedButton() == btn_reset:
             try:
-                if hasattr(self, 'pulse_learner') and self.pulse_learner:
-                    self.pulse_learner.reset()
+                if hasattr(self, 'pulse_learner') and self.ctx.pulse_learner:
+                    self.ctx.pulse_learner.reset()
                 
                 # Desativa a IA após o reset para forçar o usuário a trabalhar com DSP puro
-                self.use_machine_learning = False
+                self.ctx.use_machine_learning = False
                 self.save_settings(silent=True)
-                self._update_ml_toggle_ui()
+                self.update_ml_toggle_ui()
                 
                 
                 QMessageBox.information(
@@ -1992,8 +1693,8 @@ class MainWindow(QMainWindow):
                 # Se houver áudio carregado, força reanálise para aplicar o DSP limpo
                 curr = self.list_widget.currentItem()
                 curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-                if curr_name and curr_name in self.loaded_files:
-                    self.run_analysis(curr_name, self.algo_params, render=True)
+                if curr_name and curr_name in self.ctx.loaded_files:
+                    self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao resetar a IA:\n{e}")
 
@@ -2012,16 +1713,16 @@ class MainWindow(QMainWindow):
             return
 
         # 1. Restaura parâmetros do algoritmo para os padrões originais
-        self.algo_params = DEFAULT_ALGO_PARAMS.copy()
-        self._adaptive_overrides = {}
+        self.ctx.algo_params = DEFAULT_ALGO_PARAMS.copy()
+        self.ctx._adaptive_overrides = {}
 
         # 2. IA e marcações não são resetadas aqui mais
 
         # 4. Limpa o arquivo de configuração persistido
         try:
             clean_config = {
-                "algo_params": self.algo_params,
-                "report_params": self.report_params,
+                "algo_params": self.ctx.algo_params,
+                "report_params": self.ctx.report_params,
                 "theme": getattr(self, "theme_mode", "dark"),
                 "corrections_by_file": {},
                 "pulse_learner": None
@@ -2034,14 +1735,14 @@ class MainWindow(QMainWindow):
         # 5. Se houver arquivo ativo, reanalisa do zero com os padrões
         curr = self.list_widget.currentItem()
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        if curr_name and curr_name in self.loaded_files:
-            self.analysis_cache.clear()
-            self.run_analysis(curr_name, self.algo_params, render=True)
+        if curr_name and curr_name in self.ctx.loaded_files:
+            self.ctx.analysis_cache.clear()
+            self.pipeline.run_analysis(curr_name, self.ctx.algo_params, render=True)
         else:
-            self.analysis_cache.clear()
+            self.ctx.analysis_cache.clear()
 
         if hasattr(self, 'lbl_model_status'):
-            self._update_ml_toggle_ui()
+            self.update_ml_toggle_ui()
 
         QMessageBox.information(
             self,
@@ -2050,11 +1751,11 @@ class MainWindow(QMainWindow):
         )
 
     def open_report_settings(self):
-        dialog = GeneralSettingsDialog(self.report_params, self.lang, self)
+        dialog = GeneralSettingsDialog(self.ctx.report_params, self.lang, self)
         if dialog.exec():
-            self.report_params = dialog.get_params()
-            if self.report_params["lang"] != self.lang:
-                self.lang = self.report_params["lang"]
+            self.ctx.report_params = dialog.get_params()
+            if self.ctx.report_params["lang"] != self.lang:
+                self.lang = self.ctx.report_params["lang"]
                 self.refresh_ui_texts()
 
     def open_about(self):
@@ -2099,15 +1800,15 @@ class MainWindow(QMainWindow):
                 data = json.load(f)
             if isinstance(data, dict):
                 if isinstance(data.get("algo_params"), dict):
-                    self.algo_params.update(data["algo_params"])
+                    self.ctx.algo_params.update(data["algo_params"])
                 if isinstance(data.get("report_params"), dict):
-                    self.report_params.update(data["report_params"])
+                    self.ctx.report_params.update(data["report_params"])
                 theme = data.get("theme")
                 if theme in {"dark", "light"}:
                     self.theme_mode = theme
                 corrections = data.get("corrections_by_file")
                 if isinstance(corrections, dict):
-                    self.corrections_by_file = {}
+                    self.ctx.corrections_by_file = {}
                     for name, data_val in corrections.items():
                         if isinstance(data_val, list):
                             # Old format: just a list of peak indices
@@ -2121,9 +1822,9 @@ class MainWindow(QMainWindow):
                                         parsed.append(int(p))
                                     except (TypeError, ValueError):
                                         pass
-                            self.corrections_by_file[str(name)] = parsed
+                            self.ctx.corrections_by_file[str(name)] = parsed
                 if "pulse_learner" in data:
-                    self.pulse_learner.load_from_config()
+                    self.ctx.pulse_learner.load_from_config()
                 if "last_audio_dir" in data and isinstance(data["last_audio_dir"], str) and os.path.isdir(data["last_audio_dir"]):
                     self.last_audio_dir = data["last_audio_dir"]
         except Exception as e:
@@ -2138,16 +1839,16 @@ class MainWindow(QMainWindow):
                 config = {}
             if not isinstance(config, dict):
                 config = {}
-            config["algo_params"] = self.algo_params
-            config["report_params"] = self.report_params
+            config["algo_params"] = self.ctx.algo_params
+            config["report_params"] = self.ctx.report_params
             config["theme"] = self.theme_mode
-            config["corrections_by_file"] = self.corrections_by_file
+            config["corrections_by_file"] = self.ctx.corrections_by_file
             config["last_audio_dir"] = getattr(self, "last_audio_dir", "")
             if not "pulse_learner" in config:
                 config["pulse_learner"] = None
-            if self.pulse_learner.model is not None:
-                config["pulse_learner"] = self.pulse_learner.serialize()
-                self.pulse_learner.save_persisted_training()
+            if self.ctx.pulse_learner.model is not None:
+                config["pulse_learner"] = self.ctx.pulse_learner.serialize()
+                self.ctx.pulse_learner.save_persisted_training()
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
             if not silent:
@@ -2158,7 +1859,7 @@ class MainWindow(QMainWindow):
 
     def toggle_machine_learning(self):
         """Ativa ou desativa a filtragem e classificação por Inteligência Artificial sem forçar reanálise imediata."""
-        is_active = not getattr(self, "use_machine_learning", False)
+        is_active = not getattr(self.ctx, "use_machine_learning", False)
         if is_active:
             QMessageBox.warning(
                 self, 
@@ -2167,14 +1868,14 @@ class MainWindow(QMainWindow):
                 "Lembre-se de que correções mal feitas pelo usuário podem 'quebrar' as análises da IA e piorar os resultados.\n\n"
                 "Recomendação: Se a IA começar a apresentar resultados quebrados ou irregulares, utilize o botão 'Resetar Aprendizado' no menu Opções (Configurações) para restaurar os valores originais do DSP."
             )
-        self.use_machine_learning = is_active
+        self.ctx.use_machine_learning = is_active
         self.save_settings(silent=True)
-        self._update_ml_toggle_ui()
+        self.update_ml_toggle_ui()
 
-    def _update_ml_toggle_ui(self):
+    def update_ml_toggle_ui(self):
         if not hasattr(self, "btn_toggle_ml"):
             return
-        is_active = getattr(self, "use_machine_learning", False)
+        is_active = getattr(self.ctx, "use_machine_learning", False)
         self.btn_toggle_ml.setProperty("active", "true" if is_active else "false")
         self.btn_toggle_ml.setStyleSheet("")
         self.btn_toggle_ml.style().unpolish(self.btn_toggle_ml)
@@ -2183,7 +1884,7 @@ class MainWindow(QMainWindow):
             self.btn_toggle_ml.setText("🧠 IA: Ativada")
             self.btn_toggle_ml.setToolTip("IA Ativada: filtra ruído e discrimina grilos distantes. Clique para desativar.")
             if hasattr(self, "lbl_model_status"):
-                status_txt = "🧠 IA: Ativada (Modelo Supervisionado)" if self.pulse_learner.is_trained() else "🧠 IA: Ativada (GMM não-supervisionado)"
+                status_txt = "🧠 IA: Ativada (Modelo Supervisionado)" if self.ctx.pulse_learner.is_trained() else "🧠 IA: Ativada (GMM não-supervisionado)"
                 self.lbl_model_status.setText(status_txt)
                 self.lbl_model_status.setStyleSheet("color: #10B981;")
         else:
@@ -2195,6 +1896,16 @@ class MainWindow(QMainWindow):
 
     # ---------- análise ----------
     # ---------- análise (delegada ao PipelineOrchestrator) ----------
+
+    def _on_analysis_started(self, filename, is_first_time):
+        loading_text = "Analisando..." if is_first_time else "Reanalisando..."
+        from ui.widgets import ButtonSpinner
+        spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
+        spinner.start()
+        self._reanalyze_spinner = spinner
+        self.btn_reanalisar_main.setEnabled(False)
+        self.btn_abort_analysis.setVisible(True)
+
     def _on_pipeline_completed(self, filename):
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
@@ -2206,18 +1917,18 @@ class MainWindow(QMainWindow):
             self._reanalyze_spinner = None
         if hasattr(self, "btn_reanalisar_main"):
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
-        if self.active_filename == filename:
-            if self.active_heavy_data:
-                carrier_freq = float(self.active_heavy_data.get("carrier_freq", 0.0))
-                tol_val = float(self.algo_params.get("freq_tolerance_hz", 700.0))
+        if self.ctx.active_filename == filename:
+            if self.ctx.active_heavy_data:
+                carrier_freq = float(self.ctx.active_heavy_data.get("carrier_freq", 0.0))
+                tol_val = float(self.ctx.algo_params.get("freq_tolerance_hz", 700.0))
                 if hasattr(self, "panel_spec"):
                     self.panel_spec.set_carrier_info(carrier_freq, tol_val)
                 if hasattr(self, "panel_freq"):
                     self.panel_freq.set_carrier_info(carrier_freq, tol_val)
-            self.render_dashboard(filename)
+            self.plot_renderers.render_dashboard(filename)
             vp = getattr(self, "_saved_viewport", None)
-            if vp is not None and self.active_heavy_data:
-                dur = self.active_heavy_data.get("duration", 0.0)
+            if vp is not None and self.ctx.active_heavy_data:
+                dur = self.ctx.active_heavy_data.get("duration", 0.0)
                 x0, x1 = vp.get("wave_xlim", (0, dur))
                 if x1 <= x0: x1 = x0 + 1.0
                 self.panel_wave.ax.set_xlim(x0, x1)
@@ -2230,7 +1941,7 @@ class MainWindow(QMainWindow):
 
                 for p in [self.panel_wave, self.panel_freq, self.panel_spec]:
                     p.canvas.draw()
-                self.capture_backgrounds()
+                self.nav_controller.capture_backgrounds()
                 self._saved_viewport = None
 
     def _on_batch_started(self, total_files):
@@ -2258,7 +1969,7 @@ class MainWindow(QMainWindow):
 
         curr = self.list_widget.currentItem()
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        if curr_name in self.analysis_cache and hasattr(self, "btn_reanalisar_main"):
+        if curr_name in self.ctx.analysis_cache and hasattr(self, "btn_reanalisar_main"):
             self.btn_reanalisar_main.setText("Reanalisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
@@ -2307,7 +2018,7 @@ class MainWindow(QMainWindow):
         if item_widget and hasattr(item_widget, "set_loading"):
             item_widget.set_loading(False)
         if getattr(self, "_reanalyze_spinner", None) is not None:
-            is_first_time = (filename not in self.analysis_cache)
+            is_first_time = (filename not in self.ctx.analysis_cache)
             restore_text = "Analisar" if is_first_time else "Reanalisar"
             restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
             self._reanalyze_spinner.stop(restore_icon, restore_text)
@@ -2320,7 +2031,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "btn_abort_batch"):
             self.btn_abort_batch.setVisible(False)
         if getattr(self, "_reanalyze_spinner", None) is not None:
-            is_first_time = (filename not in self.analysis_cache)
+            is_first_time = (filename not in self.ctx.analysis_cache)
             restore_text = "Analisar" if is_first_time else "Reanalisar"
             restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
             self._reanalyze_spinner.stop(restore_icon, restore_text)
@@ -2329,439 +2040,19 @@ class MainWindow(QMainWindow):
             self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
             self._batch_spinner = None
 
-    def force_reanalyze(self):
-        curr = self.list_widget.currentItem()
-        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        if not filename or filename not in self.loaded_files or not os.path.exists(self.loaded_files[filename]):
-            QMessageBox.information(self, "Arquivo não carregado", "Selecione ou carregue o arquivo WAV antes de analisar.")
-            return
-
-        self._update_pulse_edit_buttons(None)
-
-        is_first_time = (filename not in self.analysis_cache)
-        if is_first_time:
-            self.reset_audio_state(filename)
-        loading_text = "Analisando..." if is_first_time else "Reanalisando..."
-        spinner = ButtonSpinner(self.btn_reanalisar_main, loading_text)
-        spinner.start()
-        self._reanalyze_spinner = spinner
-
-        self._saved_viewport = None
-        if not is_first_time and getattr(self, "panel_spec", None):
-            self._saved_viewport = {
-                "wave_xlim": self.panel_wave.ax.get_xlim(),
-                "wave_ylim": self.panel_wave.ax.get_ylim(),
-                "freq_xlim": self.panel_freq.ax.get_xlim(),
-                "freq_ylim": self.panel_freq.ax.get_ylim(),
-                "spec_xlim": self.panel_spec.ax.get_xlim(),
-                "spec_ylim": self.panel_spec.ax.get_ylim(),
-            }
-
-        item_widget = self._get_item_widget_by_name(filename)
-        if item_widget and hasattr(item_widget, "set_loading"):
-            item_widget.set_loading(True)
-
-        if hasattr(self, "btn_abort_analysis"):
-            self.btn_abort_analysis.setVisible(True)
-
-        self.pipeline.force_reanalyze(filename)
-
-    def run_analysis(self, filename, params, render=True, validate_all=False):
-        try:
-            return self.pipeline.run_analysis(filename, params, render=render, validate_all=validate_all)
-        except Exception as e:
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha no arquivo {filename}:\n{str(e)}")
-            return None
-
-    def abort_current_analysis(self):
-        """Cancela cooperativamente a análise em andamento (single ou lote)."""
-        aborted = self.pipeline.abort_current_analysis()
-
-        if hasattr(self, "btn_abort_analysis"):
-            self.btn_abort_analysis.setVisible(False)
-        if hasattr(self, "btn_abort_batch"):
-            self.btn_abort_batch.setVisible(False)
-
-        if getattr(self, "_reanalyze_spinner", None) is not None:
-            is_first_time = (getattr(self, "active_filename", None) not in self.analysis_cache)
-            restore_text = "Analisar" if is_first_time else "Reanalisar"
-            restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
-            self._reanalyze_spinner.stop(restore_icon, restore_text)
-            self._reanalyze_spinner = None
-
-        if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
-            self._batch_spinner = None
-
-        if aborted:
-            if hasattr(self, "btn_reanalisar_main"):
-                self.btn_reanalisar_main.setEnabled(True)
-            if hasattr(self, "btn_analyze_selected"):
-                self.btn_analyze_selected.setEnabled(True)
-
-            curr_name = getattr(self, 'active_filename', None)
-            if curr_name:
-                item_widget = self._get_item_widget_by_name(curr_name)
-                if item_widget and hasattr(item_widget, "set_loading"):
-                    item_widget.set_loading(False)
-
-            checked_files = self.get_checked_files() if hasattr(self, "get_checked_files") else []
-            for fname in checked_files:
-                w = self._get_item_widget_by_name(fname)
-                if w and hasattr(w, "set_loading"):
-                    w.set_loading(False)
-
-    def _apply_analysis_results(self, filename, results, render=True, validate_all=False, params=None):
-        if params is None:
-            params = self.algo_params.copy()
-        heavy_data = self.pipeline._apply_analysis_results(filename, results, params=params)
-
-        if render:
-            has_active = hasattr(self, "active_filename") and self.active_filename == filename
-            if has_active and hasattr(self, "panel_wave") and hasattr(self, "panel_spec"):
-                current_vp = {
-                    "wave_xlim": self.panel_wave.ax.get_xlim(),
-                    "wave_ylim": self.panel_wave.ax.get_ylim(),
-                    "freq_xlim": self.panel_freq.ax.get_xlim(),
-                    "freq_ylim": self.panel_freq.ax.get_ylim(),
-                    "spec_xlim": self.panel_spec.ax.get_xlim(),
-                    "spec_ylim": self.panel_spec.ax.get_ylim(),
-                }
-            else:
-                current_vp = None
-
-            self.active_heavy_data = heavy_data
-            self.active_filename = filename
-
-            carrier_freq = float(heavy_data.get("carrier_freq", 0.0))
-            tol_val = float(params.get("freq_tolerance_hz", 700.0))
-            if hasattr(self, "panel_spec"):
-                self.panel_spec.set_carrier_info(carrier_freq, tol_val)
-            if hasattr(self, "panel_freq"):
-                self.panel_freq.set_carrier_info(carrier_freq, tol_val)
-
-            self.render_dashboard(filename)
-
-            vp = current_vp or getattr(self, "_saved_viewport", None)
-            if vp is not None and has_active:
-                dur = heavy_data.get("duration", 0.0)
-                x0, x1 = vp.get("wave_xlim", (0, dur))
-                if x1 <= x0: x1 = x0 + 1.0
-                self.panel_wave.ax.set_xlim(x0, x1)
-
-                sx0, sx1 = vp.get("spec_xlim", (x0, x1))
-                if sx1 <= sx0: sx1 = sx0 + 1.0
-                self.panel_spec.ax.set_xlim(sx0, sx1)
-                if not getattr(self.panel_spec, "_y_locked", False):
-                    self.panel_spec.ax.set_ylim(vp.get("spec_ylim", (0, 10)))
-
-                for p in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                    p.canvas.draw()
-                self.capture_backgrounds()
-
-            self._saved_viewport = None
 
 
 
-    def update_wave_visibility(self, show_raw, show_env, show_lod, show_peaks):
-        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
-        if hasattr(self, 'plot_renderers'):
-            self.plot_renderers.update_wave_visibility(show_raw, show_env, show_lod, show_peaks)
-            return
-        if hasattr(self, 'wave_lines'):
-            if 'raw' in self.wave_lines and self.wave_lines['raw']:
-                self.wave_lines['raw'].set_visible(bool(show_raw))
-            if 'env' in self.wave_lines and self.wave_lines['env']:
-                self.wave_lines['env'].set_visible(bool(show_env))
-            if 'lod' in self.wave_lines and self.wave_lines['lod']:
-                self.wave_lines['lod'].set_visible(bool(show_lod))
-        if getattr(self, 'line_engine', None) and getattr(self.line_engine, 'line', None):
-            self.line_engine.line.set_visible(bool(show_lod))
 
-        if hasattr(self, '_wave_user_markers') and self._wave_user_markers:
-            for m in self._wave_user_markers:
-                try:
-                    m.set_visible(bool(show_peaks))
-                except Exception:
-                    pass
 
-        if hasattr(self, 'panel_wave') and self.panel_wave and hasattr(self.panel_wave, 'canvas'):
-            self.panel_wave.canvas.draw_idle()
 
-        if hasattr(self, "capture_backgrounds"):
-            self.bg_cache_valid = False
-            self.capture_backgrounds()
 
-    def render_dashboard(self, filename):
-        # FASE 3: delega para PlotRenderers.render_file. Corpo original permanece como fallback (FASE 7).
-        if hasattr(self, 'plot_renderers'):
-            self.plot_renderers.render_file(filename)
-            return
-        cur_splitter_sizes = self.splitter.sizes() if hasattr(self, "splitter") else None
-        # Limpa referências a linhas de alinhamento do clique em eixos que serão
-        # destruídos/recriados nesta renderização. Mantê-las causaria RuntimeError
-        # ao chamar line.remove() na próxima chamada de _align_click_marker().
-        self._click_alignment_lines = []
-        d = self.active_heavy_data
-        p = d.get("params") or {}
-        rate = d["rate"]
-        data = d["data"]
-        env = d["env"]
-        chirp_peaks_list = d["chirp_peaks_list"]
-        chirps = d["chirps"]
-        f_spec = d["f_spec"]
-        t_spec = d["t_spec"]
-        Sxx_db = d["Sxx_db"]
-        dom_freqs = d["dom_freqs"]
 
-        self.lbl_summary_file.setText(filename)
-        p_txt = f"[Pulsos: {p['min_p']}-{p['max_p']} | Amp: {p['amp_min']:.2f}-{p['amp_max']:.2f} | Freq: {int(p['b1_min'])}-{int(p['b1_max'])} Hz]"
-        meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
-        self.lbl_summary_meta.setText(meta_str)
-        self.lbl_summary_meta.setToolTip(f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}")
-        self.lbl_total.setText(str(len(chirps)))
-        self.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
-        self._update_ml_toggle_ui()
 
-        paleta_cores = ['#03A9F4', '#4CAF50', '#FF5252', '#E040FB', '#FFAB40', '#00E676', '#FF4081', '#FFEA00']
-        # Visual solicitado: verde/orange/magenta como categorias dominantes.
-        # Paleta canônica por quantidade de pulsos (2 a 10 + 1 extra para escopos maiores).
-        # A mesma cor é usada no histograma, nos X da onda, frequência e espectrograma.
-        pulse_colors = {
-            2: '#2563EB',   # Azul Royal
-            3: '#8B5CF6',   # Roxo / Violeta
-            4: '#F97316',   # Laranja
-            5: '#10B981',   # Verde Esmeralda
-            6: '#EC4899',   # Rosa Magenta
-            7: '#06B6D4',   # Ciano Turquesa
-            8: '#EAB308',   # Amarelo Dourado
-            9: '#6366F1',   # Índigo
-            10: '#14B8A6',  # Teal Menta
-        }
-        extra_pulse_color = '#F43F5E'  # Vermelho Rubi (cor extra para > 10 pulsos ou outros escopos)
-        marker_colors = pulse_colors
 
-        picos_por_contagem = {}
-        for cp in chirp_peaks_list:
-            qnt = len(cp)
-            picos_por_contagem.setdefault(qnt, []).extend(cp)
-        time_sec = np.arange(len(data)) / rate
-
-        # WAVE
-        ax1 = self.panel_wave.ax
-        ax1.clear()
-        self._wave_user_markers = []
-        self.wave_lines = {}
-
-        # Lê os seletores configurados nos chips do cabeçalho
-        show_raw = getattr(self.panel_wave, "show_raw", True)
-        show_env = getattr(self.panel_wave, "show_env", True)
-        show_lod = getattr(self.panel_wave, "show_lod", False)
-        show_peaks = getattr(self.panel_wave, "show_peaks", True)
-
-        # 1. Sinal Bruto Filtrado (Amostras Reais - Linha cinza em segundo plano)
-        dec_raw = max(1, len(data) // 20000)
-        line_raw, = ax1.plot(
-            time_sec[::dec_raw], data[::dec_raw],
-            color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
-            label="Sinal Bruto Filtrado"
-        )
-        line_raw.set_visible(bool(show_raw))
-        self.wave_lines['raw'] = line_raw
-
-        # 2. Envoltória de Hilbert Suavizada (Curva azul nítida em destaque)
-        dec_env = max(1, len(env) // 8000)
-        line_env, = ax1.plot(
-            time_sec[::dec_env], env[::dec_env],
-            color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
-            label="Envoltória de Hilbert Suavizada"
-        )
-        line_env.set_visible(bool(show_env))
-        self.wave_lines['env'] = line_env
-
-        # 3. Decimação Min-Max LOD (Linha Laranja dinâmica com preservação de picos)
-        self.line_engine = HighPerfLineEngine(ax1, time_sec, data, base_color='#F97316', update_bg_callback=self.capture_backgrounds)
-        self.line_engine.render_high_detail()
-        if self.line_engine.line:
-            self.line_engine.line.set_zorder(2)
-            self.line_engine.line.set_linewidth(1.1)
-            self.line_engine.line.set_visible(bool(show_lod))
-            self.wave_lines['lod'] = self.line_engine.line
-
-        ax1.set_xlabel("seconds")
-        ax1.set_ylabel("Amplitude")
-        ax1.set_xlim(time_sec[0], time_sec[-1])
-        ax1.set_ylim(-1.05, 1.05)
-
-        # HIST — fixo, sem drag/zoom, com índice de cores/pulsos no rodapé
-        self._refresh_histogram()
-
-        # FREQ (PSD)
-        ax3 = self.panel_freq.ax
-        ax3.clear()
-        
-        f_psd = self.active_heavy_data.get("f_psd", [])
-        Pxx_db = self.active_heavy_data.get("Pxx_db", [])
-        unit = getattr(self.panel_spec, "spec_unit", "kHz")
-        scale = 1000.0 if unit == "kHz" else 1.0
-        
-        ax3.set_ylabel("Power (dB/Hz)")
-        ax3.set_xlabel(f"Frequency ({unit})")
-        
-        if len(f_psd) > 0 and len(Pxx_db) > 0:
-            ax3.plot(f_psd / scale, Pxx_db, color='#8B5CF6', linewidth=1.5, zorder=2)
-            
-            # Highlight carrier peak
-            carrier_freq_hz = self.active_heavy_data.get("carrier_freq", 0.0)
-            if carrier_freq_hz > 0:
-                # Encontra o índice no PSD mais próximo à portadora
-                idx_c = np.argmin(np.abs(f_psd - carrier_freq_hz))
-                carrier_x = f_psd[idx_c] / scale
-                carrier_y = Pxx_db[idx_c]
-            else:
-                idx_max = np.argmax(Pxx_db)
-                carrier_x = f_psd[idx_max] / scale
-                carrier_y = Pxx_db[idx_max]
-                
-            ax3.plot(carrier_x, carrier_y, 'ro', markersize=6, zorder=3)
-            ax3.annotate(f"{carrier_x:.2f} {unit}", 
-                         xy=(carrier_x, carrier_y), xytext=(5, 5),
-                         textcoords='offset points', color='white',
-                         fontsize=9, zorder=4)
-                         
-            # Limite superior para focar na banda acústica relevante de insetos (ou Nyquist)
-            rate = self.active_heavy_data.get("rate", 44100)
-            max_khz = min(15.0, rate / 2000.0)
-            ax3.set_xlim(0.0, max_khz if unit == "kHz" else max_khz * 1000.0)
-            
-            y_range = np.ptp(Pxx_db) if len(Pxx_db) > 0 else 10
-            ax3.set_ylim(np.min(Pxx_db) - y_range*0.1, np.max(Pxx_db) + y_range*0.1)
-
-        self.freq_engine = None
-
-        # SPEC
-        ax4 = self.panel_spec.ax
-        ax4.clear()
-        unit = getattr(self.panel_spec, "spec_unit", "kHz")
-        scale = 1000.0 if unit == "kHz" else 1.0
-        ymin = self.panel_spec.spin_spec_ymin.value() if hasattr(self.panel_spec, "spin_spec_ymin") else 0.0
-        ymax = self.panel_spec.spin_spec_ymax.value() if hasattr(self.panel_spec, "spin_spec_ymax") else (10.0 if unit == "kHz" else 10000.0)
-        ax4.set_ylabel(unit)
-        ax4.set_xlabel("seconds")
-        ax4.set_xlim(t_spec[0], t_spec[-1])
-        ax4.set_ylim(ymin, ymax)
-        self.spectro_engine = HighPerfSpectrogramEngine(ax4, Sxx_db, t_spec, f_spec, update_bg_callback=self.capture_backgrounds, unit=unit)
-        self.spectro_engine.render_high_detail()
-
-        # Atualiza mapa de eixos independente da posição atual.
-        self.cursor_lines = []
-        for panel in [self.panel_wave, self.panel_spec]:
-            self.cursor_lines.append(panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9))
-
-        for panel in self.all_panels:
-            panel.apply_dark_theme()
-        self._apply_plot_geometry()
-
-        # Desenho inicial explícito: o histograma não participa do cache do cursor,
-        # então precisa receber seu primeiro draw aqui para aparecer imediatamente.
-        self.setUpdatesEnabled(False)
-        try:
-            for panel in self.all_panels:
-                panel.canvas.draw()
-        finally:
-            self.setUpdatesEnabled(True)
-
-        markers = []
-        for idx, cp in enumerate(chirp_peaks_list):
-            if not cp:
-                continue
-            t = float(cp[0] / rate)
-            markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
-        self.timeline.set_data(d["duration"], markers)
-        self.timeline.set_position(self.player.position() / 1000.0)
-        self._refresh_user_peak_markers()
-        self._update_pulse_hover_data()
-        self.capture_backgrounds()
-        if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
-            self.splitter.setSizes(cur_splitter_sizes)
-
-    def apply_spectrogram_y_limits(self, ymin, ymax, unit="kHz"):
-        """Atualiza dinamicamente a escala, limites e unidade do eixo Y do espectrograma."""
-        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
-        if hasattr(self, 'plot_renderers'):
-            self.plot_renderers.apply_spectrogram_y_limits(ymin, ymax, unit)
-            return
-        if not hasattr(self, "panel_spec"):
-            return
-        ax4 = self.panel_spec.ax
-        unit_changed = (getattr(self, "_last_applied_spec_unit", None) != unit)
-        self._last_applied_spec_unit = unit
-
-        ax4.set_ylabel(unit)
-        ax4.set_ylim(ymin, ymax)
-        if hasattr(self, "spectro_engine") and self.spectro_engine:
-            if unit_changed:
-                self.spectro_engine.set_unit(unit)
-            self.spectro_engine.render_high_detail()
-
-        if unit_changed and getattr(self, "active_heavy_data", None):
-            scale = 1000.0 if unit == "kHz" else 1.0
-            rate = float(self.active_heavy_data.get("rate", 1.0))
-            t_spec = self.active_heavy_data.get("t_spec")
-            dom_freqs = self.active_heavy_data.get("dom_freqs")
-            chirp_peaks_list = self.active_heavy_data.get("chirp_peaks_list", [])
-            distant_pks = self.active_heavy_data.get("distant_peaks", [])
-            env = self.active_heavy_data.get("env")
-            marker_colors = {
-                1: '#F59E0B', 2: '#EC4899', 3: '#8B5CF6', 4: '#3B82F6',
-                5: '#10B981', 6: '#F97316', 7: '#06B6D4', 8: '#84CC16',
-                9: '#EAB308', 10: '#A855F7', 11: '#14B8A6', 12: '#6366F1'
-            }
-            lines_to_keep = set(getattr(self, "cursor_lines", []) + getattr(self, "_click_alignment_lines", []))
-            lines_to_remove = [line for line in ax4.lines if line not in lines_to_keep]
-            for line in lines_to_remove:
-                try:
-                    line.remove()
-                except Exception:
-                    pass
-
-            picos_por_contagem = {}
-            for cp in chirp_peaks_list:
-                qnt = len(cp)
-                picos_por_contagem.setdefault(qnt, []).extend(cp)
-
-            if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
-                for qnt, pks in sorted(picos_por_contagem.items()):
-                    pks_t = np.array(pks) / rate
-                    freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs) / scale
-                    ax4.plot(pks_t, freqs_at_pks, 'x', color=marker_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
-                if distant_pks:
-                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
-                    if valid_d:
-                        d_times = np.array(valid_d) / rate
-                        d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
-                        ax4.plot(d_times, d_freqs, 'x', color='#9CA3AF', markersize=4.5, markeredgewidth=1.0, alpha=0.6, zorder=6)
-
-        self.panel_spec.canvas.draw_idle()
-
-    def apply_realtime_freq_tolerance(self, new_tol, source_panel=None):
-        """Ajusta em tempo real a tolerância espectral (±Hz) em torno da frequência portadora."""
-        new_tol = float(new_tol)
-        self.algo_params["freq_tolerance_hz"] = new_tol
-
-        # Sincroniza controles dos painéis para manter o mesmo valor visual
-        if hasattr(self, "panel_spec") and self.panel_spec is not source_panel and hasattr(self.panel_spec, "set_carrier_tolerance"):
-            self.panel_spec.set_carrier_tolerance(new_tol, notify=False)
-        if hasattr(self, "panel_freq") and self.panel_freq is not source_panel and hasattr(self.panel_freq, "set_carrier_tolerance"):
-            self.panel_freq.set_carrier_tolerance(new_tol, notify=False)
-
-        self.pipeline.apply_realtime_freq_tolerance(new_tol, source_panel=source_panel)
-
-    def _execute_realtime_freq_tolerance(self):
-        self.pipeline._execute_realtime_freq_tolerance()
 
     def _on_realtime_tolerance_updated(self, filename):
-        d = self.active_heavy_data
+        d = self.ctx.active_heavy_data
         if not d:
             return
         cf = float(d.get("carrier_freq", 0.0))
@@ -2773,8 +2064,8 @@ class MainWindow(QMainWindow):
 
         cur_xlim = self.panel_wave.ax.get_xlim() if hasattr(self, "panel_wave") else None
 
-        if self.active_filename:
-            self.render_dashboard(self.active_filename)
+        if self.ctx.active_filename:
+            self.plot_renderers.render_dashboard(self.ctx.active_filename)
 
         if cur_xlim is not None and cur_xlim[0] is not None and cur_xlim[1] is not None:
             for panel in (self.panel_wave, self.panel_spec):
@@ -2783,96 +2074,19 @@ class MainWindow(QMainWindow):
             for panel in self.all_panels:
                 panel.canvas.draw_idle()
 
-    def _update_pulse_hover_data(self):
-        """Atualiza a tabela de metadados de cada pulso para exibição de tooltip no hover."""
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.update_hover_data()
-        self.pulse_hover_data = []
-        d = getattr(self, "active_heavy_data", None)
-        if not d:
-            return
-        rate = float(d.get("rate", 44100))
-        env = d.get("env1_smooth", d.get("env", np.array([])))
-        chirp_peaks_list = d.get("chirp_peaks_list", [])
-        dom_freqs = d.get("dom_freqs", np.array([]))
-        t_spec = d.get("t_spec", np.array([]))
-        carrier_freq = float(d.get("carrier_freq", 0.0))
-        freq_tol = float(d.get("params", {}).get("freq_tolerance_hz", 700.0))
-
-        # 1. Pulsos válidos agrupados em chilreios
-        seen_samples = set()
-        for c_idx, cp in enumerate(chirp_peaks_list):
-            qnt = len(cp)
-            for p_idx, pk in enumerate(cp):
-                pk = int(pk)
-                seen_samples.add(pk)
-                t_val = float(pk) / rate
-                y_env = float(env[pk]) if (env is not None and len(env) > pk) else 0.0
-                if len(t_spec) > 0 and len(dom_freqs) > 0:
-                    y_freq = float(np.interp(t_val, t_spec, dom_freqs))
-                else:
-                    y_freq = 0.0
-                self.pulse_hover_data.append({
-                    "sample": pk,
-                    "time": t_val,
-                    "env_y": y_env,
-                    "freq_y": y_freq,
-                    "chirp_pulses": qnt,
-                    "chirp_idx": c_idx + 1,
-                    "pulse_num": p_idx + 1,
-                    "status": "valid",
-                    "carrier_freq": carrier_freq,
-                })
-
-        # 2. Pulsos descartados (marcados em cinza)
-        distant_pks = d.get("distant_peaks", [])
-        discarded_reasons = d.get("discarded_peaks_reasons", {})
-
-        for pk in distant_pks:
-            pk = int(pk)
-            if pk in seen_samples:
-                continue
-            t_val = float(pk) / rate
-            y_env = float(env[pk]) if (env is not None and len(env) > pk) else 0.0
-            if len(t_spec) > 0 and len(dom_freqs) > 0:
-                y_freq = float(np.interp(t_val, t_spec, dom_freqs))
-            else:
-                y_freq = 0.0
-
-            reason = discarded_reasons.get(pk)
-            if not reason:
-                if carrier_freq > 0 and abs(y_freq - carrier_freq) > freq_tol:
-                    diff = y_freq - carrier_freq
-                    reason = (
-                        f"Frequência fora da tolerância da portadora "
-                        f"({y_freq:.0f} Hz; desvio de {diff:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
-                    )
-                else:
-                    reason = "Pulso isolado / ruído fora do padrão rítmico focal"
-
-            self.pulse_hover_data.append({
-                "sample": pk,
-                "time": t_val,
-                "env_y": y_env,
-                "freq_y": y_freq,
-                "status": "discarded",
-                "reason": reason,
-                "carrier_freq": carrier_freq,
-            })
-
     def _update_summary_placeholder(self, filename=""):
         self.lbl_summary_file.setText(filename or "Nenhum arquivo selecionado")
         self.lbl_summary_meta.setText("Carregue um arquivo WAV para iniciar a análise")
         self.lbl_total.setText("—")
         self.lbl_metric_sub.setText("Moda: —   |   Média: —")
         if hasattr(self, 'lbl_elapsed'):
-            self.lbl_elapsed.setText("00:00.00 / 00:00.00")
+            self.transport_panel.lbl_elapsed.setText("00:00.00 / 00:00.00")
         if hasattr(self, 'btn_reanalisar_main'):
             self.btn_reanalisar_main.setText("Analisar")
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
-        self.timeline.set_data(0, [])
-        self.timeline.set_position(0)
+        self.transport_panel.timeline.set_data(0, [])
+        self.transport_panel.timeline.set_position(0)
 
     # ---------- exportação ----------
     def action_save_txt(self):
@@ -2886,17 +2100,17 @@ class MainWindow(QMainWindow):
             return
 
         # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
-        unprocessed = [f for f in checked_files if f not in self.analysis_cache and f in self.loaded_files]
+        unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
         for f in unprocessed:
             try:
-                self.run_analysis(f, self.algo_params, render=False)
+                self.pipeline.run_analysis(f, self.ctx.algo_params, render=False)
             except Exception as exc:
                 print(f"Aviso ao processar {f} para relatório: {exc}")
 
         selected_cache = {
-            fname: self.analysis_cache[fname]
+            fname: self.ctx.analysis_cache[fname]
             for fname in checked_files
-            if fname in self.analysis_cache
+            if fname in self.ctx.analysis_cache
         }
 
         if not selected_cache:
@@ -2914,10 +2128,10 @@ class MainWindow(QMainWindow):
             return
 
         with open(file_path, 'w', encoding='utf-8') as f:
-            inst = self.report_params.get('institution', '').strip()
-            name = self.report_params.get('researcher_name', '').strip()
-            role = self.report_params.get('role', '').strip()
-            level = self.report_params.get('level', '').strip()
+            inst = self.ctx.report_params.get('institution', '').strip()
+            name = self.ctx.report_params.get('researcher_name', '').strip()
+            role = self.ctx.report_params.get('role', '').strip()
+            level = self.ctx.report_params.get('level', '').strip()
             header_lines = []
             if inst: header_lines.append(f"Instituição: {inst.upper()}")
             if name: header_lines.append(f"Pesquisador(a): {name}")
@@ -2997,17 +2211,17 @@ class MainWindow(QMainWindow):
             return
 
         # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
-        unprocessed = [f for f in checked_files if f not in self.analysis_cache and f in self.loaded_files]
+        unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
         for f in unprocessed:
             try:
-                self.run_analysis(f, self.algo_params, render=False)
+                self.pipeline.run_analysis(f, self.ctx.algo_params, render=False)
             except Exception as exc:
                 print(f"Aviso ao processar {f} para relatório PDF: {exc}")
 
         selected_cache = {
-            fname: self.analysis_cache[fname]
+            fname: self.ctx.analysis_cache[fname]
             for fname in checked_files
-            if fname in self.analysis_cache
+            if fname in self.ctx.analysis_cache
         }
 
         if not selected_cache:
@@ -3031,9 +2245,9 @@ class MainWindow(QMainWindow):
             from utils.report_generator import generate_pdf_report
             generate_pdf_report(
                 file_path,
-                self.report_params,
+                self.ctx.report_params,
                 selected_cache,
-                self.algo_params,
+                self.ctx.algo_params,
                 include_chirp_list=include_chirp_list
             )
             QMessageBox.information(
@@ -3058,13 +2272,11 @@ class MainWindow(QMainWindow):
             self.player.play()
 
     def _update_play_icon(self):
-        if not hasattr(self, "btn_play"):
+        if not hasattr(self, "transport_panel"):
             return
         playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-        icon_color = "#FFFFFF" if self.theme_mode == "dark" else "#123B5D"
-        self.btn_play.setIcon(make_ui_icon("pause" if playing else "play", color=icon_color, size=19))
-        self.btn_play.setIconSize(QSize(19,19))
-        self.btn_play.setToolTip("Pausar" if playing else "Reproduzir")
+        icon_color = "#FFFFFF" if getattr(self, "theme_mode", "light") == "dark" else "#123B5D"
+        self.transport_panel.set_play_icon("pause" if playing else "play", icon_color)
 
     def _on_playback_state(self, state):
         self._update_play_icon()
@@ -3087,8 +2299,8 @@ class MainWindow(QMainWindow):
         self.playback_speed = options[(idx + 1) % len(options)]
         self.player.setPlaybackRate(self.playback_speed)
         label = f"{self.playback_speed:g}×" if self.playback_speed != 1.0 else "1×"
-        self.btn_speed.setText(label)
-        self.btn_speed.setToolTip(
+        self.transport_panel.btn_speed.setText(label)
+        self.transport_panel.btn_speed.setToolTip(
             "Velocidade de reprodução: " + label + ". Clique para reduzir ou voltar a 1×."
         )
 
@@ -3104,9 +2316,9 @@ class MainWindow(QMainWindow):
         self.slider.setRange(0, max(0, duration_ms))
         duration_s = duration_ms / 1000.0
         if hasattr(self, 'lbl_elapsed'):
-            self.lbl_elapsed.setText(f"{self._format_playback_time(self.player.position()/1000.0)} / {self._format_playback_time(duration_s)}")
-        markers = self.timeline.markers if hasattr(self, 'timeline') else []
-        self.timeline.set_data(duration_s, markers)
+            self.transport_panel.lbl_elapsed.setText(f"{self._format_playback_time(self.player.position()/1000.0)} / {self._format_playback_time(duration_s)}")
+        markers = self.transport_panel.timeline.markers if hasattr(self, 'timeline') else []
+        self.transport_panel.timeline.set_data(duration_s, markers)
 
     def set_position(self, position_ms, is_final=False):
         """Atualiza a posição de reprodução com throttling seguro contra sobrecarga de seeks no driver de áudio."""
@@ -3132,679 +2344,20 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'lbl_elapsed'):
             try:
                 duration_sec = self.player.duration() / 1000.0
-                self.lbl_elapsed.setText(f"{self._format_playback_time(position_sec)} / {self._format_playback_time(duration_sec)}")
+                self.transport_panel.lbl_elapsed.setText(f"{self._format_playback_time(position_sec)} / {self._format_playback_time(duration_sec)}")
             except Exception:
                 pass
         if hasattr(self, 'timeline'):
             try:
-                self.timeline.set_position(position_sec)
+                self.transport_panel.timeline.set_position(position_sec)
             except Exception:
                 pass
 
         # FASE 4: Delega renderização do cursor e blitting para NavigationController
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            self.nav_controller.update_playback_cursor(position_sec)
-            return
-
-        for line in self.cursor_lines:
-            try:
-                line.set_xdata([position_sec, position_sec])
-            except Exception:
-                pass
-
-        if not getattr(self, 'bg_cache_valid', False) or getattr(self, 'panning', False):
-            current_time = time.time()
-            if current_time - self.last_draw_time > 0.01:
-                for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                    try:
-                        panel.canvas.draw_idle()
-                    except Exception:
-                        pass
-                self.last_draw_time = current_time
-            return
-
-        if not self.backgrounds:
-            return
-
-        try:
-            active_panels = [self.panel_wave, self.panel_spec]
-            for panel, bg, line in zip(active_panels, self.backgrounds, self.cursor_lines):
-                if bg is not None and hasattr(panel, 'ax') and panel.ax.bbox.width > 0 and panel.ax.bbox.height > 0:
-                    panel.canvas.restore_region(bg)
-                    panel.ax.draw_artist(line)
-                    panel.canvas.blit(panel.ax.bbox)
-        except Exception:
-            self.bg_cache_valid = False
-            for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
-                try:
-                    panel.canvas.draw_idle()
-                except Exception:
-                    pass
-
-    def _refresh_histogram(self):
-        """Redesenha o histograma bivariado: barras de contagem (eixo Y esquerdo)
-        e linha de tendência de duração média do chilreio em ms (eixo Y direito)."""
-        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
-        if hasattr(self, 'plot_renderers'):
-            self.plot_renderers._refresh_histogram()
-            return
-        if not hasattr(self, 'panel_hist') or not getattr(self, 'active_heavy_data', None):
-            return
-        chirps = self.active_heavy_data.get('chirps', [])
-        chirp_peaks_list = self.active_heavy_data.get('chirp_peaks_list', [])
-        rate = float(self.active_heavy_data.get('rate', 1.0))
-        pulse_colors = {
-            2: '#2563EB',   # Azul Royal
-            3: '#8B5CF6',   # Roxo / Violeta
-            4: '#F97316',   # Laranja
-            5: '#10B981',   # Verde Esmeralda
-            6: '#EC4899',   # Rosa Magenta
-            7: '#06B6D4',   # Ciano Turquesa
-            8: '#EAB308',   # Amarelo Ouro
-            9: '#84CC16',   # Verde Lima
-            10: '#A855F7',  # Púrpura Forte
-            1: '#94A3B8'    # Cinza ardósia
-        }
-        extra_pulse_color = '#F43F5E'
-        hist_palette = pulse_colors
-        
-        ax_hist = self.panel_hist.ax
-        ax_hist.clear()
-        
-        # Remove eixos secundários antigos para evitar acúmulo
-        for child_ax in self.panel_hist.figure.get_axes():
-            if child_ax is not ax_hist:
-                self.panel_hist.figure.delaxes(child_ax)
-        
-        if len(chirps) == 0:
-            self.panel_hist.canvas.draw_idle()
-            return
-        
-        unique_pulses, counts = np.unique(chirps, return_counts=True)
-        bars = ax_hist.bar(
-            unique_pulses, counts,
-            color=[hist_palette.get(int(x), extra_pulse_color) for x in unique_pulses],
-            edgecolor='none', linewidth=0, width=0.68, zorder=3
-        )
-        
-        is_dark = self.theme_mode == 'dark'
-        ax_hist.grid(axis='y', color='#292D32' if is_dark else '#E2E8F0', linewidth=0.6, alpha=0.8, zorder=0)
-        max_count = int(max(counts)) if len(counts) else 1
-        hist_text_color = '#DDE1E5' if is_dark else '#1F2937'
-        hist_tick_color = '#A9ADB5' if is_dark else '#1F2937'
-        for bar in bars:
-            ax_hist.text(bar.get_x()+bar.get_width()/2, bar.get_height()+max_count*0.025, str(int(bar.get_height())),
-                     ha='center', va='bottom', color=hist_text_color, fontsize=8.5, fontweight='bold')
-        ax_hist.set_xticks(unique_pulses)
-        ax_hist.set_xlabel("")
-        ax_hist.set_ylabel("")
-        ax_hist.tick_params(axis='x', labelsize=8.5, colors=hist_tick_color, length=0)
-        ax_hist.tick_params(axis='y', labelsize=8, colors=hist_tick_color)
-        ax_hist.set_ylim(0, max_count * 1.20)
-        
-        # ——— Eixo Y secundário: Duração média do chilreio (ms) ———
-        dur_color = '#FF6B6B' if is_dark else '#DC2626'
-        
-        # Calcular duração média por classe de pulsos
-        duration_by_class = {}
-        for cp in chirp_peaks_list:
-            n_pulses = len(cp)
-            if n_pulses >= 1 and rate > 0:
-                dur_ms = (cp[-1] - cp[0]) / rate * 1000.0
-                duration_by_class.setdefault(n_pulses, []).append(dur_ms)
-        
-        avg_durations = {}
-        for n_p, durs in duration_by_class.items():
-            avg_durations[n_p] = float(np.mean(durs))
-        
-        if len(avg_durations) >= 2:
-            ax2 = ax_hist.twinx()
-            # Armazenar referência para o tema poder estilizar
-            self.panel_hist._ax2 = ax2
-            
-            sorted_classes = sorted(avg_durations.keys())
-            x_pts = np.array(sorted_classes, dtype=float)
-            y_pts = np.array([avg_durations[k] for k in sorted_classes], dtype=float)
-            
-            ax2.plot(x_pts, y_pts, color=dur_color, linewidth=1.5, linestyle='--',
-                     marker='o', markersize=5, markerfacecolor=dur_color,
-                     markeredgecolor='white' if is_dark else '#1F2937',
-                     markeredgewidth=0.8, zorder=5, alpha=0.9)
-            
-            # Anotações discretas de duração sobre cada marcador
-            for xv, yv in zip(x_pts, y_pts):
-                ax2.annotate(f'{yv:.0f}', (xv, yv), textcoords='offset points',
-                             xytext=(0, 7), ha='center', fontsize=6.5,
-                             color=dur_color, fontweight='bold')
-            
-            dur_label_color = dur_color
-            ax2.set_ylabel("Duração (ms)", fontsize=7.5, color=dur_label_color)
-            ax2.tick_params(axis='y', labelsize=7, colors=dur_label_color, length=2)
-            for sp in ax2.spines.values():
-                sp.set_visible(False)
-            ax2.spines['right'].set_visible(True)
-            ax2.spines['right'].set_color(dur_color)
-            ax2.spines['right'].set_linewidth(0.8)
-            ax2.spines['right'].set_alpha(0.5)
-            ax2.grid(False)
-            
-            # Margem vertical para não colar nos limites
-            y_min_d = min(y_pts) * 0.85 if min(y_pts) > 0 else 0
-            y_max_d = max(y_pts) * 1.20
-            ax2.set_ylim(y_min_d, y_max_d)
-            ax2.set_facecolor('none')
-        else:
-            self.panel_hist._ax2 = None
-        
-        # ——— Legenda unificada ———
-        from matplotlib.patches import Patch
-        from matplotlib.lines import Line2D
-        legend_handles = [Patch(facecolor=hist_palette.get(int(x), extra_pulse_color), edgecolor='none', label=f'{int(x)} pulsos')
-                          for x in unique_pulses]
-        if len(avg_durations) >= 2:
-            legend_handles.append(Line2D([0], [0], color=dur_color, linewidth=1.5, linestyle='--',
-                                         marker='o', markersize=4, label='Duração (ms)'))
-        if legend_handles:
-            hist_w = self.panel_hist.width()
-            leg_ncol = min(3 if hist_w < 340 else 4, len(legend_handles))
-            leg_fs = 7.0 if hist_w < 280 else (7.5 if hist_w < 340 else 8.0)
-            leg = ax_hist.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.11),
-                             ncol=leg_ncol, frameon=False, fontsize=leg_fs, handlelength=0.9,
-                             columnspacing=0.5, borderaxespad=0.0)
-            leg.get_frame().set_facecolor((0, 0, 0, 0))
-            leg.get_frame().set_alpha(0.0)
-            leg.get_frame().set_edgecolor((0, 0, 0, 0))
-            leg.get_frame().set_linewidth(0)
-            for text in leg.get_texts():
-                text.set_color(hist_tick_color)
-        
-        self.panel_hist.canvas.draw_idle()
-
-    def _refresh_user_peak_markers(self):
-        """Renderiza marcadores de picos do usuário em todos os gráficos relevantes (onda, freq, spec)."""
-        # FASE 3: delega para PlotRenderers. Corpo original permanece como fallback (FASE 7).
-        if hasattr(self, 'plot_renderers'):
-            self.plot_renderers._refresh_user_peak_markers()
-            return
-        if not hasattr(self, 'panel_wave'):
-            return
-
-
-        # Limpa marcadores antigos de todos os painéis
-        for artist in getattr(self, '_wave_user_markers', []):
-            try:
-                artist.remove()
-            except Exception:
-                pass
-        self._wave_user_markers = []
-
-        if not self.active_heavy_data:
-            return
-
-        rate = float(self.active_heavy_data.get('rate', 1.0))
-        t_spec = self.active_heavy_data.get('t_spec', [])
-        dom_freqs = self.active_heavy_data.get('dom_freqs', [])
-        env = self.active_heavy_data.get('env')
-        
-        # 1. Desenhar marcadores de chirps classificados
-        chirp_peaks_list = self.active_heavy_data.get('chirp_peaks_list', [])
-        picos_por_contagem = {}
-        for cp in chirp_peaks_list:
-            qnt = len(cp)
-            picos_por_contagem.setdefault(qnt, []).extend(cp)
-            
-        pulse_colors = {
-            2: '#2563EB',   # Azul Royal
-            3: '#8B5CF6',   # Roxo / Violeta
-            4: '#F97316',   # Laranja
-            5: '#10B981',   # Verde Esmeralda
-            6: '#EC4899',   # Rosa Magenta
-            7: '#06B6D4',   # Ciano Turquesa
-            8: '#EAB308',   # Amarelo Ouro
-            9: '#84CC16',   # Verde Lima
-            10: '#A855F7',  # Púrpura Forte
-            1: '#94A3B8'    # Cinza ardósia
-        }
-        extra_pulse_color = '#F43F5E'
-        
-        # 2. Distant Peaks
-        distant_pks = self.active_heavy_data.get('distant_peaks', [])
-        
-        ax1 = getattr(self.panel_wave, 'ax', None)
-        ax3 = getattr(self.panel_freq, 'ax', None)
-        ax4 = getattr(self.panel_spec, 'ax', None)
-        
-        if ax1 and env is not None:
-            for qnt, pks in sorted(picos_por_contagem.items()):
-                pks_t = np.array(pks) / rate
-                lines = ax1.plot(pks_t, env[pks], 'x', color=pulse_colors.get(int(qnt), extra_pulse_color), markersize=7, markeredgewidth=1.7, zorder=7)
-                self._wave_user_markers.extend(lines)
-            if distant_pks:
-                valid_d = [dp for dp in distant_pks if 0 <= dp < len(env)]
-                if valid_d:
-                    lines = ax1.plot(np.array(valid_d) / rate, env[valid_d], 'x', color='#64748B', markersize=5.5, markeredgewidth=1.1, alpha=0.55, zorder=5)
-                    self._wave_user_markers.extend(lines)
-
-        if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
-            pulse_meta = getattr(self, "pulse_metadata", {})
-            
-            def get_freqs_for_peaks(pks):
-                pks_t = np.array(pks) / rate
-                f = np.interp(pks_t, t_spec, dom_freqs)
-                for i, p in enumerate(pks):
-                    if p in pulse_meta and "freq" in pulse_meta[p]:
-                        f[i] = pulse_meta[p]["freq"]
-                return pks_t, f
-
-            if ax3:
-                for qnt, pks in sorted(picos_por_contagem.items()):
-                    pks_t, freqs_at_pks = get_freqs_for_peaks(pks)
-                    lines = ax3.plot(pks_t, freqs_at_pks, 'x', color=pulse_colors.get(int(qnt), '#5F9ED1'), markersize=6, markeredgewidth=1.4, zorder=7)
-                    self._wave_user_markers.extend(lines)
-                if distant_pks:
-                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
-                    if valid_d:
-                        d_times, d_freqs = get_freqs_for_peaks(valid_d)
-                        lines = ax3.plot(d_times, d_freqs, 'x', color='#64748B', markersize=5, markeredgewidth=1.1, alpha=0.55, zorder=5)
-                        self._wave_user_markers.extend(lines)
-
-            if ax4:
-                unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                scale = 1000.0 if unit == "kHz" else 1.0
-                for qnt, pks in sorted(picos_por_contagem.items()):
-                    pks_t, freqs_at_pks = get_freqs_for_peaks(pks)
-                    lines = ax4.plot(pks_t, freqs_at_pks / scale, 'x', color=pulse_colors.get(int(qnt), '#5F9ED1'), markersize=7, markeredgewidth=1.5, zorder=7)
-                    self._wave_user_markers.extend(lines)
-                if distant_pks:
-                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
-                    if valid_d:
-                        d_times, d_freqs = get_freqs_for_peaks(valid_d)
-                        lines = ax4.plot(d_times, d_freqs / scale, 'x', color='#94A3B8', markersize=5, markeredgewidth=1.0, alpha=0.5, zorder=5)
-                        self._wave_user_markers.extend(lines)
-
-        # 3. Marcadores do Usuário (Adicionados, Confirmados, Removidos)
-        if self.peaks_user_verified and self.peaks_detected:
-            peaks_detected_set = set(int(p) for p in self.peaks_detected)
-            peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
-
-            peaks_confirmed = sorted(peaks_verified_set & peaks_detected_set)
-            peaks_added = sorted(peaks_verified_set - peaks_detected_set)
-            peaks_removed = sorted(peaks_detected_set - peaks_verified_set)
-
-            if ax1:
-                if peaks_confirmed:
-                    xdata = np.asarray(peaks_confirmed, dtype=float) / rate
-                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='o', 
-                                         color='#10B981', edgecolors='#047857', linewidths=1.5, zorder=4)
-                    self._wave_user_markers.append(scatter)
-
-                if peaks_added:
-                    xdata = np.asarray(peaks_added, dtype=float) / rate
-                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=60, marker='^', 
-                                         color='#3B82F6', edgecolors='#1E40AF', linewidths=1.5, zorder=4)
-                    self._wave_user_markers.append(scatter)
-
-                if peaks_removed:
-                    xdata = np.asarray(peaks_removed, dtype=float) / rate
-                    scatter = ax1.scatter(xdata, np.zeros_like(xdata), s=80, marker='x', 
-                                         color='#EF4444', linewidths=2.0, zorder=4)
-                    self._wave_user_markers.append(scatter)
-
-            if t_spec is not None and len(t_spec) > 0 and dom_freqs is not None and len(dom_freqs) > 0:
-                for peaks, color, marker in [
-                    (peaks_confirmed, '#10B981', 'o'),
-                    (peaks_added, '#3B82F6', '^'),
-                    (peaks_removed, '#EF4444', 'x'),
-                ]:
-                    if peaks:
-                        pks_t = np.asarray(peaks, dtype=float) / rate
-                        freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs)
-                        
-                        # Usa a frequência manual exata caso o usuário tenha clicado no espectrograma
-                        pulse_meta = getattr(self, "pulse_metadata", {})
-                        for i, p in enumerate(peaks):
-                            if p in pulse_meta and "freq" in pulse_meta[p]:
-                                freqs_at_pks[i] = pulse_meta[p]["freq"]
-                        
-                        if ax3:
-                            lines = ax3.plot(pks_t, freqs_at_pks, marker=marker, linestyle='none',
-                                            color=color, markersize=8, markeredgewidth=1.2, zorder=4)
-                            self._wave_user_markers.extend(lines)
-                            
-                            if ax4:
-                                unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                                scale = 1000.0 if unit == "kHz" else 1.0
-                                freqs_at_pks_spec = freqs_at_pks / scale
-                                lines = ax4.plot(pks_t, freqs_at_pks_spec, marker=marker, linestyle='none',
-                                                color=color, markersize=8, markeredgewidth=1.2, zorder=4)
-                                self._wave_user_markers.extend(lines)
-
-        # Aplica a visibilidade configurada pelo usuário nos marcadores de pulsos
-        show_peaks = getattr(self.panel_wave, "show_peaks", True)
-        if not show_peaks:
-            for m in self._wave_user_markers:
-                try:
-                    m.set_visible(False)
-                except Exception:
-                    pass
-
-        self._update_pulse_hover_data()
-        for panel in self.all_panels:
-            try:
-                panel.canvas.draw_idle()
-            except Exception:
-                pass
-
-    def _find_nearest_user_peak(self, time_sec, tolerance_sec=0.005):
-        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            return self.editor_controller.find_nearest_user_peak(time_sec, tolerance_sec)
-        if not self.peaks_user_verified or not self.active_heavy_data:
-            return None
-        rate = float(self.active_heavy_data.get('rate', 1.0))
-        tolerance_samples = max(2, int(round(tolerance_sec * rate)))
-        peak_samples = np.asarray(self.peaks_user_verified, dtype=int)
-        target = int(round(float(time_sec) * rate))
-        diffs = np.abs(peak_samples - target)
-        if diffs.size == 0:
-            return None
-        nearest_idx = int(np.argmin(diffs))
-        if diffs[nearest_idx] <= tolerance_samples:
-            return int(peak_samples[nearest_idx])
-        return None
-
-    def _toggle_peak_marker(self, time_sec, panel=None, event=None, f_click=None, amp_click=None):
-        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            return self.editor_controller.toggle_peak_marker(time_sec, panel, event, f_click, amp_click)
-        if not self.active_heavy_data:
-            return
-        rate = float(self.active_heavy_data.get('rate', 1.0))
-        target = int(round(float(time_sec) * rate))
-        candidates = sorted(set(int(p) for p in self.peaks_detected) |
-                            set(int(p) for p in self.peaks_user_verified))
-        nearest = None
-
-        if candidates:
-            # Hit-box snapping adaptativo em pixels de tela (tolerância suave de ~15px)
-            ax = panel.ax if (panel and hasattr(panel, 'ax')) else (event.inaxes if event else None)
-            if ax is not None and event is not None and getattr(event, 'x', None) is not None:
-                xlim = ax.get_xlim()
-                pad = max(0.1, (xlim[1] - xlim[0]) * 0.1)
-                vis_cands = [p for p in candidates if (xlim[0] - pad) <= (p / rate) <= (xlim[1] + pad)]
-                if not vis_cands:
-                    vis_cands = candidates
-                cand_times = np.asarray(vis_cands, dtype=float) / rate
-                pts_disp = ax.transData.transform(np.column_stack([cand_times, np.zeros_like(cand_times)]))
-                pixel_dists = np.abs(pts_disp[:, 0] - event.x)
-                min_idx = int(np.argmin(pixel_dists))
-                if pixel_dists[min_idx] <= 15.0 and abs(cand_times[min_idx] - float(time_sec)) <= 0.020:
-                    nearest = vis_cands[min_idx]
-            else:
-                # Fallback adaptativo à janela temporal visível ou 5 ms
-                if ax is not None:
-                    xlim = ax.get_xlim()
-                    vis_span = max(0.01, xlim[1] - xlim[0])
-                    time_tol_sec = min(0.020, max(0.003, vis_span * 0.015))
-                else:
-                    time_tol_sec = 0.005
-                distances = np.abs(np.asarray(candidates, dtype=int) - target)
-                min_dist_idx = int(np.argmin(distances))
-                if distances[min_dist_idx] <= int(round(time_tol_sec * rate)):
-                    nearest = candidates[min_dist_idx]
-
-        self._pulse_edit_history.append(list(self.peaks_user_verified))
-        if len(self._pulse_edit_history) > 50:
-            self._pulse_edit_history = self._pulse_edit_history[-50:]
-
-        self.pulse_metadata = getattr(self, "pulse_metadata", {})
-
-        if nearest is not None and nearest in self.peaks_user_verified:
-            self.peaks_user_verified = [int(p) for p in self.peaks_user_verified if int(p) != nearest]
-        elif nearest is not None:
-            self.peaks_user_verified = sorted(set(self.peaks_user_verified + [nearest]))
-            if f_click is not None or amp_click is not None:
-                self.pulse_metadata[nearest] = {"idx": nearest}
-                if f_click is not None: self.pulse_metadata[nearest]["freq"] = f_click
-                if amp_click is not None: self.pulse_metadata[nearest]["amp"] = amp_click
-        else:
-            self.peaks_user_verified = sorted(set(self.peaks_user_verified + [target]))
-            if f_click is not None or amp_click is not None:
-                self.pulse_metadata[target] = {"idx": target}
-                if f_click is not None: self.pulse_metadata[target]["freq"] = f_click
-                if amp_click is not None: self.pulse_metadata[target]["amp"] = amp_click
-        self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
-        if self.active_filename:
-            combined = []
-            for p in self.peaks_user_verified:
-                if getattr(self, "pulse_metadata", None) and p in self.pulse_metadata:
-                    combined.append(self.pulse_metadata[p])
-                else:
-                    combined.append(int(p))
-            self.corrections_by_file[self.active_filename] = combined
-            self._save_corrections_state()
-
-        for panel in self.all_panels:
-            if hasattr(panel, "btn_pulse_undo"):
-                panel.btn_pulse_undo.setEnabled(True)
-
-        # Recalcula chilreios e métricas imediatamente após a alteração do usuário de forma ultra rápida
-        if self.peaks_user_verified and len(self.peaks_user_verified) >= 2:
-            try:
-                peaks_detected_set = set(int(p) for p in self.peaks_detected)
-                peaks_verified_set = set(int(p) for p in self.peaks_user_verified)
-                peaks_added = sorted(peaks_verified_set - peaks_detected_set)
-                
-                effective_params = {**self.algo_params, **self._adaptive_overrides}
-                chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                    self.peaks_user_verified,
-                    effective_params,
-                    rate,
-                    self.active_heavy_data['env'],
-                    raw_signal=self.active_heavy_data.get('data_b1')
-                )
-                self.active_heavy_data['chirps'] = chirps
-                self.active_heavy_data['chirp_peaks_list'] = chirp_peaks_list
-                self.active_heavy_data['media'] = media
-                self.active_heavy_data['moda'] = moda
-                if hasattr(self, 'lbl_total'):
-                    self.lbl_total.setText(str(len(chirps)))
-                if hasattr(self, 'lbl_metric_sub'):
-                    self.lbl_metric_sub.setText(f"Moda: {moda}   |   Média: {media:.2f}")
-                if self.active_filename and self.active_filename in self.analysis_cache:
-                    self.analysis_cache[self.active_filename]["chirps"] = chirps
-                    self.analysis_cache[self.active_filename]["media"] = media
-                    self.analysis_cache[self.active_filename]["moda"] = moda
-            except Exception:
-                pass
-
-        # Atualiza a contagem dos chilreios e as marcações de forma ultra-rápida!
-        self._refresh_histogram()
-        self._refresh_user_peak_markers()
-
-    def _adapt_advanced_params(self):
-        """Atualiza sobreposições adaptativas delegando ao PipelineOrchestrator."""
-        self.pipeline._adapt_advanced_params()
-
-    def _undo_pulse_edit(self):
-        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            return self.editor_controller.undo()
-        if not self._pulse_edit_history:
-            return
-        entry = self._pulse_edit_history.pop()
-        if isinstance(entry, dict) and "peaks" in entry:
-            self.peaks_user_verified = list(entry["peaks"])
-            self.pulse_metadata = dict(entry.get("metadata", {}))
-        else:
-            self.peaks_user_verified = list(entry)
-        self.active_heavy_data['peaks_user_verified'] = list(self.peaks_user_verified)
-        self.active_heavy_data['pulse_metadata'] = dict(getattr(self, "pulse_metadata", {}))
-        if self.active_filename:
-            combined = []
-            for p in self.peaks_user_verified:
-                if getattr(self, "pulse_metadata", None) and p in self.pulse_metadata:
-                    combined.append(self.pulse_metadata[p])
-                else:
-                    combined.append(int(p))
-            self.corrections_by_file[self.active_filename] = combined
-            self._save_corrections_state()
-        enabled = bool(self._pulse_edit_history)
-        for panel in self.all_panels:
-            if hasattr(panel, "btn_pulse_undo"):
-                panel.btn_pulse_undo.setEnabled(enabled)
-
-        # Recalcula chilreios e métricas após desfeita
-        if self.active_heavy_data and self.peaks_user_verified and len(self.peaks_user_verified) >= 2:
-            try:
-                rate = float(self.active_heavy_data.get('rate', 1.0))
-                effective_params = {**self.algo_params, **self._adaptive_overrides}
-                chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
-                    self.peaks_user_verified,
-                    effective_params,
-                    rate,
-                    self.active_heavy_data['env'],
-                    raw_signal=self.active_heavy_data.get('data_b1')
-                )
-                self.active_heavy_data['chirps'] = chirps
-                self.active_heavy_data['chirp_peaks_list'] = chirp_peaks_list
-                self.active_heavy_data['media'] = media
-                self.active_heavy_data['moda'] = moda
-                if hasattr(self, 'lbl_total'):
-                    self.lbl_total.setText(str(len(chirps)))
-                if hasattr(self, 'lbl_metric_sub'):
-                    self.lbl_metric_sub.setText(f"Moda: {moda}   |   Média: {media:.2f}")
-                if self.active_filename and self.active_filename in self.analysis_cache:
-                    self.analysis_cache[self.active_filename]["chirps"] = chirps
-                    self.analysis_cache[self.active_filename]["media"] = media
-                    self.analysis_cache[self.active_filename]["moda"] = moda
-            except Exception:
-                pass
-        self._refresh_histogram()
-        self._refresh_user_peak_markers()
-
-    def _save_corrections_state(self):
-        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            return self.editor_controller.save_corrections_state()
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            if not isinstance(config, dict):
-                config = {}
-            config["corrections_by_file"] = self.corrections_by_file
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
-        except (OSError, ValueError, TypeError) as exc:
-            print(f"Erro ao persistir correções: {exc}")
-
-    def learn_from_corrections(self):
-        """Coordena o retreinamento do classificador supervisionado com feedback de UI."""
-        curr = self.list_widget.currentItem()
-        filename = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
-        if not filename:
-            QMessageBox.warning(self, "Nenhum arquivo", "Selecione um arquivo antes de treinar.")
-            return
-
-        if not self.active_heavy_data:
-            QMessageBox.warning(self, "Sem dados", "Primeiro carregue um arquivo WAV antes de treinar o classificador.")
-            return
-
-        detected = list(self.peaks_detected or [])
-        verified = list(self.peaks_user_verified or [])
-        detected_set = set(int(p) for p in detected)
-        verified_set = set(int(p) for p in verified)
-
-        if not detected_set or not verified_set:
-            QMessageBox.warning(self, "Dados insuficientes", "Você precisa ter tanto pulsos detectados quanto verificados para treinar.")
-            return
-
-        spinner = ButtonSpinner(self.btn_learn_corrections, "Treinando...")
-        spinner.start()
-
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            ec = self.editor_controller
-
-            def _on_finished(num_corrections, fn):
-                try:
-                    ec.learning_completed.disconnect(_on_finished)
-                    ec.learning_failed.disconnect(_on_error)
-                except Exception:
-                    pass
-                spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
-                if hasattr(self, 'lbl_model_status'):
-                    self._update_ml_toggle_ui()
-                QMessageBox.information(
-                    self, 
-                    I18N[self.lang]['success'], 
-                    f'Modelo treinado com sucesso!\n\n'
-                    f'Arquivo: {fn}\n'
-                    f'Picos analisados: {len(detected)}\n'
-                    f'Correções aprendidas: {num_corrections}\n'
-                    f'Picos verificados: {len(verified)}\n\n'
-                    f'O modelo com 500 árvores foi atualizado e salvo.'
-                )
-
-            def _on_error(err_msg):
-                try:
-                    ec.learning_completed.disconnect(_on_finished)
-                    ec.learning_failed.disconnect(_on_error)
-                except Exception:
-                    pass
-                spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
-                QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{err_msg}')
-
-            ec.learning_completed.connect(_on_finished)
-            ec.learning_failed.connect(_on_error)
-            worker = ec.learn_from_corrections(filename=filename, blocking=False)
-            self._learn_worker = worker
-            return
-
-        # Fallback legado (FASE 7)
-        self.corrections_by_file[filename] = list(verified)
-        self._save_corrections_state()
-
-        rate = float(self.active_heavy_data.get('rate', 1.0))
-        env = self.active_heavy_data.get('env')
-        data_b1 = self.active_heavy_data.get('data_b1')
-
-        def _task():
-            self.pulse_learner.update_from_corrections(
-                detected, verified, rate, env, raw_signal=data_b1
-            )
-            self._adapt_advanced_params()
-            self.pulse_learner.save_to_config()
-            return len(detected_set ^ verified_set)
-
-        worker = GenericWorker(_task)
-        self._learn_worker = worker
-
-        def _legacy_on_finished(num_corrections):
-            spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
-            if hasattr(self, 'lbl_model_status'):
-                self._update_ml_toggle_ui()
-            QMessageBox.information(
-                self, 
-                I18N[self.lang]['success'], 
-                f'Modelo treinado com sucesso!\n\n'
-                f'Arquivo: {filename}\n'
-                f'Picos analisados: {len(detected)}\n'
-                f'Correções aprendidas: {num_corrections}\n'
-                f'Picos verificados: {len(verified)}\n\n'
-                f'O modelo com 500 árvores foi atualizado e salvo.'
-            )
-
-        def _legacy_on_error(err_msg):
-            spinner.stop(make_ui_icon("brain", color="#FFFFFF", size=17), I18N[self.lang]["learn_corrections"])
-            QMessageBox.critical(self, I18N[self.lang]['error'], f'Não foi possível treinar o classificador:\n{err_msg}')
-
-        worker.finished_signal.connect(_legacy_on_finished)
-        worker.error_signal.connect(_legacy_on_error)
-        worker.start()
-
+        self.nav_controller.update_playback_cursor(position_sec)
     def on_double_click(self, event):
         if event.inaxes == self.panel_wave.ax and event.xdata is not None:
-            self._toggle_peak_marker(event.xdata, panel=self.panel_wave, event=event)
+            self.editor_controller.toggle_peak_marker(event.xdata, panel=self.panel_wave, event=event)
 
     def _on_splitter_moved(self, pos, index):
         sizes = self.splitter.sizes()
@@ -3835,14 +2388,13 @@ class MainWindow(QMainWindow):
                 stack_h = max(300, self.stack_splitter.height())
                 h_each = max(60, stack_h // 3)
                 self.stack_splitter.setSizes([h_each, h_each, h_each])
-            QTimer.singleShot(30, self._apply_plot_geometry)
-            if not self.active_heavy_data:
+            QTimer.singleShot(30, self.apply_plot_geometry)
+            if not self.ctx.active_heavy_data:
                 QTimer.singleShot(45, self._draw_empty_plots)
 
     # ---------- maximização / pan / zoom ----------
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.bg_cache_valid = False
         if hasattr(self, "all_panels") and not getattr(self, "_swapping_panels", False) and not getattr(self, "_refreshing_canvases", False):
             if not hasattr(self, "_resize_debounce_timer"):
                 self._resize_debounce_timer = QTimer(self)
@@ -3879,11 +2431,11 @@ class MainWindow(QMainWindow):
 
     def _finish_resize_refresh(self):
         self._schedule_focus_update(50)
-        self._apply_plot_geometry()
+        self.apply_plot_geometry()
         for p in self.all_panels:
             p.canvas.draw_idle()
-        if self.active_heavy_data:
-            QTimer.singleShot(150, self.capture_backgrounds)
+        if self.ctx.active_heavy_data:
+            QTimer.singleShot(150, self.nav_controller.capture_backgrounds)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape and self.expanded_panel is not None:
@@ -3894,511 +2446,15 @@ class MainWindow(QMainWindow):
     def toggle_expand(self, panel):
         self.swap_main_panel(panel)
 
-    def capture_backgrounds(self):
-        """FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.capture_backgrounds()
-        if not self.cursor_lines:
-            return
-        for line in self.cursor_lines:
-            line.set_animated(False)
-            line.set_visible(False)
-        active_panels = [self.panel_wave, self.panel_spec]
-        self.backgrounds = []
-        for panel in active_panels:
-            panel.canvas.draw()
-            self.backgrounds.append(panel.canvas.copy_from_bbox(panel.ax.bbox))
-        for line in self.cursor_lines:
-            line.set_visible(True)
-            line.set_animated(True)
-        self.bg_cache_valid = True
 
-    def on_press(self, event):
-        """Gerencia cliques em painéis. Se modo de edição de pulsos estiver ativo, permite editar."""
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.on_press(event)
 
-        # Alinha o marcador de referência temporal com o botão esquerdo (button == 1)
-        if event.button == 1 and event.xdata is not None:
-            self._align_click_marker(float(event.xdata))
-        
-        # Determina qual painel foi clicado
-        clicked_panel = None
-        for panel in self.all_panels:
-            if event.inaxes == panel.ax:
-                clicked_panel = panel
-                break
 
-        # Se modo de edição está ativo e clicou com o botão esquerdo em um painel que suporta edição
-        if event.button == 1 and clicked_panel and getattr(clicked_panel, 'pulse_edit_mode', False) and event.xdata is not None:
-            if self.active_heavy_data:
-                rate = float(self.active_heavy_data.get('rate', 1.0))
-                time_sec = float(event.xdata)
-                kwargs = {"panel": clicked_panel, "event": event}
-                if event.ydata is not None:
-                    if clicked_panel == self.panel_spec:
-                        # ydata is in the displayed unit (Hz or kHz). Normalizing to Hz.
-                        unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                        kwargs["f_click"] = float(event.ydata) * (1000.0 if unit == "kHz" else 1.0)
-                    elif clicked_panel == self.panel_wave:
-                        kwargs["amp_click"] = float(event.ydata)
-                self._toggle_peak_marker(time_sec, **kwargs)
-                return
 
-        # Arrastar / Pan dos gráficos com o BOTÃO DIREITO do mouse (button == 3)
-        if clicked_panel and clicked_panel != self.panel_hist and event.button == 3:
-            self.panning = True
-            self.active_ax = event.inaxes
-            self.start_xlim = self.active_ax.get_xlim()
-            self.start_ylim = self.active_ax.get_ylim()
-            self.start_x, self.start_y = event.x, event.y
-            self.bg_cache_valid = False
-            for line in self.cursor_lines:
-                line.set_animated(False)
 
-    def _align_click_marker(self, time_sec):
-        """Desenha a referência vertical do clique em todos os eixos temporais."""
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller._align_click_marker(time_sec)
-        for line in self._click_alignment_lines:
-            line.remove()
-        self._click_alignment_lines = []
-        for panel in (self.panel_wave, self.panel_freq, self.panel_spec):
-            for ax in panel.figure.axes:
-                self._click_alignment_lines.append(
-                    ax.axvline(x=time_sec, color="#FACC15", linewidth=1.0,
-                               linestyle="--", alpha=0.75, zorder=8)
-                )
-            panel.canvas.draw_idle()
 
-    def _update_pulse_edit_buttons(self, activated_panel):
-        """FASE 5: Delega para EditorController. Corpo original mantido como fallback (FASE 7)."""
-        if hasattr(self, 'editor_controller') and self.editor_controller is not None:
-            return self.editor_controller.update_pulse_edit_buttons(activated_panel)
-        for panel in self.all_panels:
-            if panel != activated_panel:
-                panel.pulse_edit_mode = False
-                if hasattr(panel, 'btn_pulse_edit'):
-                    panel.btn_pulse_edit.blockSignals(True)
-                    panel.btn_pulse_edit.setChecked(False)
-                    panel.btn_pulse_edit.setStyleSheet("")
-                    panel.btn_pulse_edit.setToolTip("Ativar modo de edição de pulsos (clique para adicionar/remover)")
-                    panel.btn_pulse_edit.blockSignals(False)
 
-    def on_release(self, event):
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.on_release(event)
-        if event.button == 3:
-            self.panning, self.active_ax = False, None
-            for panel in self.all_panels:
-                panel.canvas.draw_idle()
-            
-            # Deixamos o recálculo do render_high_detail a encargo do debounce_timer das engines (250ms),
-            # para não travar a UI ao soltar o mouse. Agendamos o background cache para logo após.
-            QTimer.singleShot(350, self.capture_backgrounds)
 
-    def on_sync_toggled(self, enabled):
-        """Reestabelece uma geometria consistente nos três eixos temporais ao ativar a sincronização."""
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.on_sync_toggled(enabled)
-        if getattr(self, "_swapping_panels", False):
-            return
-        self.bg_cache_valid = False
-        for line in self.cursor_lines:
-            line.set_animated(False)
-        if not self.active_heavy_data:
-            return
 
-        duration = float(self.active_heavy_data.get("duration", 0.0))
-        if duration <= 0:
-            return
 
-        axes = [self.panel_wave.ax, self.panel_spec.ax]
-        for ax in axes:
-            ax.set_xlim(0.0, duration)
-        self.panel_wave.ax.set_ylim(-1.05, 1.05)
-        p = self.active_heavy_data.get("params", {})
-        if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
-            self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
-        elif p:
-            rate = float(self.active_heavy_data.get("rate", 44100.0))
-            nyq = rate / 2.0
-            unit = getattr(self.panel_spec, "spec_unit", "kHz") if hasattr(self, "panel_spec") else "kHz"
-            if unit == "kHz":
-                self.panel_spec.ax.set_ylim(0.0, nyq / 1000.0)
-            else:
-                self.panel_spec.ax.set_ylim(0.0, nyq)
 
-        # Conclui a geometria do Qt e renderiza imediatamente, sem esperar timers.
-        QApplication.processEvents()
-        self._refresh_synced_views()
-
-    def _refresh_synced_views(self):
-        """Redesenha os painéis depois que o Qt estabiliza as geometrias.
-        Usa renderização de alta definição para evitar tiles/viewport cortados.
-        """
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller._refresh_synced_views()
-        if not self.active_heavy_data:
-            return
-        QApplication.processEvents()
-        self.bg_cache_valid = False
-        for line in self.cursor_lines:
-            line.set_animated(False)
-            line.set_visible(False)
-
-        duration = float(self.active_heavy_data.get("duration", 0.0))
-        p = self.active_heavy_data.get("params", {})
-        self.panel_wave.ax.set_xlim(0.0, duration)
-        self.panel_spec.ax.set_xlim(float(self.active_heavy_data["t_spec"][0]) if len(self.active_heavy_data.get("t_spec", [])) else 0.0, float(self.active_heavy_data["t_spec"][-1]) if len(self.active_heavy_data.get("t_spec", [])) else duration)
-        self.panel_wave.ax.set_ylim(-1.05, 1.05)
-        if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
-            self.panel_spec.ax.set_ylim(self.panel_spec.spin_spec_ymin.value(), self.panel_spec.spin_spec_ymax.value())
-        elif p:
-            rate = float(self.active_heavy_data.get("rate", 44100.0))
-            nyq = rate / 2.0
-            unit = getattr(self.panel_spec, "spec_unit", "kHz") if hasattr(self, "panel_spec") else "kHz"
-            if unit == "kHz":
-                self.panel_spec.ax.set_ylim(0.0, nyq / 1000.0)
-            else:
-                self.panel_spec.ax.set_ylim(0.0, nyq)
-
-        if self.spectro_engine:
-            self.spectro_engine.render_high_detail()
-        if self.line_engine:
-            self.line_engine.render_high_detail()
-        if getattr(self, "freq_engine", None):
-            self.freq_engine.render_high_detail()
-        for panel in self.all_panels:
-            panel.canvas.draw()
-
-        for line in self.cursor_lines:
-            line.set_visible(True)
-            line.set_animated(True)
-        QTimer.singleShot(40, self.capture_backgrounds)
-
-    def _sync_render(self, target_panels, xmin, xmax):
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller._sync_render(target_panels, xmin, xmax)
-        if getattr(self, "_swapping_panels", False):
-            return
-        current_time = time.time()
-        if current_time - self.sync_throttle_time < 0.025:
-            return
-        for panel in target_panels:
-            if not panel.isVisible():
-                continue
-            ymin, ymax = panel.ax.get_ylim()
-            if self.spectro_engine and panel == self.panel_spec:
-                self.spectro_engine.render_interactive(xmin, xmax, ymin, ymax, is_sync=True)
-            elif self.line_engine and panel == self.panel_wave:
-                self.line_engine.render_interactive(xmin, xmax, is_sync=True)
-            elif getattr(self, "freq_engine", None) and panel == self.panel_freq:
-                self.freq_engine.render_interactive(xmin, xmax, is_sync=True)
-            else:
-                panel.canvas.draw_idle()
-        self.sync_throttle_time = current_time
-
-    def _clamp_bounds(self, ax, xmin, xmax, ymin, ymax):
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller._clamp_bounds(ax, xmin, xmax, ymin, ymax)
-        if not self.active_heavy_data: return xmin, xmax, ymin, ymax
-        d = self.active_heavy_data
-        dur = float(d.get("duration", 0.0))
-        rate = float(d.get("rate", 44100))
-        nyq = rate / 2.0
-        
-        c_xmin, c_xmax, c_ymin, c_ymax = None, None, None, None
-
-        if ax == self.panel_wave.ax:
-            c_xmin, c_xmax = 0.0, dur
-            c_ymin, c_ymax = -1.05, 1.05
-        elif getattr(self, "panel_freq", None) and ax == self.panel_freq.ax:
-            unit = getattr(self.panel_spec, "spec_unit", "kHz")
-            max_x = nyq / 1000.0
-            if unit != "kHz": max_x = nyq
-            c_xmin, c_xmax = 0.0, max_x
-            
-            Pxx_db = d.get("Pxx_db", [])
-            if len(Pxx_db) > 0:
-                yr = np.ptp(Pxx_db)
-                c_ymin, c_ymax = np.min(Pxx_db) - yr*0.1, np.max(Pxx_db) + yr*0.1
-        elif ax == self.panel_spec.ax:
-            c_xmin, c_xmax = 0.0, dur
-            unit = getattr(self.panel_spec, "spec_unit", "kHz")
-            c_ymin, c_ymax = 0.0, nyq / 1000.0 if unit == "kHz" else nyq
-        elif getattr(self, "panel_hist", None) and ax == self.panel_hist.ax:
-            chirps = np.asarray(d.get("chirps", []))
-            if chirps.size > 0:
-                c_xmin, c_xmax = float(chirps.min()) - 0.65, float(chirps.min()) + 0.65
-                ym = max(1, int(np.bincount(chirps.astype(int)).max()))
-                c_ymin, c_ymax = 0, ym * 1.20
-
-        # Clamping
-        # Se a largura desejada for maior que o limite, centralizamos.
-        if c_xmin is not None and c_xmax is not None:
-            if (xmax - xmin) > (c_xmax - c_xmin):
-                xmin, xmax = c_xmin, c_xmax
-            else:
-                if xmin < c_xmin:
-                    xmax += (c_xmin - xmin)
-                    xmin = c_xmin
-                if xmax > c_xmax:
-                    xmin -= (xmax - c_xmax)
-                    xmax = c_xmax
-                    
-        if c_ymin is not None and c_ymax is not None:
-            if (ymax - ymin) > (c_ymax - c_ymin):
-                ymin, ymax = c_ymin, c_ymax
-            else:
-                if ymin < c_ymin:
-                    ymax += (c_ymin - ymin)
-                    ymin = c_ymin
-                if ymax > c_ymax:
-                    ymin -= (ymax - c_ymax)
-                    ymax = c_ymax
-                    
-        return xmin, xmax, ymin, ymax
-
-    def on_axes_leave(self, event):
-        """Oculta o label de coordenadas quando o cursor sai do eixo."""
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.on_axes_leave(event)
-        for panel in self.all_panels:
-            if hasattr(panel, "coord_label") and event.inaxes == panel.ax:
-                panel.coord_label.setVisible(False)
-
-    def on_motion(self, event):
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.on_motion(event)
-        if self.panning and self.active_ax is not None and event.inaxes == self.active_ax:
-            now_t = time.time()
-            if now_t - getattr(self, "_last_pan_time", 0) < 0.018:
-                return
-            self._last_pan_time = now_t
-            dx, dy = event.x - self.start_x, event.y - self.start_y
-            x0, x1 = self.start_xlim
-            y0, y1 = self.start_ylim
-            bbox = self.active_ax.get_window_extent()
-            if bbox.width == 0 or bbox.height == 0:
-                return
-            new_xmin = x0 - dx * (x1-x0) / bbox.width
-            new_xmax = x1 - dx * (x1-x0) / bbox.width
-            new_ymin = y0 - dy * (y1-y0) / bbox.height
-            new_ymax = y1 - dy * (y1-y0) / bbox.height
-            
-            new_xmin, new_xmax, new_ymin, new_ymax = self._clamp_bounds(self.active_ax, new_xmin, new_xmax, new_ymin, new_ymax)
-            
-            time_axes = [self.panel_wave.ax, self.panel_spec.ax]
-            if self.btn_sync.isChecked() and self.active_ax in time_axes:
-                for panel in [self.panel_wave, self.panel_spec]:
-                    panel.ax.set_xlim(new_xmin, new_xmax)
-                    if panel.ax == self.active_ax:
-                        if not (panel == self.panel_spec and getattr(self.panel_spec, "_y_locked", False)):
-                            panel.ax.set_ylim(new_ymin, new_ymax)
-                self._sync_render([self.panel_wave, self.panel_spec], new_xmin, new_xmax)
-            else:
-                self.active_ax.set_xlim(new_xmin, new_xmax)
-                if not (self.active_ax == self.panel_spec.ax and getattr(self.panel_spec, "_y_locked", False)):
-                    self.active_ax.set_ylim(new_ymin, new_ymax)
-                mapping = {p.ax: p for p in self.all_panels}
-                self._sync_render([mapping[self.active_ax]], new_xmin, new_xmax)
-
-            if self.active_ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
-                if not getattr(self.panel_spec, "_y_locked", False):
-                    self.panel_spec.spin_spec_ymin.blockSignals(True)
-                    self.panel_spec.spin_spec_ymax.blockSignals(True)
-                    self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
-                    self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
-                    self.panel_spec.spin_spec_ymin.blockSignals(False)
-                    self.panel_spec.spin_spec_ymax.blockSignals(False)
-            return
-
-        # Tooltip de coordenadas em tempo real (Bloco 3.3)
-        if not self.panning:
-            for panel in self.all_panels:
-                if hasattr(panel, "coord_label"):
-                    if event.inaxes == panel.ax and event.xdata is not None and event.ydata is not None:
-                        if panel == self.panel_spec:
-                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                            f_val = event.ydata if unit == "kHz" else event.ydata / 1000.0
-                            panel.coord_label.setText(f"[ t: {event.xdata:.3f} s | f: {f_val:.2f} kHz ]")
-                        elif panel == self.panel_wave:
-                            panel.coord_label.setText(f"[ t: {event.xdata:.3f} s | amp: {event.ydata:+.4f} ]")
-                        elif panel == getattr(self, "panel_freq", None):
-                            unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                            panel.coord_label.setText(f"[ f: {event.xdata:.2f} {unit} | pot: {event.ydata:.1f} dB ]")
-                        elif panel == getattr(self, "panel_hist", None):
-                            panel.coord_label.setText(f"[ pulsos: {int(event.xdata)} | contagem: {int(event.ydata)} ]")
-                        else:
-                            panel.coord_label.setText(f"[ x: {event.xdata:.3f} | y: {event.ydata:.3f} ]")
-                        panel.coord_label.adjustSize()
-                        panel.coord_label.setVisible(True)
-                    else:
-                        panel.coord_label.setVisible(False)
-
-        # Hover interativo em cima dos marcadores de pulsos (X)
-        if not self.panning and event.inaxes and event.xdata is not None and getattr(self, "pulse_hover_data", None):
-            ax = event.inaxes
-            target_panel = None
-            is_wave = (ax == self.panel_wave.ax)
-            is_freq = (ax == self.panel_freq.ax)
-            is_spec = (ax == self.panel_spec.ax)
-
-            if is_wave:
-                target_panel = self.panel_wave
-            elif is_freq:
-                target_panel = self.panel_freq
-            elif is_spec:
-                target_panel = self.panel_spec
-
-            if target_panel is not None:
-                best_match = None
-                min_pixel_dist = 20.0  # tolerância de 20 pixels para acionamento fácil do hover
-
-                # Otimização crítica de performance: janela temporal em torno do cursor do mouse
-                # Elimina o lag catastrófico gerado pela transformação de milhares de pontos no hover
-                xlim = ax.get_xlim()
-                bbox = ax.get_window_extent()
-                px_per_sec = bbox.width / max(1e-6, (xlim[1] - xlim[0]))
-                dt_max = max(0.04, 30.0 / max(1.0, px_per_sec))
-                t_mouse = event.xdata
-
-                unit = getattr(self.panel_spec, "spec_unit", "kHz")
-                spec_scale = 1000.0 if unit == "kHz" else 1.0
-
-                for item in self.pulse_hover_data:
-                    if abs(item["time"] - t_mouse) > dt_max:
-                        continue
-
-                    # Determina coordenadas Y correspondentes ao eixo atual
-                    if is_wave:
-                        y_val = item["env_y"]
-                    elif is_spec:
-                        y_val = item["freq_y"] / spec_scale
-                    else:
-                        y_val = item["freq_y"]
-
-                    try:
-                        pt_disp = ax.transData.transform((item["time"], y_val))
-                        dx_pix = abs(pt_disp[0] - event.x)
-                        dy_pix = abs(pt_disp[1] - event.y)
-                        dist_pix = np.hypot(dx_pix, dy_pix)
-
-                        # Na onda acústica, também considera proximidade na linha de base y=0
-                        if is_wave:
-                            pt_zero = ax.transData.transform((item["time"], 0.0))
-                            dist_zero = np.hypot(abs(pt_zero[0] - event.x), abs(pt_zero[1] - event.y))
-                            dist_pix = min(dist_pix, dist_zero)
-
-                        if dist_pix < min_pixel_dist:
-                            min_pixel_dist = dist_pix
-                            best_match = item
-                    except Exception:
-                        continue
-
-                if best_match is not None:
-                    if best_match.get("status") == "discarded":
-                        t_val = best_match["time"]
-                        f_val = best_match.get("freq_y", 0.0)
-                        c_freq = best_match.get("carrier_freq", 0.0)
-                        reason = best_match.get("reason", "Pulso descartado pelo filtro acústico")
-
-                        freq_line = ""
-                        if f_val > 0:
-                            if c_freq > 0:
-                                diff = f_val - c_freq
-                                freq_line = f"<b>Frequência:</b> {f_val:.0f} Hz (Portadora: {c_freq:.0f} Hz | Desvio: {diff:+.0f} Hz)<br>"
-                            else:
-                                freq_line = f"<b>Frequência:</b> {f_val:.0f} Hz<br>"
-
-                        msg = (
-                            f"<div style='font-family: sans-serif; line-height: 1.35;'>"
-                            f"<span style='color: #F87171; font-weight: 700;'>✖ Pulso Descartado</span><br>"
-                            f"<b>Tempo:</b> {t_val:.3f} s<br>"
-                            f"{freq_line}"
-                            f"<b>Motivo:</b> <span style='color: #E2E8F0;'>{reason}</span>"
-                            f"</div>"
-                        )
-                    else:
-                        qnt = best_match["chirp_pulses"]
-                        p_num = best_match["pulse_num"]
-                        t_val = best_match["time"]
-                        c_idx = best_match["chirp_idx"]
-                        f_val = best_match.get("freq_y", 0.0)
-                        freq_line = f"<br><b>Frequência:</b> {f_val:.0f} Hz" if f_val > 0 else ""
-                        msg = (
-                            f"<div style='font-family: sans-serif; line-height: 1.35;'>"
-                            f"<b style='color: #38BDF8;'>Chilreio #{c_idx}: {qnt} pulsos</b><br>"
-                            f"<b>Pulso:</b> {p_num} de {qnt}<br>"
-                            f"<b>Tempo:</b> {t_val:.3f} s"
-                            f"{freq_line}"
-                            f"</div>"
-                        )
-                    QToolTip.showText(QCursor.pos(), msg, target_panel.canvas)
-                    return
-                else:
-                    QToolTip.hideText()
-
-    def zoom_graph(self, event):
-        # FASE 4: Delega para NavigationController. Corpo original mantido como fallback (FASE 7).
-        if hasattr(self, 'nav_controller') and self.nav_controller is not None:
-            return self.nav_controller.zoom_graph(event)
-        if not event.inaxes:
-            return
-        self.bg_cache_valid = False
-        for line in self.cursor_lines:
-            line.set_animated(False)
-        base_scale = 1.2
-        scale = 1/base_scale if event.button == 'up' else base_scale if event.button == 'down' else None
-        if not scale or event.xdata is None or event.ydata is None:
-            return
-        ax = event.inaxes
-        if ax is self.panel_hist.ax:
-            return
-        xmin, xmax = ax.get_xlim()
-        ymin, ymax = ax.get_ylim()
-        new_xw = (xmax-xmin)*scale
-        rel_x = (event.xdata-xmin)/(xmax-xmin)
-        new_xmin = event.xdata-new_xw*rel_x
-        new_xmax = event.xdata+new_xw*(1-rel_x)
-        new_yw = (ymax-ymin)*scale
-        rel_y = (event.ydata-ymin)/(ymax-ymin)
-        new_ymin = event.ydata-new_yw*rel_y
-        new_ymax = event.ydata+new_yw*(1-rel_y)
-        
-        new_xmin, new_xmax, new_ymin, new_ymax = self._clamp_bounds(ax, new_xmin, new_xmax, new_ymin, new_ymax)
-        
-        time_axes = [self.panel_wave.ax, self.panel_spec.ax]
-        if self.btn_sync.isChecked() and ax in time_axes:
-            for panel in [self.panel_wave, self.panel_spec]:
-                panel.ax.set_xlim(new_xmin, new_xmax)
-                if panel.ax == ax:
-                    if not (panel == self.panel_spec and getattr(self.panel_spec, "_y_locked", False)):
-                        panel.ax.set_ylim(new_ymin, new_ymax)
-            self._sync_render([self.panel_wave, self.panel_spec], new_xmin, new_xmax)
-        else:
-            ax.set_xlim(new_xmin, new_xmax)
-            if not (ax == self.panel_spec.ax and getattr(self.panel_spec, "_y_locked", False)):
-                ax.set_ylim(new_ymin, new_ymax)
-            mapping = {p.ax: p for p in self.all_panels}
-            self._sync_render([mapping[ax]], new_xmin, new_xmax)
-
-        if ax == self.panel_spec.ax and hasattr(self.panel_spec, "spin_spec_ymin"):
-            if not getattr(self.panel_spec, "_y_locked", False):
-                self.panel_spec.spin_spec_ymin.blockSignals(True)
-                self.panel_spec.spin_spec_ymax.blockSignals(True)
-                self.panel_spec.spin_spec_ymin.setValue(max(self.panel_spec.spin_spec_ymin.minimum(), new_ymin))
-                self.panel_spec.spin_spec_ymax.setValue(min(self.panel_spec.spin_spec_ymax.maximum(), new_ymax))
-                self.panel_spec.spin_spec_ymin.blockSignals(False)
-                self.panel_spec.spin_spec_ymax.blockSignals(False)
 

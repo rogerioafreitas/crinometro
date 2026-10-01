@@ -4,6 +4,16 @@ Histórico completo, técnico e detalhado de todas as atualizações, correçõe
 
 Para uma visão resumida direcionada ao uso diário, consulte a janela **Sobre** dentro do próprio aplicativo.
 
+## [4.5.0] - 2026-09-30
+### Refatoração Arquitetural
+- Isolamento total do estado da aplicação via SessionContext
+- Desacoplamento da MainWindow em controllers especialistas:
+  - PlotRenderers para a camada de desenho do Matplotlib
+  - NavigationController para controle de pan/zoom e cursores
+  - EditorController para edição de picos e métricas
+- Extração dos controles de áudio para AudioTransportPanel
+- Proteção estrita do pipeline de reprodução
+
 ## [4.4.1] - 2026-09-20
 
 ### Correções Críticas (Hotfix / Auto-Updater)

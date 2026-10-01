@@ -83,7 +83,7 @@ class PlotRenderers:
         if ctrl is not None:
             return ctrl
         win = self.main_window
-        return getattr(win, "nav_controller", None) if win is not None else None
+        return win.nav_controller if win else None
 
     def set_navigation_controller(self, nav_controller):
         self._nav_controller = weakref.ref(nav_controller) if nav_controller is not None else lambda: None
@@ -94,7 +94,7 @@ class PlotRenderers:
         if ctrl is not None:
             return ctrl
         win = self.main_window
-        return getattr(win, "editor_controller", None) if win is not None else None
+        return win.editor_controller if win else None
 
     def set_editor_controller(self, editor_controller):
         self._editor_controller = weakref.ref(editor_controller) if editor_controller is not None else lambda: None
@@ -175,12 +175,12 @@ class PlotRenderers:
             return
 
         # Preserva tamanho do splitter antes de redesenhar
-        cur_splitter_sizes = win.splitter.sizes() if hasattr(win, "splitter") else None
+        cur_splitter_sizes = win.splitter.sizes() 
 
         # Limpa referências a linhas de alinhamento do clique em eixos que serão
         # destruídos/recriados nesta renderização. Mantê-las causaria RuntimeError
         # ao chamar line.remove() na próxima chamada de _align_click_marker().
-        win._click_alignment_lines = []
+        self.nav_controller._click_alignment_lines = []
 
         # Para timers de debounce pendentes dos engines anteriores antes de recriá-los
         if self.line_engine is not None and hasattr(self.line_engine, "debounce_timer"):
@@ -216,25 +216,23 @@ class PlotRenderers:
         dom_freqs = d["dom_freqs"]
 
         # Atualiza labels de sumário na MainWindow (responsabilidade de UI)
-        if hasattr(win, "lbl_summary_file"):
-            win.lbl_summary_file.setText(filename)
-        if hasattr(win, "lbl_summary_meta"):
-            p_txt = (
-                f"[Pulsos: {p['min_p']}-{p['max_p']} | "
-                f"Amp: {p['amp_min']:.2f}-{p['amp_max']:.2f} | "
-                f"Freq: {int(p['b1_min'])}-{int(p['b1_max'])} Hz]"
-            )
-            meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
-            win.lbl_summary_meta.setText(meta_str)
-            win.lbl_summary_meta.setToolTip(
-                f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}"
-            )
-        if hasattr(win, "lbl_total"):
-            win.lbl_total.setText(str(len(chirps)))
-        if hasattr(win, "lbl_metric_sub"):
-            win.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
-        if hasattr(win, "_update_ml_toggle_ui"):
-            win._update_ml_toggle_ui()
+
+        win.lbl_summary_file.setText(filename)
+
+        p_txt = (
+            f"[Pulsos: {p['min_p']}-{p['max_p']} | "
+            f"Amp: {p['amp_min']:.2f}-{p['amp_max']:.2f} | "
+            f"Freq: {int(p['b1_min'])}-{int(p['b1_max'])} Hz]"
+        )
+        meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
+        win.lbl_summary_meta.setText(meta_str)
+        win.lbl_summary_meta.setToolTip(
+            f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}"
+        )
+        win.lbl_total.setText(str(len(chirps)))
+        win.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
+
+        win.update_ml_toggle_ui()
 
         # Reseta histórico de edições somente quando há troca real de arquivo
         # ou quando uma reanálise gerou novo objeto de dados em cache
@@ -252,8 +250,6 @@ class PlotRenderers:
             ed = self.editor_controller
             if ed is not None and hasattr(ed, "reset_history"):
                 ed.reset_history()
-            elif hasattr(win, "_pulse_edit_history"):
-                win._pulse_edit_history = []
 
         self._last_rendered_filename = filename
         self._last_rendered_heavy_id = current_heavy_id
@@ -323,8 +319,6 @@ class PlotRenderers:
         nav = self.nav_controller
         if nav is not None and hasattr(nav, "capture_backgrounds"):
             bg_cb = nav.capture_backgrounds
-        elif win is not None and hasattr(win, "capture_backgrounds"):
-            bg_cb = win.capture_backgrounds
         else:
             bg_cb = None
 
@@ -424,16 +418,16 @@ class PlotRenderers:
         if nav is not None and hasattr(nav, "setup_cursor_lines"):
             nav.setup_cursor_lines()
         elif win is not None:
-            win.cursor_lines = []
+            self.nav_controller.cursor_lines = []
             for panel in [self.panel_wave, self.panel_spec]:
-                win.cursor_lines.append(
+                self.nav_controller.cursor_lines.append(
                     panel.ax.axvline(x=0, color='#E5E8EB', linewidth=1.2, linestyle='-', zorder=9)
                 )
 
         for panel in self.all_panels:
             panel.apply_dark_theme()
-        if hasattr(win, "_apply_plot_geometry"):
-            win._apply_plot_geometry()
+
+        win.apply_plot_geometry()
 
         # Desenho inicial explícito: o histograma não participa do cache do cursor,
         # então precisa receber seu primeiro draw aqui para aparecer imediatamente.
@@ -450,20 +444,15 @@ class PlotRenderers:
                 continue
             t = float(cp[0] / rate)
             markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
-        if hasattr(win, "timeline"):
-            win.timeline.set_data(d["duration"], markers)
-            win.timeline.set_position(win.player.position() / 1000.0)
+        win.transport_panel.timeline.set_data(d["duration"], markers)
+        win.transport_panel.timeline.set_position(win.player.position() / 1000.0)
 
         self._refresh_user_peak_markers()
         if nav is not None and hasattr(nav, "update_hover_data"):
             nav.update_hover_data()
-        elif hasattr(win, "_update_pulse_hover_data"):
-            win._update_pulse_hover_data()
 
         if nav is not None and hasattr(nav, "capture_backgrounds"):
             nav.capture_backgrounds()
-        elif hasattr(win, "capture_backgrounds"):
-            win.capture_backgrounds()
 
         if cur_splitter_sizes and len(cur_splitter_sizes) >= 2 and cur_splitter_sizes[0] >= 50:
             win.splitter.setSizes(cur_splitter_sizes)
@@ -517,7 +506,7 @@ class PlotRenderers:
         )
 
         win = self.main_window
-        is_dark = (getattr(win, "theme_mode", "dark") == 'dark') if win is not None else True
+        is_dark = (win.theme_mode == 'dark') if win else True
         ax_hist.grid(
             axis='y',
             color='#292D32' if is_dark else '#E2E8F0',
@@ -839,8 +828,6 @@ class PlotRenderers:
 
         # Atualiza dados de hover (responsabilidade da MainWindow enquanto não for FASE 4)
         win = self.main_window
-        if win is not None and hasattr(win, "_update_pulse_hover_data"):
-            win._update_pulse_hover_data()
 
         for panel in self.all_panels:
             try:
@@ -883,8 +870,8 @@ class PlotRenderers:
             }
 
             win = self.main_window
-            cursor_lines = getattr(win, "cursor_lines", []) if win is not None else []
-            alignment_lines = getattr(win, "_click_alignment_lines", []) if win is not None else []
+            cursor_lines = getattr(self.nav_controller, "cursor_lines", []) if win is not None else []
+            alignment_lines = getattr(self.nav_controller, "_click_alignment_lines", []) if win is not None else []
             lines_to_keep = set(cursor_lines + alignment_lines)
             lines_to_remove = [line for line in ax4.lines if line not in lines_to_keep]
             for line in lines_to_remove:
@@ -954,6 +941,6 @@ class PlotRenderers:
             nav.capture_backgrounds()
         else:
             win = self.main_window
-            if win is not None and hasattr(win, "capture_backgrounds"):
-                win.bg_cache_valid = False
-                win.capture_backgrounds()
+            if nav is not None and hasattr(nav, "capture_backgrounds"):
+                nav.bg_cache_valid = False
+                nav.capture_backgrounds()

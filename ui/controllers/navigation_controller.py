@@ -20,7 +20,7 @@ Consome PlotRenderers e SessionContext sem acoplamento reverso.
 import time
 import weakref
 import numpy as np
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QToolTip
 
@@ -309,7 +309,7 @@ class NavigationController(QObject):
     def is_sync_enabled(self) -> bool:
         """Informa se a sincronização horizontal entre eixos está ativa."""
         win = self.main_window
-        if win is not None and hasattr(win, "btn_sync"):
+        if win is not None:
             return bool(win.btn_sync.isChecked())
         return False
 
@@ -320,16 +320,16 @@ class NavigationController(QObject):
     def _sync_render(self, target_panels, xmin: float, xmax: float) -> None:
         """Renderiza interativamente os painéis durante navegação e emite viewport_changed."""
         win = self.main_window
-        if win is not None and getattr(win, "_swapping_panels", False):
+        if win is not None and win._swapping_panels:
             return
         current_time = time.time()
         if current_time - self.sync_throttle_time < 0.025:
             return
 
         pr = self.plot_renderers
-        spectro_engine = pr.spectro_engine if pr is not None else getattr(win, "spectro_engine", None)
-        line_engine = pr.line_engine if pr is not None else getattr(win, "line_engine", None)
-        freq_engine = pr.freq_engine if pr is not None else getattr(win, "freq_engine", None)
+        spectro_engine = pr.spectro_engine if pr is not None else None
+        line_engine = pr.line_engine if pr is not None else None
+        freq_engine = pr.freq_engine if pr is not None else None
 
         for panel in target_panels:
             if panel is None or not panel.isVisible():
@@ -388,9 +388,9 @@ class NavigationController(QObject):
 
         pr = self.plot_renderers
         win = self.main_window
-        spectro_engine = pr.spectro_engine if pr is not None else getattr(win, "spectro_engine", None)
-        line_engine = pr.line_engine if pr is not None else getattr(win, "line_engine", None)
-        freq_engine = pr.freq_engine if pr is not None else getattr(win, "freq_engine", None)
+        spectro_engine = pr.spectro_engine if pr is not None else None
+        line_engine = pr.line_engine if pr is not None else None
+        freq_engine = pr.freq_engine if pr is not None else None
 
         if spectro_engine:
             spectro_engine.render_high_detail()
@@ -410,7 +410,7 @@ class NavigationController(QObject):
     def on_sync_toggled(self, enabled: bool) -> None:
         """Reestabelece uma geometria consistente nos eixos temporais ao alternar sincronização."""
         win = self.main_window
-        if win is not None and getattr(win, "_swapping_panels", False):
+        if win is not None and win._swapping_panels:
             return
         self.bg_cache_valid = False
         for line in self.cursor_lines:
@@ -485,10 +485,6 @@ class NavigationController(QObject):
                 # Delega ao handler de edição configurado ou à MainWindow
                 if callable(self.pulse_edit_handler):
                     self.pulse_edit_handler(time_sec, **kwargs)
-                    return
-                win = self.main_window
-                if win is not None and hasattr(win, "_toggle_peak_marker"):
-                    win._toggle_peak_marker(time_sec, **kwargs)
                     return
 
         # Início de Arrastar / Pan com botão direito (button == 3)

@@ -31,7 +31,7 @@ def main():
     app.setStyle("Fusion")
 
     # Define o ícone global da aplicação
-    icon_file = LoadingScreen._asset_path("grilinho.ico")
+    icon_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "grilinho.ico")
     if os.path.isfile(icon_file):
         app.setWindowIcon(QIcon(icon_file))
     else:
