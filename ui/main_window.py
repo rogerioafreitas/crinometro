@@ -1981,9 +1981,22 @@ class MainWindow(QMainWindow):
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
 
+        pending = getattr(self, "_pending_export_action", None)
         if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner.stop()
             self._batch_spinner = None
+        if pending:
+            self._pending_export_action = None
+            if not errors:
+                action, args = pending
+                if action == 'txt':
+                    self._generate_txt_report(self.get_checked_files())
+                elif action == 'pdf':
+                    self._generate_pdf_report(self.get_checked_files(), args)
+            else:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Falha na Análise", "Não foi possível gerar o relatório pois alguns arquivos falharam na análise.")
+            return
 
         total = success_count + len(errors)
         msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
@@ -2002,8 +2015,9 @@ class MainWindow(QMainWindow):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
             self.btn_analyze_selected.setEnabled(True)
+        pending = getattr(self, "_pending_export_action", None)
         if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner.stop()
             self._batch_spinner = None
         QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
@@ -2014,8 +2028,9 @@ class MainWindow(QMainWindow):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
             self.btn_analyze_selected.setEnabled(True)
+        pending = getattr(self, "_pending_export_action", None)
         if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner.stop()
             self._batch_spinner = None
 
     def _on_pipeline_failed(self, filename, err_msg):
@@ -2043,8 +2058,9 @@ class MainWindow(QMainWindow):
             restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
             self._reanalyze_spinner.stop(restore_icon, restore_text)
             self._reanalyze_spinner = None
+        pending = getattr(self, "_pending_export_action", None)
         if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop(None, "⚡ Analisar Selecionados")
+            self._batch_spinner.stop()
             self._batch_spinner = None
 
 
