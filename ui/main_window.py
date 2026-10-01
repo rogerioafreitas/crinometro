@@ -304,14 +304,10 @@ class MainWindow(QMainWindow):
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.action_save_txt)
         self.export_submenu.addAction(self.action_export)
-        self.action_export_pdf_full = QAction("Exportar Relatório Completo (.pdf)", self)
-        self.action_export_pdf_full.setIcon(make_ui_icon("export", color="#2563EB", size=16))
-        self.action_export_pdf_full.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=True))
-        self.export_submenu.addAction(self.action_export_pdf_full)
-        self.action_export_pdf_simple = QAction("Exportar Relatório Simplificado (.pdf)", self)
-        self.action_export_pdf_simple.setIcon(make_ui_icon("export", color="#0284C7", size=16))
-        self.action_export_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
-        self.export_submenu.addAction(self.action_export_pdf_simple)
+        self.action_export_pdf_mod = QAction("Relatório Científico Modular (PDF)...", self)
+        self.action_export_pdf_mod.setIcon(make_ui_icon("export", color="#0284C7", size=16))
+        self.action_export_pdf_mod.triggered.connect(self.open_export_report_dialog)
+        self.export_submenu.addAction(self.action_export_pdf_mod)
         self.export_submenu.addSeparator()
         self.action_export_graphs = QAction("Exportar Gráficos (PNG/PDF)…", self)
         self.action_export_graphs.setIcon(make_ui_icon("export", color="#10B981", size=16))
@@ -1991,8 +1987,9 @@ class MainWindow(QMainWindow):
                 action, args = pending
                 if action == 'txt':
                     self._generate_txt_report(self.get_checked_files())
-                elif action == 'pdf':
-                    self._generate_pdf_report(self.get_checked_files(), args)
+
+                elif action == 'pdf_modular':
+                    self._generate_pdf_report_modular(self.get_checked_files(), args)
             else:
                 from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "Falha na Análise", "Não foi possível gerar o relatório pois alguns arquivos falharam na análise.")
@@ -2240,10 +2237,9 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         menu.setObjectName("exportMenu")
-        act_pdf_full = menu.addAction(make_ui_icon("export", color="#2563EB", size=15), "📄 Exportar Relatório Completo (.pdf)")
-        act_pdf_full.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=True))
-        act_pdf_simple = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📑 Exportar Relatório Simplificado (.pdf)")
-        act_pdf_simple.triggered.connect(lambda: self.action_save_pdf(include_chirp_list=False))
+        act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📊 Relatório Científico Modular (PDF)...")
+        act_pdf_mod.triggered.connect(self.open_export_report_dialog)
+        menu.addSeparator()
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
         act_txt.triggered.connect(self.action_save_txt)
         
@@ -2260,71 +2256,68 @@ class MainWindow(QMainWindow):
         self._export_menu_open = True
         menu.popup(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
 
-    def action_save_pdf(self, include_chirp_list=True):
+
+    def open_export_report_dialog(self):
         checked_files = self.get_checked_files()
         if not checked_files:
-            QMessageBox.warning(
-                self,
-                "Nenhum áudio selecionado",
-                "Marque a caixinha de pelo menos um arquivo de áudio na lista para gerar o relatório em PDF."
-            )
+            QMessageBox.warning(self, "Nenhum áudio", "Marque pelo menos um arquivo na lista para gerar o relatório.")
             return
 
-        # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
-        unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
-        if unprocessed:
-            self._pending_export_action = ('pdf', include_chirp_list)
-            self._start_batch_for_export(unprocessed)
-            return
-
-        self._generate_pdf_report(checked_files, include_chirp_list)
-
-    def _generate_pdf_report(self, checked_files, include_chirp_list):
-        selected_cache = {
-            fname: self.ctx.analysis_cache[fname]
-            for fname in checked_files
-            if fname in self.ctx.analysis_cache
-        }
-
+        from ui.dialogs.export_report_dialog import ExportReportDialog
+        dlg = ExportReportDialog(self.ctx, parent=self)
+        if dlg.exec():
+            config = dlg.config
+            unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
+            if unprocessed:
+                self._pending_export_action = ('pdf_modular', config)
+                self._start_batch_for_export(unprocessed)
+                return
+            self._generate_pdf_report_modular(checked_files, config)
+            
+    def _generate_pdf_report_modular(self, checked_files, config):
+        selected_cache = {fname: self.ctx.analysis_cache[fname] for fname in checked_files if fname in self.ctx.analysis_cache}
         if not selected_cache:
-            QMessageBox.warning(
-                self,
-                "Sem dados",
-                "Nenhum dos áudios selecionados possui dados de análise válidos para o relatório."
-            )
+            QMessageBox.warning(self, "Sem dados", "Nenhum dos áudios selecionados possui dados válidos.")
             return
 
-        now = datetime.datetime.now()
-        tipo_str = "Completo" if include_chirp_list else "Simplificado"
-        default_name = f"Relatorio_{tipo_str}_Crinometro_{now.strftime('%Y%m%d_%H%M')}.pdf"
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, f"Exportar Relatório {tipo_str} em PDF", default_name, "PDF Files (*.pdf)"
-        )
-        if not file_path:
-            return
-
-        try:
+        from core.worker import GenericWorker
+        def _task():
             from utils.report_generator import generate_pdf_report
             generate_pdf_report(
-                file_path,
-                self.ctx.report_params,
+                config.output_path,
+                config,
                 selected_cache,
-                self.ctx.algo_params,
-                include_chirp_list=include_chirp_list
+                self.ctx.algo_params
             )
-            QMessageBox.information(
-                self,
-                I18N[self.lang]["success"],
-                f"Relatório PDF ({tipo_str}) gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s)!\n\nSalvo em:\n{file_path}"
-            )
-        except Exception as err:
-            QMessageBox.critical(
-                self,
-                I18N[self.lang]["error"],
-                f"Falha ao gerar relatório em PDF:\n{str(err)}"
-            )
+            return config.output_path
 
-    # ---------- reprodução ----------
+        def _on_finished(path):
+            QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório PDF modular gerado com sucesso!\n\nSalvo em:\n{path}")
+            if getattr(self, "_batch_spinner", None) is not None:
+                self._batch_spinner.stop()
+                self._batch_spinner = None
+
+        def _on_error(err_msg):
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha ao gerar relatório em PDF:\n{err_msg}")
+            if getattr(self, "_batch_spinner", None) is not None:
+                self._batch_spinner.stop()
+                self._batch_spinner = None
+
+        worker = GenericWorker(_task)
+        self._report_worker = worker
+        worker.finished_signal.connect(_on_finished)
+        worker.error_signal.connect(_on_error)
+        
+        # Start spinner
+        if hasattr(self, "btn_export_main"):
+            from ui.widgets import ButtonSpinner
+            if not getattr(self, "_batch_spinner", None):
+                spinner = ButtonSpinner(self.btn_export_main, "Gerando PDF...")
+                spinner.start()
+                self._batch_spinner = spinner
+                
+        worker.start()
+
     def toggle_playback(self):
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.player.pause()

@@ -6,6 +6,24 @@ import sys
 import datetime
 import numpy as np
 import scipy.stats
+from dataclasses import dataclass, field
+
+@dataclass
+class ReportSectionFlags:
+    resumo: bool = True
+    metricas: bool = True
+    cadencia: bool = True
+    dolbear: bool = True
+    graficos: bool = False
+    lista_pulsos: bool = False
+
+@dataclass
+class ReportConfig:
+    metadata: dict = field(default_factory=dict)
+    section_flags: ReportSectionFlags = field(default_factory=ReportSectionFlags)
+    graph_config: dict = None
+    output_path: str = ""
+
 
 from utils.constants import APP_VERSION, APP_VERSION_LABEL
 
@@ -186,7 +204,10 @@ def analyze_rhythmic_cadence(chirp_peaks_list, rate):
     }
 
 
-def generate_pdf_report(output_filepath, report_params, selected_cache, algo_params=None, include_chirp_list=True):
+def generate_pdf_report(output_filepath, config: ReportConfig, selected_cache, algo_params=None):
+    report_params = config.metadata
+    include_chirp_list = config.section_flags.lista_pulsos
+
     """Gera o relatório estruturado em PDF (Completo ou Simplificado) para os áudios selecionados."""
     if not REPORTLAB_AVAILABLE:
         raise RuntimeError("A biblioteca 'reportlab' não está instalada no ambiente Python.")
@@ -281,19 +302,26 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284C7"), spaceAfter=10))
 
     # 2. METADADOS INSTITUCIONAIS E DA PESQUISA
-    inst = report_params.get('institution', '').strip() or "Laboratório / Instituição não informada"
-    name = report_params.get('researcher_name', '').strip() or "Pesquisador não informado"
-    role = report_params.get('role', '').strip() or "Não especificado"
-    level = report_params.get('level', '').strip() or "Não especificado"
+    inst = report_params.get('institution', '').strip() or "Não informada"
+    name = report_params.get('researcher_name', '').strip() or "Não informado"
+    species = report_params.get('species', '').strip() or "Não informada"
+    specimen = report_params.get('specimen', '').strip() or "Não informado"
+    location = report_params.get('location', '').strip() or "Não informada"
+    temp = report_params.get('temperature', '').strip() or "Não informada"
+    equip = report_params.get('equipment', '').strip() or "Não informado"
     now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
 
     meta_data = [
-        [Paragraph("<b>Instituição:</b>", body_style), Paragraph(inst.upper(), bold_style),
-         Paragraph("<b>Pesquisador(a):</b>", body_style), Paragraph(name, bold_style)],
-        [Paragraph("<b>Função:</b>", body_style), Paragraph(role, body_style),
-         Paragraph("<b>Grau Acadêmico:</b>", body_style), Paragraph(level, body_style)],
-        [Paragraph("<b>Data da Análise:</b>", body_style), Paragraph(now_str, body_style),
-         Paragraph("<b>Áudios Compilados:</b>", body_style), Paragraph(f"{len(selected_cache)} arquivo(s)", bold_style)],
+        [Paragraph("<b>Espécie:</b>", body_style), Paragraph(species, bold_style),
+         Paragraph("<b>Cód. Espécime:</b>", body_style), Paragraph(specimen, bold_style)],
+        [Paragraph("<b>Pesquisador(a):</b>", body_style), Paragraph(name, bold_style),
+         Paragraph("<b>Instituição:</b>", body_style), Paragraph(inst.upper(), body_style)],
+        [Paragraph("<b>Localidade:</b>", body_style), Paragraph(location, body_style),
+         Paragraph("<b>Temp. Gravação:</b>", body_style), Paragraph(temp, body_style)],
+        [Paragraph("<b>Equipamento:</b>", body_style), Paragraph(equip, body_style),
+         Paragraph("<b>Data da Análise:</b>", body_style), Paragraph(now_str, body_style)],
+        [Paragraph("<b>Áudios Compilados:</b>", body_style), Paragraph(f"{len(selected_cache)} arquivo(s)", bold_style),
+         Paragraph("", body_style), Paragraph("", body_style)]
     ]
     meta_table = Table(meta_data, colWidths=[90, 170, 95, 168])
     meta_table.setStyle(TableStyle([
@@ -309,7 +337,7 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
     story.append(Spacer(1, 14))
 
     # 3. TABELA COMPARATIVA GERAL (Quando houver mais de 1 áudio, agrupado por espécime)
-    if len(selected_cache) > 1:
+    if len(selected_cache) > 1 and config.section_flags.resumo:
         story.append(Paragraph("<b>Síntese Bioacústica Comparativa entre Espécimes</b>", section_h1))
         comp_headers = [
             Paragraph("<b>Espécime</b>", table_header),
@@ -477,7 +505,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
-        audio_elements.append(metrics_table)
+        if config.section_flags.metricas:
+            audio_elements.append(metrics_table)
         audio_elements.append(Spacer(1, 6))
 
         # Diagnóstico de Cadência Rítmica
@@ -516,7 +545,8 @@ def generate_pdf_report(output_filepath, report_params, selected_cache, algo_par
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ]))
-        audio_elements.append(cadence_table)
+        if config.section_flags.cadencia:
+            audio_elements.append(cadence_table)
         audio_elements.append(Spacer(1, 10))
 
         # No relatório simplificado, mantemos o bloco do áudio coeso via KeepTogether
