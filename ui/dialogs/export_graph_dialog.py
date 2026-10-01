@@ -118,6 +118,7 @@ class ExportGraphDialog(QDialog):
         self._chk_wave.toggled.connect(self._chk_env.setVisible)
         self._chk_raw.setVisible(False)
         self._chk_env.setVisible(False)
+        panels_layout.addStretch()
 
         root.addWidget(grp_panels)
 
@@ -128,6 +129,8 @@ class ExportGraphDialog(QDialog):
         from PyQt6.QtWidgets import QFormLayout
         form_layout = QFormLayout()
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        # Evita que a combobox estique absurdamente
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
         
         self._cmb_bg = QComboBox()
         self._cmb_bg.addItems(["Branco (papel)", "Tema atual da janela"])
@@ -160,6 +163,7 @@ class ExportGraphDialog(QDialog):
         scope_form = QFormLayout()
         scope_form.setContentsMargins(0, 0, 0, 0)
         scope_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        scope_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
         
         self._cmb_scope = QComboBox()
         self._cmb_scope.addItems(["Focal", "10k", "Total", "Específico"])
@@ -168,11 +172,7 @@ class ExportGraphDialog(QDialog):
         
         self._chk_apply_x = QCheckBox("Aplicar recorte de tempo ao oscilograma")
         self._chk_apply_x.setChecked(True)
-        # Add spacing to align checkbox with the combo box visually
-        chk_lyt = QHBoxLayout()
-        chk_lyt.addSpacing(145)
-        chk_lyt.addWidget(self._chk_apply_x)
-        scope_layout.addLayout(chk_lyt)
+        scope_form.addRow("", self._chk_apply_x)
         
         app_layout.addWidget(self._widget_scope)
 
@@ -192,6 +192,7 @@ class ExportGraphDialog(QDialog):
         self._bg_fmt.addButton(self._rdo_png)
         fmt_layout.addWidget(self._rdo_pdf)
         fmt_layout.addWidget(self._rdo_png)
+        fmt_layout.addStretch()
         root.addWidget(grp_fmt)
 
         # ---- Progresso ----
@@ -201,9 +202,6 @@ class ExportGraphDialog(QDialog):
         root.addWidget(self._progress)
 
         # ---- Botões ----
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        root.addWidget(sep)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()

@@ -3,6 +3,11 @@ QDialog {
     background-color: #18181B;
 }
 
+/* Protege os widgets internos contra o background global preto (#000000) do app */
+QDialog QWidget {
+    background-color: transparent;
+}
+
 QGroupBox {
     background-color: #1E1E24;
     border: 1px solid #27272A;
