@@ -17,7 +17,7 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QRadioButton, QSpinBox, QLabel, QPushButton, QButtonGroup,
-    QFileDialog, QMessageBox, QComboBox, QProgressBar, QFrame,
+    QFileDialog, QMessageBox, QComboBox, QProgressBar, QFrame, QWidget,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -108,13 +108,19 @@ class ExportGraphDialog(QDialog):
         row_spec.addStretch()
         app_layout.addLayout(row_spec)
 
-        row_scope = QHBoxLayout()
-        row_scope.addWidget(QLabel("Escopo do Espectrograma:"))
+        self._widget_scope = QWidget()
+        scope_layout = QHBoxLayout(self._widget_scope)
+        scope_layout.setContentsMargins(0, 0, 0, 0)
+        scope_layout.addWidget(QLabel("Escopo do Espectrograma:"))
         self._cmb_scope = QComboBox()
         self._cmb_scope.addItems(["Focal (Portadora)", "10k (0-10 kHz)", "Total (Completo)", "Específico (Visão Atual)"])
-        row_scope.addWidget(self._cmb_scope)
-        row_scope.addStretch()
-        app_layout.addLayout(row_scope)
+        scope_layout.addWidget(self._cmb_scope)
+        scope_layout.addStretch()
+        app_layout.addWidget(self._widget_scope)
+        
+        # Oculta inicialmente e vincula o estado do checkbox
+        self._widget_scope.setVisible(self._chk_spec.isChecked())
+        self._chk_spec.toggled.connect(self._widget_scope.setVisible)
 
         row_dpi = QHBoxLayout()
         row_dpi.addWidget(QLabel("DPI:"))
