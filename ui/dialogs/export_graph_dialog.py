@@ -125,59 +125,59 @@ class ExportGraphDialog(QDialog):
         grp_app = QGroupBox("Aparência")
         app_layout = QVBoxLayout(grp_app)
 
-        from PyQt6.QtWidgets import QGridLayout
-        grid_chk = QGridLayout()
+        from PyQt6.QtWidgets import QFormLayout
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        self._cmb_bg = QComboBox()
+        self._cmb_bg.addItems(["Branco (papel)", "Tema atual da janela"])
+        form_layout.addRow("Fundo:", self._cmb_bg)
+        
+        self._cmb_unit = QComboBox()
+        self._cmb_unit.addItems(["kHz", "Hz"])
+        form_layout.addRow("Unidade do espectrograma:", self._cmb_unit)
+        
+        self._cmb_dpi = QComboBox()
+        self._cmb_dpi.addItems(["150 (Rascunho)", "300 (Publicação)", "600 (Alta Resolução)"])
+        self._cmb_dpi.setCurrentIndex(1)
+        form_layout.addRow("DPI (Resolução):", self._cmb_dpi)
+        
         self._chk_grid = QCheckBox("Mostrar grade")
         self._chk_markers = QCheckBox("Mostrar marcadores de pulsos")
         self._chk_markers.setChecked(False)
-        grid_chk.addWidget(self._chk_grid, 0, 0)
-        grid_chk.addWidget(self._chk_markers, 0, 1)
-        grid_chk.setColumnStretch(2, 1)
-        app_layout.addLayout(grid_chk)
-
-        row_bg = QHBoxLayout()
-        row_bg.addWidget(QLabel("Fundo:"))
-        self._cmb_bg = QComboBox()
-        self._cmb_bg.addItems(["Branco (papel)", "Tema atual da janela"])
-        row_bg.addWidget(self._cmb_bg)
-        row_bg.addStretch()
-        app_layout.addLayout(row_bg)
-
-        row_spec = QHBoxLayout()
-        row_spec.addWidget(QLabel("Unidade do espectrograma:"))
-        self._cmb_unit = QComboBox()
-        self._cmb_unit.addItems(["kHz", "Hz"])
-        row_spec.addWidget(self._cmb_unit)
-        row_spec.addStretch()
-        app_layout.addLayout(row_spec)
+        
+        # O usuário quer "da direita para esquerda, deixando elas alinhadas"
+        # Com QFormLayout, podemos usar uma linha com label vazio para alinhá-las à direita (junto aos campos de input)
+        form_layout.addRow("", self._chk_grid)
+        form_layout.addRow("", self._chk_markers)
+        
+        app_layout.addLayout(form_layout)
 
         self._widget_scope = QWidget()
         scope_layout = QVBoxLayout(self._widget_scope)
         scope_layout.setContentsMargins(0, 0, 0, 0)
-        row_scope = QHBoxLayout()
-        row_scope.addWidget(QLabel("Escopo do Espectrograma:"))
+        
+        scope_form = QFormLayout()
+        scope_form.setContentsMargins(0, 0, 0, 0)
+        scope_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
         self._cmb_scope = QComboBox()
         self._cmb_scope.addItems(["Focal", "10k", "Total", "Específico"])
-        row_scope.addWidget(self._cmb_scope)
-        row_scope.addStretch()
-        scope_layout.addLayout(row_scope)
+        scope_form.addRow("Escopo do Espectrograma:", self._cmb_scope)
+        scope_layout.addLayout(scope_form)
+        
         self._chk_apply_x = QCheckBox("Aplicar recorte de tempo ao oscilograma")
         self._chk_apply_x.setChecked(True)
-        scope_layout.addWidget(self._chk_apply_x)
+        # Add spacing to align checkbox with the combo box visually
+        chk_lyt = QHBoxLayout()
+        chk_lyt.addSpacing(145)
+        chk_lyt.addWidget(self._chk_apply_x)
+        scope_layout.addLayout(chk_lyt)
+        
         app_layout.addWidget(self._widget_scope)
 
-        # Oculta inicialmente e vincula o estado do checkbox
         self._widget_scope.setVisible(self._chk_spec.isChecked())
         self._chk_spec.toggled.connect(self._widget_scope.setVisible)
-
-        row_dpi = QHBoxLayout()
-        row_dpi.addWidget(QLabel("DPI (Resolução):"))
-        self._cmb_dpi = QComboBox()
-        self._cmb_dpi.addItems(["150 (Rascunho)", "300 (Publicação)", "600 (Alta Resolução)"])
-        self._cmb_dpi.setCurrentIndex(1) # Default 300
-        row_dpi.addWidget(self._cmb_dpi)
-        row_dpi.addStretch()
-        app_layout.addLayout(row_dpi)
 
         root.addWidget(grp_app)
 
