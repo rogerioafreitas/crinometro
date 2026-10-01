@@ -29,8 +29,15 @@ from ui.figure_factory import ExportConfig, export_figures_png, export_figures_p
 # Worker thread — exportação em background para não travar a UI
 # ---------------------------------------------------------------------------
 
+
+class _SnapshotCtx:
+    def __init__(self, heavy, algo, name):
+        self.active_heavy_data = heavy
+        self.algo_params = algo
+        self.active_filename = name
+
 class _ExportWorker(QThread):
-    finished = pyqtSignal(list)   # lista de caminhos escritos
+    done_export = pyqtSignal(list)   # lista de caminhos escritos
     error = pyqtSignal(str)
 
     def __init__(self, ctx, path: str, cfg: ExportConfig):
@@ -123,12 +130,11 @@ class ExportGraphDialog(QDialog):
         self._chk_spec.toggled.connect(self._widget_scope.setVisible)
 
         row_dpi = QHBoxLayout()
-        row_dpi.addWidget(QLabel("DPI:"))
-        self._spn_dpi = QSpinBox()
-        self._spn_dpi.setRange(72, 1800)
-        self._spn_dpi.setValue(300)
-        self._spn_dpi.setSingleStep(50)
-        row_dpi.addWidget(self._spn_dpi)
+        row_dpi.addWidget(QLabel("DPI (Resolução):"))
+        self._cmb_dpi = QComboBox()
+        self._cmb_dpi.addItems(["150 (Rascunho)", "300 (Publicação)", "600 (Alta Resolução)"])
+        self._cmb_dpi.setCurrentIndex(1) # Default 300
+        row_dpi.addWidget(self._cmb_dpi)
         row_dpi.addStretch()
         app_layout.addLayout(row_dpi)
 
@@ -170,6 +176,19 @@ class ExportGraphDialog(QDialog):
         root.addLayout(btn_row)
 
     # ------------------------------------------------------------------
+
+    def reject(self):
+        if hasattr(self, "_worker") and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait()
+        super().reject()
+        
+    def closeEvent(self, event):
+        if hasattr(self, "_worker") and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait()
+        super().closeEvent(event)
+
     def _build_config(self) -> ExportConfig:
         panels = []
         if self._chk_wave.isChecked():
@@ -232,7 +251,7 @@ class ExportGraphDialog(QDialog):
             spec_xmax=xmax,
             spec_ymin=ymin,
             spec_ymax=ymax,
-            dpi=self._spn_dpi.value(),
+            dpi=int(self._cmb_dpi.currentText().split()[0]),
             fmt="pdf" if self._rdo_pdf.isChecked() else "png",
             # Tema claro (papel branco)
             bg_color="#FFFFFF",
@@ -277,7 +296,7 @@ class ExportGraphDialog(QDialog):
         self._progress.setVisible(True)
 
         self._worker = _ExportWorker(self._ctx, path, cfg)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.done_export.connect(self._on_finished)
         self._worker.error.connect(self._on_error)
         self._worker.start()
 

@@ -307,10 +307,14 @@ class PlotRenderers:
         )
 
         # Delega o desenho puro para o FigureFactory
+        is_dark = getattr(win, "theme_mode", "dark") == "dark"
         _gui_cfg = ExportConfig(
             show_raw=show_raw, show_env=show_env,
-            bg_color="none", ax_color="#94A3B8",
-            text_color="#CBD5E1", annotation_color="#CBD5E1",
+            bg_color="none", 
+            ax_color="#94A3B8" if is_dark else "#64748B",
+            text_color="#CBD5E1" if is_dark else "#334155", 
+            annotation_color="#CBD5E1" if is_dark else "#334155",
+            xlabel_wave="seconds"
         )
         self.wave_lines = draw_waveform(
             ax1, data, rate, env=env,
@@ -338,8 +342,10 @@ class PlotRenderers:
         rate_psd = self.session_context.active_heavy_data.get("rate", 44100)
         _psd_cfg = ExportConfig(
             spec_unit=unit,
-            bg_color="none", ax_color="#94A3B8",
-            text_color="#CBD5E1", annotation_color="#FFFFFF",
+            bg_color="none", 
+            ax_color="#94A3B8" if getattr(win, "theme_mode", "dark") == "dark" else "#64748B",
+            text_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155", 
+            annotation_color="#FFFFFF" if getattr(win, "theme_mode", "dark") == "dark" else "#0F172A",
         )
         draw_psd(ax3, f_psd, Pxx_db, rate=rate_psd,
                  carrier_freq_hz=carrier_freq_hz, cfg=_psd_cfg)
@@ -369,8 +375,10 @@ class PlotRenderers:
         )
         _spec_cfg = ExportConfig(
             spec_unit=unit, spec_ymin=ymin, spec_ymax=ymax,
-            bg_color="none", ax_color="#94A3B8",
-            text_color="#CBD5E1", annotation_color="#CBD5E1",
+            bg_color="none", 
+            ax_color="#94A3B8" if getattr(win, "theme_mode", "dark") == "dark" else "#64748B",
+            text_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155", 
+            annotation_color="#CBD5E1" if getattr(win, "theme_mode", "dark") == "dark" else "#334155",
         )
         draw_spectrogram(
             ax4, Sxx_db, t_spec, f_spec,
