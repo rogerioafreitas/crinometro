@@ -391,11 +391,11 @@ class MainWindow(QMainWindow):
         if hasattr(self, "action_view_spec"):
             self.action_view_spec.setText(I18N[l]["focal_spec"])
         if hasattr(self, "action_reset_layout"):
-            self.action_reset_layout.setText("↺ Restaurar Layout Padrão" if l == "pt" else "↺ Reset Plot Layout")
+            self.action_reset_layout.setText(I18N[l]["reset_layout"])
         if hasattr(self, "btn_plots_menu"):
-            self.btn_plots_menu.setText("Gráficos ▾" if l == "pt" else "Graphs ▾")
+            self.btn_plots_menu.setText(I18N[l]["graphs"])
         if hasattr(self, "btn_reset_layout"):
-            self.btn_reset_layout.setText("↺ Padrão" if l == "pt" else "↺ Default")
+            self.btn_reset_layout.setText(I18N[l]["default"])
         self.help_menu.setTitle(I18N[l]["help"])
         if hasattr(self, "action_check_updates"):
             self.action_check_updates.setText(I18N[l].get("check_updates", "Verificar Atualizações..."))
@@ -1256,7 +1256,7 @@ class MainWindow(QMainWindow):
             self.lbl_eyebrow.setText(I18N[l]["file_in_analysis"])
         if hasattr(self, "btn_export_main"):
             self.btn_export_main.setText(I18N[l]["export_menu"])
-        if hasattr(self, "lbl_summary_file") and not self.ctx.session_context.active_file:
+        if hasattr(self, "lbl_summary_file") and not self.ctx.active_file:
             self.lbl_summary_file.setText(I18N[l]["no_file_selected"])
         if hasattr(self, "action_export_pdf_mod"):
             self.action_export_pdf_mod.setText(I18N[l]["export_modular"])
@@ -1264,9 +1264,9 @@ class MainWindow(QMainWindow):
             self.action_export_graphs.setText(I18N[l]["export_graphs"])
         if hasattr(self, "empty_graph_placeholder"):
             self.empty_graph_placeholder.setText(I18N[l]["placeholder_text"])
-        if hasattr(self.ctx, "session_context") and self.ctx.session_context.active_file:
+        if hasattr(self, "ctx") and self.ctx.active_file:
             self.lbl_summary_meta.setText(I18N[l]["audio_loaded"])
-            if self.ctx.session_context.active_heavy_data:
+            if self.ctx.active_heavy_data:
                 self.btn_reanalisar_main.setText(I18N[l]["reanalyze"].replace("🔄 ", ""))
             else:
                 self.btn_reanalisar_main.setText(I18N[l]["analyze"])
