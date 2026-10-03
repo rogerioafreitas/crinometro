@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
         self.pipeline.batch_failed.connect(self._on_batch_failed)
         self.pipeline.batch_cancelled.connect(self._on_batch_cancelled)
 
+
         # Parâmetros base do algoritmo — editados pelo usuário via menu.
         # NÃO inclui sobreposições adaptativas (prominence, noise_floor adaptados).
         self.ctx.algo_params = DEFAULT_ALGO_PARAMS.copy()
@@ -126,6 +127,9 @@ class MainWindow(QMainWindow):
         self.ctx.use_machine_learning = False
         self.load_settings()
         self.lang = self.ctx.report_params.get("lang", "pt") or "pt"
+
+        from ui.controllers.export_controller import ExportController
+        self.export_controller = ExportController(self.ctx, self.pipeline, self)
 
         self.setWindowTitle(I18N[self.lang]["app_title"])
         self.setGeometry(80, 70, 1480, 900)
@@ -302,16 +306,16 @@ class MainWindow(QMainWindow):
         self.export_submenu.setIcon(make_ui_icon("export", color="#FFFFFF", size=16))
         
         self.action_export = QAction(I18N[self.lang]["export"], self)
-        self.action_export.triggered.connect(self.action_save_txt)
+        self.action_export.triggered.connect(self.export_controller.request_txt_export)
         self.export_submenu.addAction(self.action_export)
         self.action_export_pdf_mod = QAction("Exportar Relatório Modular...", self)
         self.action_export_pdf_mod.setIcon(make_ui_icon("export", color="#0284C7", size=16))
-        self.action_export_pdf_mod.triggered.connect(self.open_export_report_dialog)
+        self.action_export_pdf_mod.triggered.connect(self.export_controller.request_modular_report)
         self.export_submenu.addAction(self.action_export_pdf_mod)
         self.export_submenu.addSeparator()
         self.action_export_graphs = QAction("Exportar Gráficos (PNG/PDF)…", self)
         self.action_export_graphs.setIcon(make_ui_icon("export", color="#10B981", size=16))
-        self.action_export_graphs.triggered.connect(self.open_export_graph_dialog)
+        self.action_export_graphs.triggered.connect(self.export_controller.request_graph_export)
         self.export_submenu.addAction(self.action_export_graphs)
         
 
@@ -1977,24 +1981,6 @@ class MainWindow(QMainWindow):
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
 
-        pending = getattr(self, "_pending_export_action", None)
-        if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop()
-            self._batch_spinner = None
-        if pending:
-            self._pending_export_action = None
-            if not errors:
-                action, args = pending
-                if action == 'txt':
-                    self._generate_txt_report(self.get_checked_files())
-
-                elif action == 'pdf_modular':
-                    cfg, wcsv, cpath, wtxt, tpath, cmode = args if isinstance(args, tuple) and len(args) == 6 else (args[0], args[1], args[2], args[3], args[4], "brazilian") if isinstance(args, tuple) and len(args)==5 else (args, False, None, False, None, "brazilian")
-                    self._generate_pdf_report_modular(self.get_checked_files(), cfg, want_csv=wcsv, csv_path=cpath, want_txt=wtxt, txt_path=tpath, csv_mode=cmode)
-            else:
-                QMessageBox.warning(self, "Falha na Análise", "Não foi possível gerar o relatório pois alguns arquivos falharam na análise.")
-            return
-
         total = success_count + len(errors)
         msg = f"Análise concluída!\n\n• {success_count} de {total} arquivo(s) analisado(s) com sucesso."
         if errors:
@@ -2012,10 +1998,6 @@ class MainWindow(QMainWindow):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
             self.btn_analyze_selected.setEnabled(True)
-        pending = getattr(self, "_pending_export_action", None)
-        if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop()
-            self._batch_spinner = None
         QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
     def _on_batch_cancelled(self):
@@ -2025,10 +2007,6 @@ class MainWindow(QMainWindow):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
             self.btn_analyze_selected.setEnabled(True)
-        pending = getattr(self, "_pending_export_action", None)
-        if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop()
-            self._batch_spinner = None
 
     def _on_pipeline_failed(self, filename, err_msg):
         if hasattr(self, "btn_abort_analysis"):
@@ -2055,10 +2033,6 @@ class MainWindow(QMainWindow):
             restore_icon = make_ui_icon("play", color="#FFFFFF", size=15) if is_first_time else make_ui_icon("reload", color="#FFFFFF", size=17)
             self._reanalyze_spinner.stop(restore_icon, restore_text)
             self._reanalyze_spinner = None
-        pending = getattr(self, "_pending_export_action", None)
-        if getattr(self, "_batch_spinner", None) is not None:
-            self._batch_spinner.stop()
-            self._batch_spinner = None
 
 
 
@@ -2109,119 +2083,6 @@ class MainWindow(QMainWindow):
         self.transport_panel.timeline.set_position(0)
 
     # ---------- exportação ----------
-    def open_export_graph_dialog(self):
-        from ui.dialogs.export_graph_dialog import ExportGraphDialog
-        live_view = {}
-        if hasattr(self, 'plot_renderers') and hasattr(self.plot_renderers, 'panel_spec') and self.plot_renderers.panel_spec and self.plot_renderers.panel_spec.ax:
-            try:
-                ax = self.plot_renderers.panel_spec.ax
-                live_view['xlim'] = ax.get_xlim()
-                live_view['ylim'] = ax.get_ylim()
-                live_view['spec_unit'] = getattr(self.plot_renderers.panel_spec, 'spec_unit', 'kHz')
-            except Exception:
-                QMessageBox.warning(self, "Aviso", "Não foi possível ler a vista atual do espectrograma para o recorte 'Específico'.")
-                pass
-
-        dlg = ExportGraphDialog(self.ctx, live_view=live_view, parent=self)
-        dlg.exec()
-
-
-    def _start_batch_for_export(self, unprocessed):
-        for fname in unprocessed:
-            w = self._get_item_widget_by_name(fname)
-            if w and hasattr(w, "set_loading"):
-                w.set_loading(True)
-        if hasattr(self, "btn_analyze_selected"):
-            self.btn_analyze_selected.setEnabled(False)
-        from ui.widgets import ButtonSpinner
-        spinner = ButtonSpinner(self.btn_export_main, "Analisando pendentes...")
-        spinner.start()
-        self._batch_spinner = spinner
-        self.pipeline.run_batch_analysis(unprocessed, self.ctx.algo_params)
-
-    def action_save_txt(self):
-        checked_files = self.get_checked_files()
-        if not checked_files:
-            QMessageBox.warning(
-                self,
-                "Nenhum áudio selecionado",
-                "Marque a caixinha de pelo menos um arquivo de áudio na lista para gerar o relatório."
-            )
-            return
-
-        # Analisa em segundo plano qualquer arquivo marcado que ainda não esteja no cache
-        unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
-        if unprocessed:
-            self._pending_export_action = ('txt', None)
-            self._start_batch_for_export(unprocessed)
-            return
-
-        self._generate_txt_report(checked_files)
-
-    def _generate_txt_report(self, checked_files):
-        selected_cache = {
-            fname: self.ctx.analysis_cache[fname]
-            for fname in checked_files
-            if fname in self.ctx.analysis_cache
-        }
-
-        if not selected_cache:
-            QMessageBox.warning(
-                self,
-                "Sem dados",
-                "Nenhum dos áudios selecionados possui dados de análise válidos para o relatório."
-            )
-            return
-
-        now = datetime.datetime.now()
-        default_name = f"Relatorio_Crinometro_{now.strftime('%Y%m%d_%H%M')}.txt"
-        file_path, _ = QFileDialog.getSaveFileName(self, I18N[self.lang]["export"], default_name, "Text Files (*.txt)")
-        if not file_path:
-            return
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            inst = self.ctx.report_params.get('institution', '').strip()
-            name = self.ctx.report_params.get('researcher_name', '').strip()
-            role = self.ctx.report_params.get('role', '').strip()
-            level = self.ctx.report_params.get('level', '').strip()
-            header_lines = []
-            if inst: header_lines.append(f"Instituição: {inst.upper()}")
-            if name: header_lines.append(f"Pesquisador(a): {name}")
-            if role: header_lines.append(f"Função: {role}")
-            if level: header_lines.append(f"Grau Acadêmico: {level}")
-            header_text = "\n".join(header_lines) + "\n\n" if header_lines else ""
-            params_list = [d['params'] for d in selected_cache.values()]
-            all_same_params = all(p == params_list[0] for p in params_list)
-            texto = (
-                f"RELATÓRIO MULTIPLEXADO DE ANÁLISE BIOACÚSTICA - CRINÔMETRO\n"
-                f"{'='*58}\n"
-                f"{header_text}"
-                f"Data da Geração: {now.strftime('%d/%m/%Y %H:%M:%S')}\n"
-                f"Total de Arquivos Selecionados Compilados: {len(selected_cache)}\n\n"
-            )
-            def get_pulse_distribution_text(chirps_list):
-                unique_p, counts_p = np.unique(chirps_list, return_counts=True)
-                return "; ".join([f"{int(cnt)} chilreiro(s) com {int(up)} pulso(s)" for up, cnt in zip(unique_p, counts_p)])
-            if all_same_params:
-                p = params_list[0]
-                texto += (
-                    f"1. PARÂMETROS METODOLÓGICOS (CONFIGURAÇÕES GERAIS)\n"
-                    f"{'-'*58}\n"
-                    f"- Filtro de Amplitude: Mín={p['amp_min']} | Máx={p['amp_max']}\n"
-                    f"- Limites de Duração de Pulso: {p['dur_min']}ms a {p['dur_max']}ms\n"
-                    f"- Banda de Frequência Analisada: {p['b1_min']}Hz a {p['b1_max']}Hz\n\n"
-                    f"2. RESULTADOS POR ÁUDIO SELECIONADO\n"
-                    f"{'-'*58}\n\n"
-                )
-                for fname, d in selected_cache.items():
-                    texto += f"• ARQUIVO: {fname}\n  - Duração Total: {d['duration']:.2f} segundos\n  - Chilreios Validados: {len(d['chirps'])}\n  - Moda (Padrão): {d['moda']} pulsos/chilreio | Média: {d['media']:.2f}\n  - Distribuição: {get_pulse_distribution_text(d['chirps'])}\n\n"
-            else:
-                texto += "RESULTADOS DETALHADOS POR ÁUDIO SELECIONADO\n"
-                for fname, d in selected_cache.items():
-                    texto += f"Arquivo: {fname} | Chilreios: {len(d['chirps'])}\n"
-            f.write(texto)
-        QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s).")
-
     def show_export_menu(self):
         """Exibe/oculta o dropdown de exportação (toggle: clique abre, outro clique fecha)."""
         now = time.time()
@@ -2237,12 +2098,12 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.setObjectName("exportMenu")
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), I18N[self.lang]["export"])
-        act_txt.triggered.connect(self.action_save_txt)
+        act_txt.triggered.connect(self.export_controller.request_txt_export)
         act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📊 Exportar Relatório Modular...")
-        act_pdf_mod.triggered.connect(self.open_export_report_dialog)
+        act_pdf_mod.triggered.connect(self.export_controller.request_modular_report)
         menu.addSeparator()
         act_graphs = menu.addAction(make_ui_icon("export", color="#10B981", size=15), "📊 Exportar Gráficos (PNG/PDF)…")
-        act_graphs.triggered.connect(self.open_export_graph_dialog)
+        act_graphs.triggered.connect(self.export_controller.request_graph_export)
 
         def _on_close():
             self._export_menu_open = False
@@ -2253,79 +2114,6 @@ class MainWindow(QMainWindow):
         self._export_menu_open = True
         menu.popup(self.btn_export_main.mapToGlobal(self.btn_export_main.rect().bottomLeft()))
 
-
-    def open_export_report_dialog(self):
-        checked_files = self.get_checked_files()
-        if not checked_files:
-            QMessageBox.warning(self, "Nenhum áudio", "Marque pelo menos um arquivo na lista para gerar o relatório.")
-            return
-
-        from ui.dialogs.export_report_dialog import ExportReportDialog
-        dlg = ExportReportDialog(self.ctx, checked_files=checked_files, parent=self)
-        if dlg.exec():
-            config    = dlg.config
-            want_csv  = dlg.export_csv
-            csv_path  = dlg.csv_path
-            want_txt  = dlg.export_txt
-            txt_path  = dlg.txt_path
-            csv_mode  = getattr(dlg, 'csv_mode', 'brazilian')
-            unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
-            if unprocessed:
-                self._pending_export_action = ('pdf_modular', (config, want_csv, csv_path, want_txt, txt_path, csv_mode))
-                self._start_batch_for_export(unprocessed)
-                return
-            self._generate_pdf_report_modular(checked_files, config, want_csv=want_csv, csv_path=csv_path, want_txt=want_txt, txt_path=txt_path, csv_mode=csv_mode)
-            
-    def _generate_pdf_report_modular(self, checked_files, config, want_csv=False, csv_path=None, want_txt=False, txt_path=None, csv_mode="brazilian"):
-        selected_cache = {fname: self.ctx.analysis_cache[fname] for fname in checked_files if fname in self.ctx.analysis_cache}
-        if not selected_cache:
-            QMessageBox.warning(self, "Sem dados", "Nenhum dos áudios selecionados possui dados válidos.")
-            return
-
-        from core.worker import GenericWorker
-        def _task():
-            results = []
-            if config.output_path:
-                from utils.report_generator import generate_pdf_report
-                generate_pdf_report(config.output_path, config, selected_cache, self.ctx.algo_params)
-                results.append(config.output_path)
-            if want_csv and csv_path:
-                from utils.report_generator import generate_csv_report
-                generate_csv_report(csv_path, selected_cache, config.metadata, csv_mode=csv_mode)
-                results.append(csv_path)
-            if want_txt and txt_path:
-                from utils.report_generator import generate_txt_report
-                generate_txt_report(txt_path, selected_cache, config.metadata)
-                results.append(txt_path)
-            return results
-
-        def _on_finished(paths):
-            paths_str = "\n".join(paths) if paths else ""
-            QMessageBox.information(self, I18N[self.lang]["success"],
-                                    f"Relatório gerado com sucesso!\n\nSalvo em:\n{paths_str}")
-            if getattr(self, "_batch_spinner", None) is not None:
-                self._batch_spinner.stop()
-                self._batch_spinner = None
-
-        def _on_error(err_msg):
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha ao gerar relatório:\n{err_msg}")
-            if getattr(self, "_batch_spinner", None) is not None:
-                self._batch_spinner.stop()
-                self._batch_spinner = None
-
-        worker = GenericWorker(_task)
-        self._report_worker = worker
-        worker.finished_signal.connect(_on_finished)
-        worker.error_signal.connect(_on_error)
-
-        if hasattr(self, "btn_export_main"):
-            from ui.widgets import ButtonSpinner
-            if not getattr(self, "_batch_spinner", None):
-                spinner = ButtonSpinner(self.btn_export_main, "Gerando relatório...")
-                spinner.start()
-                self._batch_spinner = spinner
-
-        worker.start()
 
     def toggle_playback(self):
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:

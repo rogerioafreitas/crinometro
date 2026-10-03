@@ -217,9 +217,9 @@ class TestMenuRouting(unittest.TestCase):
         import inspect
         from ui.main_window import MainWindow
         src = inspect.getsource(MainWindow.show_export_menu)
-        self.assertIn("action_save_txt", src)
-        self.assertIn("open_export_report_dialog", src)
-        self.assertIn("open_export_graph_dialog", src)
+        self.assertIn("request_txt_export", src)
+        self.assertIn("request_modular_report", src)
+        self.assertIn("request_graph_export", src)
 
 
 if __name__ == "__main__":
