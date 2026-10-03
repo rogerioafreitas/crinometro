@@ -45,8 +45,8 @@ I18N = {
             "Esta operação não pode ser desfeita. Deseja continuar?"
         ),
         "reset_done": "Configurações resetadas. O app agora usa os parâmetros padrão originais.",
-        "export_training": "Exportar Treinamento (.pkl)...",
-        "import_training": "Carregar Treinamento (.pkl)...",
+        "export_training": "Exportar Treinamento (.skops)...",
+        "import_training": "Carregar Treinamento (.skops)...",
     },
     "en": {
         "app_title": f"Crinometer - {APP_VERSION_LABEL}",
@@ -89,8 +89,8 @@ I18N = {
             "This cannot be undone. Continue?"
         ),
         "reset_done": "Settings reset. The app now uses the original default parameters.",
-        "export_training": "Export Training Model (.pkl)...",
-        "import_training": "Load Training Model (.pkl)...",
+        "export_training": "Export Training Model (.skops)...",
+        "import_training": "Load Training Model (.skops)...",
     }
 }
 

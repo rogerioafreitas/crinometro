@@ -6,6 +6,7 @@ import sys
 import json
 import time
 import pickle
+import skops.io as skio
 import base64
 import warnings
 import random
@@ -37,7 +38,7 @@ class PulseLearner:
     def __init__(self, config_path=CONFIG_FILE):
         self.config_path = config_path
         config_dir = os.path.dirname(os.path.abspath(config_path))
-        self.persistence_path = os.path.join(config_dir, "modelo_treinado.pkl")
+        self.persistence_path = os.path.join(config_dir, "modelo_treinado.skops")
         self.model = None
         self.feature_names = [
             "peak_amp_rel",           # 1. Amplitude do pico relativa à mediana local
@@ -806,7 +807,7 @@ class PulseLearner:
     def serialize(self):
         if self.model is None:
             return None
-        payload = pickle.dumps(self.model)
+        payload = skio.dumps(self.model)
         return {
             "model_type": type(self.model).__name__,
             "feature_names": self.feature_names,
@@ -845,15 +846,73 @@ class PulseLearner:
         temp_path = self.persistence_path + ".tmp"
         try:
             with open(temp_path, "wb") as f:
-                pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+                skio.dump(payload, f)
             os.replace(temp_path, self.persistence_path)
+            
+            # Remove o .pkl antigo se existir
+            old_path = self.persistence_path.replace(".skops", ".pkl")
+            if old_path != self.persistence_path and os.path.exists(old_path):
+                try: os.remove(old_path)
+                except: pass
+                
             return True
-        except (OSError, pickle.PickleError) as exc:
+        except (OSError, Exception) as exc:
             print(f"Erro ao persistir treinamento: {exc}")
             return False
 
     def load_persisted_training(self):
+        # Migração transparente
         if not os.path.exists(self.persistence_path):
+            old_path = self.persistence_path.replace(".skops", ".pkl")
+            if os.path.exists(old_path):
+                self.persistence_path = old_path
+            else:
+                return False
+                
+        try:
+            try:
+                with open(self.persistence_path, "rb") as f:
+                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype])
+            except Exception:
+                with open(self.persistence_path, "rb") as f:
+                    payload = pickle.load(f)
+                # Força a migração do formato antigo para o novo (skops)
+                if self.persistence_path.endswith(".pkl"):
+                    self.persistence_path = self.persistence_path.replace(".pkl", ".skops")
+                    self.save_persisted_training()
+                    
+            if not isinstance(payload, dict):
+                return False
+            features = np.asarray(payload.get("training_features", []), dtype=float)
+            labels = np.asarray(payload.get("training_labels", []), dtype=int)
+            if features.ndim == 2 and len(labels) == len(features):
+                if features.shape[1] < len(self.feature_names):
+                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
+                    self.training_features = np.hstack((features, pad))
+                elif features.shape[1] == len(self.feature_names):
+                    self.training_features = features
+                else:
+                    self.training_features = features[:, :len(self.feature_names)]
+                self.training_labels = labels
+
+            # Salvaguarda contra modelos degenerados (sem exemplos negativos de ruído/distantes)
+            if self.training_labels.size > 0:
+                n_neg = int(np.sum(self.training_labels == 0))
+                n_pos = int(np.sum(self.training_labels == 1))
+                if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
+                    print("Aviso: Base de treinamento legada com desbalanceamento extremo detectada. Reiniciando modelo para modo restritivo de alta precisão.")
+                    self.model = None
+                    self.training_features = np.empty((0, len(self.feature_names)))
+                    self.training_labels = np.empty(0, dtype=int)
+                    return False
+
+            self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
+            model = payload.get("model")
+            if model is not None and hasattr(model, "predict"):
+                self.model = model
+            return self.model is not None or self.training_features.size > 0
+        except Exception as exc:
+            print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
             return False
         try:
             with open(self.persistence_path, "rb") as f:
@@ -905,6 +964,25 @@ class PulseLearner:
             if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
                 return False
             model_bytes = base64.b64decode(payload["model_pickle_b64"])
+            try:
+                self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier])
+            except Exception:
+                self.model = pickle.loads(model_bytes)
+            return True
+        except Exception as exc:
+            print(f"Aviso: não foi possível restaurar o modelo treinado: {exc}")
+            self.model = None
+            return False
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            if not isinstance(config, dict):
+                return False
+            self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
+            payload = config.get("pulse_learner")
+            if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
+                return False
+            model_bytes = base64.b64decode(payload["model_pickle_b64"])
             self.model = pickle.loads(model_bytes)
             return True
         except Exception as exc:
@@ -925,19 +1003,24 @@ class PulseLearner:
             "timestamp": time.time(),
         }
         with open(filepath, "wb") as f:
-            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+            skio.dump(payload, f)
         return True
 
     def import_model_file(self, filepath):
         """Carrega e valida um modelo de treinamento exportado anteriormente, com verificação de versão."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
-        with open(filepath, "rb") as f:
-            payload = pickle.load(f)
+        try:
+            with open(filepath, "rb") as f:
+                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype])
+        except Exception:
+            with open(filepath, "rb") as f:
+                payload = pickle.load(f)
+                
         if not isinstance(payload, dict):
             raise ValueError("Formato de arquivo de treinamento inválido.")
 
-        # Verificação de versão do arquivo .pkl em relação à versão do app
+        # Verificação de versão do arquivo em relação à versão do app
         file_version = str(payload.get("version", "1.0.0"))
         if is_version_newer(file_version, APP_VERSION):
             raise ValueError(

@@ -1587,8 +1587,8 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Exportar Arquivo de Treinamento",
-            "modelo_treinado_crinometro.pkl",
-            "Modelos Treinados (*.pkl *.crntrain);;Todos os Arquivos (*)"
+            "modelo_treinado_crinometro.skops",
+            "Modelos Treinados (*.skops *.pkl);;Todos os Arquivos (*)"
         )
         if not file_path:
             return
@@ -1613,7 +1613,7 @@ class MainWindow(QMainWindow):
             self,
             "Carregar Arquivo de Treinamento",
             "",
-            "Modelos Treinados (*.pkl *.crntrain);;Todos os Arquivos (*)"
+            "Modelos Treinados (*.skops *.pkl);;Todos os Arquivos (*)"
         )
         if not file_path:
             return
@@ -1660,7 +1660,7 @@ class MainWindow(QMainWindow):
             msg_box.setInformativeText(
                 "Isso apagará definitivamente todo o histórico de correções manuais e as árvores de decisão geradas.\n\n"
                 "Recomendamos fortemente que você salve este treinamento em outro local da máquina usando a opção "
-                "<b>'Exportar .pkl'</b> antes de prosseguir, para não perdê-lo permanentemente.\n\n"
+                "<b>'Exportar .skops'</b> antes de prosseguir, para não perdê-lo permanentemente.\n\n"
                 "Você tem certeza que deseja executar esta ação?"
             )
             btn_reset = msg_box.addButton("Resetar mesmo assim", QMessageBox.ButtonRole.DestructiveRole)
@@ -1671,7 +1671,7 @@ class MainWindow(QMainWindow):
             msg_box.setInformativeText(
                 "This will permanently erase all manual correction history and the generated decision trees.\n\n"
                 "We strongly recommend saving this training somewhere else on your machine using the "
-                "<b>'Export .pkl'</b> option before proceeding, so you don't lose it permanently.\n\n"
+                "<b>'Export .skops'</b> option before proceeding, so you don't lose it permanently.\n\n"
                 "Are you absolutely sure you want to execute this action?"
             )
             btn_reset = msg_box.addButton("Reset anyway", QMessageBox.ButtonRole.DestructiveRole)
