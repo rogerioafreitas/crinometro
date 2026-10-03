@@ -1125,6 +1125,7 @@ class MainWindow(QMainWindow):
                 if panel is self.panel_hist:
                     left = max(0.06, min(0.12, 50.0 / w))
                     bottom = max(0.12, min(0.20, 50.0 / h))
+                    right = 1.0 - max(0.06, min(0.12, 60.0 / w))
                 elif panel in (self.panel_spec, self.panel_freq):
                     left = max(0.08, min(0.15, 70.0 / w))
                     bottom = max(0.10, min(0.18, 44.0 / h))
@@ -1140,6 +1141,7 @@ class MainWindow(QMainWindow):
                 if panel is self.panel_hist:
                     left = max(0.11, min(0.20, 40.0 / w))
                     bottom = max(0.24, min(0.40, 48.0 / h))
+                    right = 1.0 - max(0.12, min(0.22, 60.0 / w))
                 elif panel in (self.panel_freq, self.panel_spec):
                     left = max(0.18, min(0.30, 64.0 / w))
                     bottom = max(0.22, min(0.35, 38.0 / h))

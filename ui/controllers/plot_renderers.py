@@ -491,6 +491,8 @@ class PlotRenderers:
         max_count = int(max(counts)) if len(counts) else 1
         hist_text_color = '#DDE1E5' if is_dark else '#1F2937'
         hist_tick_color = '#A9ADB5' if is_dark else '#1F2937'
+        import matplotlib.patheffects as pe
+        outline_bar = pe.withStroke(linewidth=2.0, foreground='#000000' if is_dark else '#FFFFFF')
         for bar in bars:
             ax_hist.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -498,6 +500,7 @@ class PlotRenderers:
                 str(int(bar.get_height())),
                 ha='center', va='bottom',
                 color=hist_text_color, fontsize=8.5, fontweight='bold',
+                path_effects=[outline_bar]
             )
         ax_hist.set_xticks(unique_pulses)
         ax_hist.set_xlabel("")
@@ -538,11 +541,14 @@ class PlotRenderers:
             )
 
             # Anotações discretas de duração sobre cada marcador
+            import matplotlib.patheffects as pe
+            outline_dur = pe.withStroke(linewidth=2.5, foreground='#000000' if is_dark else '#FFFFFF')
             for xv, yv in zip(x_pts, y_pts):
                 ax2.annotate(
                     f'{yv:.0f}', (xv, yv), textcoords='offset points',
-                    xytext=(0, 7), ha='center', fontsize=6.5,
+                    xytext=(6, 0), ha='left', va='center', fontsize=7.5,
                     color=dur_color, fontweight='bold',
+                    path_effects=[outline_dur]
                 )
 
             ax2.set_ylabel("Duração (ms)", fontsize=7.5, color=dur_color)

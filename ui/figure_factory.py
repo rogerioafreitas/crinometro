@@ -423,13 +423,16 @@ def draw_histogram(
     max_count = int(max(counts)) if len(counts) > 0 else 1
     ax.set_ylim(0, max_count * 1.25)
     
+    import matplotlib.patheffects as pe
+    outline_bar = pe.withStroke(linewidth=2.0, foreground=cfg.bg_color)
     for bar in bars:
         ax.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + max_count * 0.025,
             str(int(bar.get_height())),
             ha='center', va='bottom',
-            color=cfg.text_color, fontsize=8.5, fontweight='bold', zorder=4
+            color=cfg.text_color, fontsize=8.5, fontweight='bold', zorder=4,
+            path_effects=[outline_bar]
         )
 
     # Duração média
@@ -459,10 +462,12 @@ def draw_histogram(
         max_d = max(y_pts) if len(y_pts) > 0 else 1
         ax2.set_ylim(0, max_d * 1.25)
         
+        outline_dur = pe.withStroke(linewidth=2.5, foreground=cfg.bg_color)
         for xv, yv in zip(x_pts, y_pts):
             if yv > 0:
-                ax2.text(xv, yv + max_d * 0.03, f"{yv:.1f} ms", ha='center', va='bottom', 
-                         color='#EA580C', fontsize=8.5, fontweight='bold', zorder=4)
+                ax2.text(xv, yv, f"{yv:.1f} ms", ha='left', va='center', 
+                         color='#EA580C', fontsize=8.5, fontweight='bold', zorder=4,
+                         path_effects=[outline_dur])
 
         ax2.set_ylabel("Duração Média (ms)", color=cfg.text_color)
         for spine in ax2.spines.values():
