@@ -400,6 +400,7 @@ class EditorController(QObject):
                 "total_chirps": 0,
                 "media": 0.0,
                 "moda": 0.0,
+                "variancia": 0.0,
                 "chirps": [],
                 "chirp_peaks_list": [],
             }
@@ -412,7 +413,7 @@ class EditorController(QObject):
             env = heavy.get('env')
             data_b1 = heavy.get('data_b1')
 
-            chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+            chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
                 verified,
                 effective_params,
                 rate,
@@ -424,6 +425,7 @@ class EditorController(QObject):
             heavy['chirp_peaks_list'] = chirp_peaks_list
             heavy['media'] = media
             heavy['moda'] = moda
+            heavy['variancia'] = variancia
 
             active_fn = ctx.active_filename
             if active_fn and active_fn in ctx.analysis_cache:
@@ -438,7 +440,7 @@ class EditorController(QObject):
 
                 win.lbl_total.setText(str(len(chirps)))
 
-                win.lbl_metric_sub.setText(f"Moda: {moda}   |   Média: {media:.2f}")
+                win.lbl_metric_sub.setText(f"Média: {media:.2f}   |   Variância: {variancia:.2f}")
 
             metrics_payload = {
                 "total_chirps": len(chirps),

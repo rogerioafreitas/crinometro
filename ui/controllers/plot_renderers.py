@@ -231,7 +231,7 @@ class PlotRenderers:
             f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}"
         )
         win.lbl_total.setText(str(len(chirps)))
-        win.lbl_metric_sub.setText(f"Moda: {d['moda']}   |   Média: {d['media']:.2f}")
+        win.lbl_metric_sub.setText(f"Média: {d['media']:.2f}   |   Variância: {d.get('variancia', 0.0):.2f}")
 
         win.update_ml_toggle_ui()
 

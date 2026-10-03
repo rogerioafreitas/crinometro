@@ -1546,7 +1546,7 @@ class MainWindow(QMainWindow):
             self.lbl_summary_meta.setText("Áudio carregado • Clique em 'Analisar'")
             self.transport_panel.timeline.set_data(0.0, [])
         self.lbl_total.setText("--")
-        self.lbl_metric_sub.setText("Moda: --   |   Média: --")
+        self.lbl_metric_sub.setText("Média: --   |   Variância: --")
         for panel in self.all_panels:
             panel.ax.clear()
             panel.canvas.draw_idle()

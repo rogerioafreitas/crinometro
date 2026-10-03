@@ -165,6 +165,7 @@ class PipelineOrchestrator(QObject):
             params = self.ctx.algo_params.copy()
 
         rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results[:14]
+        variancia = results[21] if len(results) > 21 else 0.0
         distant_peaks = results[14] if len(results) > 14 else []
         carrier_freq = float(results[15]) if len(results) > 15 else 0.0
         discarded_peaks_reasons = results[16] if len(results) > 16 else {}
@@ -213,7 +214,7 @@ class PipelineOrchestrator(QObject):
                 )
                 if len(effective_peaks) >= 2:
                     try:
-                        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+                        chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
                             effective_peaks, effective_params, rate, env, raw_signal=data_b1
                         )
                     except Exception:

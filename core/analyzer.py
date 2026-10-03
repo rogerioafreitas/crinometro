@@ -178,7 +178,7 @@ class CricketAnalyzer:
         # ----------------------------------------------------------------------
         carrier_freq = 5000.0
         if len(valid_peaks_stage2) >= 2:
-            prelim_chirps, prelim_chirp_peaks_list, _, _ = CricketAnalyzer.regroup_chirps(
+            prelim_chirps, prelim_chirp_peaks_list, _, _, _ = CricketAnalyzer.regroup_chirps(
                 valid_peaks_stage2, params, rate, env1_smooth, raw_signal=data_b1
             )
             chirp_freqs = []
@@ -255,7 +255,7 @@ class CricketAnalyzer:
 
         # Agrupamento com coerência de trilha acústica em tempo linear O(N)
         peaks = np.asarray(sorted(candidate_peaks), dtype=int)
-        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+        chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
             peaks, params, rate, env1_smooth, raw_signal=data_b1
         )
 
@@ -277,7 +277,7 @@ class CricketAnalyzer:
 
         return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
                 media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, all_distant, carrier_freq,
-                discarded_peaks_reasons, valid_peaks_stage2, peak_dur_dict, f_psd.astype(np.float32), Pxx_db.astype(np.float32))
+                discarded_peaks_reasons, valid_peaks_stage2, peak_dur_dict, f_psd.astype(np.float32), Pxx_db.astype(np.float32), variancia)
 
     @staticmethod
     def reevaluate_carrier_tolerance(
@@ -331,7 +331,7 @@ class CricketAnalyzer:
 
         # 4. Agrupamento em chilreios
         peaks = np.asarray(sorted(candidate_peaks), dtype=int)
-        chirps, chirp_peaks_list, media, moda = CricketAnalyzer.regroup_chirps(
+        chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
             peaks, params, rate, env, raw_signal=data_b1
         )
 
@@ -495,5 +495,6 @@ class CricketAnalyzer:
         chirps = [len(cp) for cp in refined_chirps]
         media = float(statistics.mean(chirps)) if len(chirps) > 0 else 0.0
         moda = CricketAnalyzer._safe_mode(chirps) if len(chirps) > 0 else 0
-        return chirps, refined_chirps, media, moda
+        variancia = float(statistics.variance(chirps)) if len(chirps) > 1 else 0.0
+        return chirps, refined_chirps, media, moda, variancia
 

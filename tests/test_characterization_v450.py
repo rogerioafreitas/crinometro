@@ -89,9 +89,9 @@ class TestCharacterization(unittest.TestCase):
 
         # 1. Execução do analisador científico
         res = CricketAnalyzer.analyze(self.sample_wav, params)
-        self.assertEqual(len(res), 21, "CricketAnalyzer.analyze deve retornar exatamente 21 elementos")
+        self.assertEqual(len(res), 22, "CricketAnalyzer.analyze deve retornar exatamente 22 elementos")
 
-        rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, duration, all_distant, carrier_freq, discarded_reasons, valid_peaks_stage2, peak_dur_dict, f_psd, Pxx_db = res
+        rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, duration, all_distant, carrier_freq, discarded_reasons, valid_peaks_stage2, peak_dur_dict, f_psd, Pxx_db, variancia = res
 
         self.assertEqual(rate, 44100)
         self.assertGreater(len(peaks), 0)
