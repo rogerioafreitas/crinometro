@@ -354,7 +354,7 @@ class NavigationController(QObject):
         d = self.session_context.active_heavy_data
         if not d:
             return
-        QApplication.processEvents()
+        # QApplication.processEvents()  # Removido (Preveno de Reentrncia - FASE 11)
         self.bg_cache_valid = False
         for line in self.cursor_lines:
             line.set_animated(False)
@@ -444,7 +444,7 @@ class NavigationController(QObject):
             else:
                 self.panel_spec.ax.set_ylim(0.0, nyq)
 
-        QApplication.processEvents()
+        # QApplication.processEvents()  # Removido (Preveno de Reentrncia - FASE 11)
         self._refresh_synced_views()
 
     # ------------------------------------------------------------------

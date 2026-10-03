@@ -48,6 +48,7 @@ class ExportConfig:
     spec_unit: str = "kHz"      # "kHz" ou "Hz"
     spec_xmin: Optional[float] = None
     spec_xmax: Optional[float] = None
+    wave_apply_xlim: bool = True   # aplica spec_xmin/xmax tambem ao oscilograma
     spec_ymin: float = 0.0
     spec_ymax: float = 10.0
 
@@ -148,7 +149,9 @@ def draw_waveform(
     time_sec = np.arange(len(data)) / rate
 
     # Subset dos dados se houver limite X (Apenas para exportação de Específico)
-    if not interactive and cfg.spec_xmin is not None and cfg.spec_xmax is not None:
+    use_x_crop = (cfg.wave_apply_xlim and cfg.spec_xmin is not None
+                  and cfg.spec_xmax is not None)
+    if not interactive and use_x_crop:
         idx_min = max(0, int(cfg.spec_xmin * rate))
         idx_max = min(len(data), int(cfg.spec_xmax * rate) + 1)
         plot_data = data[idx_min:idx_max]
@@ -252,8 +255,14 @@ def draw_waveform(
     ax.set_xlabel(xlabel, color=cfg.text_color)
     ax.set_ylabel(ylabel, color=cfg.text_color)
     
-    xmin = cfg.spec_xmin if cfg.spec_xmin is not None else time_sec[0]
-    xmax = cfg.spec_xmax if cfg.spec_xmax is not None else time_sec[-1]
+    if cfg.wave_apply_xlim and cfg.spec_xmin is not None:
+        xmin = cfg.spec_xmin
+    else:
+        xmin = time_sec[0]
+    if cfg.wave_apply_xlim and cfg.spec_xmax is not None:
+        xmax = cfg.spec_xmax
+    else:
+        xmax = time_sec[-1]
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(-1.05, 1.05)
     ax.tick_params(colors=cfg.ax_color)

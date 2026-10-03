@@ -208,7 +208,7 @@ class PipelineOrchestrator(QObject):
 
             if peaks_added or peaks_removed:
                 effective_peaks = np.asarray(
-                    sorted(set(file_peaks_detected) | set(peaks_added) - set(peaks_removed)),
+                    sorted((set(file_peaks_detected) | set(peaks_added)) - set(peaks_removed)),
                     dtype=int
                 )
                 if len(effective_peaks) >= 2:
@@ -254,8 +254,40 @@ class PipelineOrchestrator(QObject):
         return heavy_data
 
     # ------------------------------------------------------------------ #
+    def run_analysis(self, filename, params=None, render=True):
+        """Método síncrono mantido EXCLUSIVAMENTE para compatibilidade com testes unitários."""
+        if not filename or filename not in self.ctx.loaded_files or not os.path.exists(self.ctx.loaded_files[filename]):
+            return
+
+        self.ctx.active_filename = filename
+        effective_params = params if params else {**self.ctx.algo_params, **self.ctx._adaptive_overrides}
+        
+        from core.analyzer import CricketAnalyzer
+        use_ml = self.ctx.use_machine_learning
+        learner = self.ctx.pulse_learner if use_ml else None
+        file_path = self.ctx.loaded_files[filename]
+        
+        # Simulate the cache for spec
+        cached_spec = None
+        if self.ctx.active_heavy_data and self.ctx.active_filename == filename:
+            if all(self.ctx.active_heavy_data.get(k) is not None for k in ("f_spec", "t_spec", "Sxx_db", "dom_freqs")):
+                cached_spec = {
+                    "f_spec": self.ctx.active_heavy_data.get("f_spec"),
+                    "t_spec": self.ctx.active_heavy_data.get("t_spec"),
+                    "Sxx_db": self.ctx.active_heavy_data.get("Sxx_db"),
+                    "dom_freqs": self.ctx.active_heavy_data.get("dom_freqs"),
+                }
+                
+        res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner, cached_spec=cached_spec)
+        self._apply_analysis_results(filename, res, params=effective_params)
+        
+        if render:
+            self.analysis_completed.emit(filename)
+            
+        return self.ctx.active_heavy_data
+
     # ------------------------------------------------------------------ #
-    # 5. Execução em Lote Assíncrona (run_batch_analysis)                #
+    # 5. Execução em Lote Assíncrona (run_batch_analysis)                #                #
     # ------------------------------------------------------------------ #
     def run_batch_analysis(self, checked_files, params):
         """Gerencia worker de análise em lote e emite sinais de alto nível de ponta a ponta.

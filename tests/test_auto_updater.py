@@ -35,16 +35,16 @@ class TestAutoUpdater(unittest.TestCase):
 
     def test_version_constants(self):
         """Verifica se a versão global foi atualizada para 4.4.1."""
-        self.assertEqual(APP_VERSION, "4.4.1")
-        self.assertEqual(parse_version_tuple("4.4.1"), (4, 4, 1))
+        self.assertEqual(APP_VERSION, "4.5.0")
+        self.assertEqual(parse_version_tuple("4.5.0"), (4, 5, 0))
 
     def test_version_comparison(self):
         """Verifica a lógica de comparação SemVer do atualizador."""
-        self.assertTrue(is_remote_version_newer("4.4.1", "4.4.0"))
-        self.assertTrue(is_remote_version_newer("4.4.1", "4.3.2"))
-        self.assertTrue(is_remote_version_newer("5.0.0", "4.4.1"))
-        self.assertFalse(is_remote_version_newer("4.4.0", "4.4.1"))
-        self.assertFalse(is_remote_version_newer("4.4.1", "4.4.1"))
+        self.assertTrue(is_remote_version_newer("4.5.0", "4.4.0"))
+        self.assertTrue(is_remote_version_newer("4.5.0", "4.3.2"))
+        self.assertTrue(is_remote_version_newer("5.0.0", "4.5.0"))
+        self.assertFalse(is_remote_version_newer("4.4.0", "4.5.0"))
+        self.assertFalse(is_remote_version_newer("4.5.0", "4.5.0"))
 
     def test_path_normalization_corrupted_char(self):
         """Verifica se diretórios com acento ou caractere de substituição são normalizados para 'Crinometro'."""

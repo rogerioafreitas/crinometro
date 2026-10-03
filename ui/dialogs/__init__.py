@@ -33,10 +33,10 @@ class AlgoSettingsDialog(QDialog):
         
         self.inputs = {}
         fields = [
-            ("min_p", "Mín. Pulsos/Chilr.:" if lang == "pt" else "Min Pulses/Chirp:", QSpinBox, 1, 50, 1),
-            ("max_p", "Máx. Pulsos/Chilr.:" if lang == "pt" else "Max Pulses/Chirp:", QSpinBox, 1, 100, 1),
-            ("amp_min", "Altura mínima do pico:" if lang == "pt" else "Min Peak Height:", QDoubleSpinBox, 0.01, 2.00, 0.01),
-            ("gap_min", "Distância mínima entre picos (ms):" if lang == "pt" else "Min Peak Distance (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
+            ("min_p", "Mín. pulsos para formar um chilreio:" if lang == "pt" else "Min Pulses to form a Chirp:", QSpinBox, 1, 50, 1),
+            ("max_p", "Máx. pulsos por chilreio (limite superior):" if lang == "pt" else "Max Pulses per Chirp (upper limit):", QSpinBox, 1, 100, 1),
+            ("amp_min", "Altura mínima do pico (limiar de detecção):" if lang == "pt" else "Min Peak Height (detection threshold):", QDoubleSpinBox, 0.01, 2.00, 0.01),
+            ("gap_min", "Dist. mínima entre pulsos consecutivos (ms):" if lang == "pt" else "Min Distance between consecutive Pulses (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
         ]
         for key, label, WidgetClass, vmin, vmax, step in fields:
             widget = WidgetClass()
@@ -152,16 +152,14 @@ class AdvancedAlgoSettingsDialog(QDialog):
         form.setSpacing(10)
         self.inputs = {}
         fields = [
-            ("prominence", "Proeminência (Prominence):", 0.0, 2.0, 0.001),
-            ("width_min_ms", "Largura mínima do pico (ms):", 0.0, 500.0, 0.5),
-            ("width_max_ms", "Largura máxima do pico (ms):", 0.0, 500.0, 0.5),
-            ("smooth_window_ms", "Janela de suavização (ms):", 1.0, 500.0, 0.5),
-            ("b1_min", "Frequência passa-alta (Hz):", 100.0, 24000.0, 100.0),
-            ("b1_max", "Frequência passa-baixa (Hz):", 100.0, 24000.0, 100.0),
-            ("noise_floor", "Limiar de ruído dinâmico:", 0.01, 2.0, 0.01),
-            ("adaptation_rate", "Taxa de adaptação:", 0.0, 1.0, 0.01),
-            ("focal_sensitivity", "Sensibilidade Focal (Rejeição Grilos Distantes):", 0.0, 1.0, 0.05),
-            ("freq_tolerance_hz", "Tolerância Freq. Focal (±Hz):", 50.0, 2000.0, 25.0),
+            ("prominence", "Proemiência mínima do pico (separação do ruído):", 0.0, 2.0, 0.001),
+            ("smooth_window_ms", "Janela de suavização da envoltória (ms):", 1.0, 500.0, 0.5),
+            ("b1_min", "Frequência de corte inferior do filtro (Hz):", 100.0, 24000.0, 100.0),
+            ("b1_max", "Frequência de corte superior do filtro (Hz):", 100.0, 24000.0, 100.0),
+            ("noise_floor", "Multiplicador do piso de ruído dinâmico:", 0.01, 2.0, 0.01),
+            ("adaptation_rate", "Taxa de adaptação do limiar ao longo do tempo:", 0.0, 1.0, 0.01),
+            ("focal_sensitivity", "Sensib. de rejeição de grilos distantes (0=desativado):", 0.0, 1.0, 0.05),
+            ("freq_tolerance_hz", "Tolerância de frequência focal (+/-Hz):", 50.0, 2000.0, 25.0),
         ]
         for key, label, vmin, vmax, step in fields:
             widget = QDoubleSpinBox()

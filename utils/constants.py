@@ -7,7 +7,7 @@ APP_VERSION_LABEL = "4.5.0 beta"  # rótulo de exibição — usado pela UI, tí
 CONFIG_FILE = "crinometro_config.json"
 
 DEFAULT_ALGO_PARAMS = {
-    "amp_min": 0.08, "amp_max": 1.00, "amp_var": 0.40,
+    "amp_min": 0.30, "amp_max": 1.00, "amp_var": 0.40,
     "dur_min": 14.0, "dur_max": 80.0,
     "gap_min": 25.0, "gap_max": 35.0,
     "min_p": 3, "max_p": 10, "b1_min": 3200, "b1_max": 6000,

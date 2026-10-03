@@ -49,7 +49,7 @@ class TestFigureFactory(unittest.TestCase):
         data = np.zeros(250000)
         data[150000] = 5.0
         time_sec = np.linspace(0, 5, 250000)
-        draw_waveform(ax, data, time_sec, None, cfg, interactive=False)
+        draw_waveform(ax, data, 44100, cfg=cfg, interactive=False)
         line = ax.lines[0]
         ydata = line.get_ydata()
         self.assertIn(5.0, ydata)
@@ -62,7 +62,7 @@ class TestFigureFactory(unittest.TestCase):
         t_spec = np.linspace(0, 1, 10)
         f_spec = np.linspace(0, 10000, 10)
         Sxx = np.zeros((10, 10))
-        draw_spectrogram(ax, t_spec, f_spec, Sxx, cfg, interactive=False)
+        draw_spectrogram(ax, Sxx, t_spec, f_spec, cfg=cfg, interactive=False)
         self.assertTrue(len(fig.axes) > 1)
         fig.clf()
 
@@ -70,7 +70,7 @@ class TestFigureFactory(unittest.TestCase):
         ctx = MockContext()
         ctx.active_heavy_data = {
             "rate": 44100,
-            "audio_data": np.zeros(100),
+            "data": np.zeros(100),
             "time_sec": np.linspace(0, 1, 100)
         }
         cfg = ExportConfig(panels=["waveform"])
@@ -95,10 +95,10 @@ class TestFigureFactory(unittest.TestCase):
         ctx = MockContext()
         ctx.active_heavy_data = {
             "rate": 44100,
-            "audio_data": np.zeros(100),
+            "data": np.zeros(100),
             "time_sec": np.linspace(0, 1, 100),
             "f_psd": np.linspace(0, 10000, 10),
-            "Pxx_den": np.ones(10),
+            "Pxx_db": np.ones(10),
             "t_spec": np.linspace(0, 1, 10),
             "f_spec": np.linspace(0, 10000, 10),
             "Sxx_db": np.zeros((10, 10))

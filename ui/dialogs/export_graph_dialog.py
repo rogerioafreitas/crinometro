@@ -9,22 +9,20 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QRadioButton, QLabel, QPushButton, QButtonGroup,
-    QFileDialog, QMessageBox, QComboBox, QProgressBar, QWidget, QFormLayout, QGridLayout
+    QFileDialog, QMessageBox, QComboBox, QProgressBar, QWidget,
+    QFormLayout, QGridLayout, QListView
 )
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QPropertyAnimation, QEasingCurve
 
 from ui.figure_factory import ExportConfig, export_figures_png, export_figures_pdf
-from ui.dialogs.theme import MODERN_DIALOG_THEME
+from ui.dialogs.theme import get_dialog_theme
 
-# ---------------------------------------------------------------------------
-# Worker thread e Contexto Snapshot (mantidos iguais)
-# ---------------------------------------------------------------------------
+
 
 class _SnapshotCtx:
-    def __init__(self, spec_data, wave_data, chirps, active_filename):
-        self.spec_data = spec_data
-        self.wave_data = wave_data
-        self.chirps = chirps
+    def __init__(self, active_heavy_data, algo_params, active_filename):
+        self.active_heavy_data = dict(active_heavy_data) if active_heavy_data else {}
+        self.algo_params = dict(algo_params) if algo_params else {}
         self.active_filename = active_filename
 
 class _ExportWorker(QThread):
@@ -32,10 +30,11 @@ class _ExportWorker(QThread):
     error_occurred = pyqtSignal(str)
     progress_update = pyqtSignal(int, int)
 
-    def __init__(self, config, ctx, parent=None):
+    def __init__(self, config, ctx, path, parent=None):
         super().__init__(parent)
         self.config = config
         self.ctx = ctx
+        self.path = path
         self._cancel_requested = False
 
     def cancel(self):
@@ -46,18 +45,19 @@ class _ExportWorker(QThread):
 
     def run(self):
         try:
-            if self.config.format == "png":
-                export_figures_png(self.config, self.ctx, progress_callback=self.progress_update.emit, cancel_check=self._should_cancel)
-            elif self.config.format == "pdf":
-                export_figures_pdf(self.config, self.ctx, progress_callback=self.progress_update.emit, cancel_check=self._should_cancel)
+            if self.config.fmt == "png":
+                export_figures_png(self.ctx, self.path, self.config, should_cancel=self._should_cancel)
+            elif self.config.fmt == "pdf":
+                export_figures_pdf(self.ctx, self.path, self.config, should_cancel=self._should_cancel)
             else:
-                raise ValueError(f"Formato desconhecido: {self.config.format}")
+                raise ValueError(f"Formato desconhecido: {self.config.fmt}")
 
             if not self._cancel_requested:
                 self.finished_ok.emit()
         except Exception as e:
             if not self._cancel_requested:
                 self.error_occurred.emit(str(e))
+
 
 # ---------------------------------------------------------------------------
 # Dialog
@@ -68,31 +68,34 @@ class ExportGraphDialog(QDialog):
         super().__init__(parent)
         self.session_context = session_context
         self._live_view = live_view or {}
-        
+        self._parent_dark = getattr(parent, "theme_mode", "dark") == "dark"
+
         self.setWindowTitle("Exportar Gráficos")
-        self.setMinimumWidth(450)
-        
+        self.setMinimumWidth(560)
+
         self._worker = None
 
         self._build_ui()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(24)
 
         # ---- Painéis a exportar ----
         grp_panels = QGroupBox("Painéis a exportar")
         panels_layout = QVBoxLayout(grp_panels)
-        
-        # Botões de marcação em massa
+        panels_layout.setContentsMargins(16, 16, 16, 16)
+        panels_layout.setSpacing(6)
+
+        # Botões de marcação em massa — estilo primário azul conforme design
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         self._btn_mark_all = QPushButton("Marcar todos")
         self._btn_clear_all = QPushButton("Limpar")
-        # Estilo sutil para ações em massa
         self._btn_mark_all.setObjectName("linkButton")
         self._btn_mark_all.setToolTip("Marcar todos os painéis (Ctrl+A)")
         self._btn_mark_all.setShortcut("Ctrl+A")
-        
         self._btn_clear_all.setObjectName("linkButton")
         self._btn_clear_all.setToolTip("Desmarcar todos os painéis (Ctrl+D)")
         self._btn_clear_all.setShortcut("Ctrl+D")
@@ -109,8 +112,8 @@ class ExportGraphDialog(QDialog):
         self._chk_spec.setChecked(True)
 
         panels_layout.addWidget(self._chk_wave)
-        
-        # Sub-opções do oscilograma com indentação real
+
+        # Sub-opções do oscilograma com indentação real (24dp)
         self.sub_wave_container = QWidget()
         sub_wave_layout = QVBoxLayout(self.sub_wave_container)
         sub_wave_layout.setContentsMargins(24, 0, 0, 0)
@@ -124,10 +127,10 @@ class ExportGraphDialog(QDialog):
         sub_wave_layout.addWidget(self._chk_raw)
         sub_wave_layout.addWidget(self._chk_env)
         panels_layout.addWidget(self.sub_wave_container)
-        
+
         self._chk_wave.toggled.connect(self.sub_wave_container.setVisible)
         self.sub_wave_container.setVisible(self._chk_wave.isChecked())
-        
+
         panels_layout.addWidget(self._chk_hist)
         panels_layout.addWidget(self._chk_psd)
         panels_layout.addWidget(self._chk_spec)
@@ -146,25 +149,30 @@ class ExportGraphDialog(QDialog):
         # ---- Configurações Gerais ----
         grp_gen = QGroupBox("Configurações Gerais")
         gen_layout = QVBoxLayout(grp_gen)
-        
+        gen_layout.setContentsMargins(16, 16, 16, 16)
+        gen_layout.setSpacing(8)
+
         form_gen = QFormLayout()
         form_gen.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form_gen.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
-        
+        form_gen.setVerticalSpacing(8)
+
+        # Ordem conforme design: 300 (Publicação) primeiro, depois 150, depois 72
         self._cmb_dpi = QComboBox()
-        self._cmb_dpi.addItems(["150 (Rascunho)", "300 (Publicação)", "600 (Alta Resolução)"])
+        self._cmb_dpi.addItems(["600 (Alta qualidade)", "300 (Publicação)", "150 (Rascunho)", "72 (Web)"])
         self._cmb_dpi.setCurrentIndex(1)
-        self._cmb_dpi.setMaxVisibleItems(3)
+        self._cmb_dpi.setMaxVisibleItems(4)
         self._cmb_dpi.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         form_gen.addRow("Resolução:", self._cmb_dpi)
-        
+
         self._cmb_bg = QComboBox()
         self._cmb_bg.addItems(["Branco (papel)", "Tema atual da janela"])
         form_gen.addRow("Fundo:", self._cmb_bg)
-        
+
         gen_layout.addLayout(form_gen)
-        
+
         grid_chk = QGridLayout()
+        grid_chk.setSpacing(8)
         self._chk_grid = QCheckBox("Mostrar grade")
         self._chk_markers = QCheckBox("Marcadores de pulsos")
         self._chk_markers.setChecked(False)
@@ -172,59 +180,65 @@ class ExportGraphDialog(QDialog):
         grid_chk.addWidget(self._chk_markers, 0, 1)
         grid_chk.setColumnStretch(2, 1)
         gen_layout.addLayout(grid_chk)
-        
+
         self._chk_apply_x = QCheckBox("Aplicar recorte de tempo focal ao oscilograma")
         self._chk_apply_x.setChecked(True)
         self._chk_apply_x.setToolTip("Quando ativo, o oscilograma exportado usa o mesmo recorte de tempo do espectrograma focal em vez da gravação completa.")
         gen_layout.addWidget(self._chk_apply_x)
-        
+
         root.addWidget(grp_gen)
 
         # ---- Ajustes do Espectrograma ----
         self._grp_spec = QGroupBox("Ajustes do Espectrograma")
         spec_layout = QVBoxLayout(self._grp_spec)
-        
+        spec_layout.setContentsMargins(16, 16, 16, 16)
+        spec_layout.setSpacing(8)
+
         form_spec = QFormLayout()
         form_spec.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form_spec.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
-        
+        form_spec.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form_spec.setVerticalSpacing(8)
+
         self._cmb_unit = QComboBox()
         self._cmb_unit.addItems(["kHz", "Hz"])
         form_spec.addRow("Unidade:", self._cmb_unit)
-        
+
         self._cmb_scope = QComboBox()
         self._cmb_scope.addItems(["Focal", "10k", "Total", "Específico"])
         form_spec.addRow("Escopo:", self._cmb_scope)
-        
+
+
         spec_layout.addLayout(form_spec)
         root.addWidget(self._grp_spec)
-        
+
         self._grp_spec.setVisible(self._chk_spec.isChecked())
         self._chk_spec.toggled.connect(self._toggle_spec_section)
 
         # ---- Formato de saída ----
         grp_fmt = QGroupBox("Formato de saída")
         fmt_layout = QVBoxLayout(grp_fmt)
+        fmt_layout.setContentsMargins(16, 16, 16, 16)
+        fmt_layout.setSpacing(6)
         self._bg_fmt = QButtonGroup(self)
-        
+
         self._rdo_pdf = QRadioButton("PDF multipágina (um arquivo único)")
         self._rdo_png = QRadioButton("PNG individual por painel")
         self._rdo_pdf.setChecked(True)
-        
+
         self._bg_fmt.addButton(self._rdo_pdf)
         self._bg_fmt.addButton(self._rdo_png)
-        
+
         fmt_layout.addWidget(self._rdo_pdf)
         fmt_layout.addWidget(self._rdo_png)
-        
+
         self._lbl_png_count = QLabel("")
         self._lbl_png_count.setObjectName("secondary")
         self._lbl_png_count.setVisible(False)
         fmt_layout.addWidget(self._lbl_png_count)
-        
+
         fmt_layout.addStretch()
         root.addWidget(grp_fmt)
-        
+
         self._rdo_png.toggled.connect(self._update_png_count_label)
         for chk in [self._chk_wave, self._chk_hist, self._chk_psd, self._chk_spec, self._chk_raw, self._chk_env]:
             chk.toggled.connect(self._update_png_count_label)
@@ -234,25 +248,38 @@ class ExportGraphDialog(QDialog):
         self._progress.setVisible(False)
         root.addWidget(self._progress)
 
-        # ---- Botões de Ação ----
+        # ---- Botões de Ação (alinhados à direita, espaçamento 26dp conforme design) ----
         btn_action_layout = QHBoxLayout()
-        btn_action_layout.setContentsMargins(0, 16, 0, 0)
-        
+        btn_action_layout.setContentsMargins(0, 0, 0, 0)
+        btn_action_layout.setSpacing(26)
+
         self._btn_cancel = QPushButton("Cancelar")
         self._btn_export = QPushButton("Exportar...")
         self._btn_export.setObjectName("primaryButton")
-        
+
         self._btn_cancel.clicked.connect(self.reject)
         self._btn_export.clicked.connect(self._on_export)
-        
+
         btn_action_layout.addStretch()
         btn_action_layout.addWidget(self._btn_cancel)
         btn_action_layout.addWidget(self._btn_export)
-        
+
         root.addLayout(btn_action_layout)
 
-        self.setStyleSheet(MODERN_DIALOG_THEME)
-        
+        is_dark = True
+        if hasattr(self.parent(), "theme_mode"):
+            is_dark = self.parent().theme_mode == "dark"
+        self.setStyleSheet(get_dialog_theme(is_dark))
+
+        # QListView explicito: permite estilizar a lista suspensa via QSS
+        # e remove a moldura/sombra nativa escura do popup.
+        for cmb in (self._cmb_dpi, self._cmb_bg, self._cmb_unit, self._cmb_scope):
+            cmb.setView(QListView())
+            cmb.view().window().setWindowFlags(
+                Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.NoDropShadowWindowHint)
+            cmb.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+
         # Chamada inicial para validar estado
         self._validate_export_state()
         self._update_png_count_label()
@@ -267,16 +294,14 @@ class ExportGraphDialog(QDialog):
     def _clear_all(self):
         for chk in [self._chk_wave, self._chk_hist, self._chk_psd, self._chk_spec]:
             chk.setChecked(False)
-        self._chk_raw.setChecked(False)
-        self._chk_env.setChecked(False)
 
     def _validate_export_state(self):
         has_panel = any(chk.isChecked() for chk in [self._chk_wave, self._chk_hist, self._chk_psd, self._chk_spec])
         if self._chk_wave.isChecked() and not (self._chk_raw.isChecked() or self._chk_env.isChecked()):
             has_panel = False
-            
+
         self._btn_export.setEnabled(has_panel)
-        
+
     def _update_png_count_label(self):
         if not self._rdo_png.isChecked():
             self._lbl_png_count.setVisible(False)
@@ -300,48 +325,90 @@ class ExportGraphDialog(QDialog):
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._anim.start()
 
-    def _build_config(self, filepath: str) -> ExportConfig:
-        scope = self._cmb_scope.currentText()
-        if scope == "Focal":
-            t_min, t_max = self._live_view.get('focal_xlim', (None, None))
-        elif scope == "Específico":
-            t_min, t_max = self._live_view.get('xlim', (None, None))
-        else:
-            t_min, t_max = None, None
+    def _build_config(self) -> ExportConfig:
+        # Painéis selecionados — ExportConfig espera uma lista de strings
+        panels = []
+        if self._chk_wave.isChecked():
+            panels.append('waveform')
+        if self._chk_hist.isChecked():
+            panels.append('histogram')
+        if self._chk_psd.isChecked():
+            panels.append('psd')
+        if self._chk_spec.isChecked():
+            panels.append('spectrogram')
 
+        # Escopo: espelha os presets do painel de espectrograma.
+        # 10k / Focal / Total definem a FAIXA DE FREQUENCIA (eixo Y);
+        # somente 'Específico' tambem recorta o TEMPO (eixo X) da vista atual.
+        d = getattr(self.session_context, "active_heavy_data", None) or {}
+        params = d.get("params") or {}
+        nyq_hz = float(d.get("rate", 44100.0)) / 2.0
         unit = self._cmb_unit.currentText()
-        if unit == "kHz":
-            f_min, f_max = self._live_view.get('ylim_khz', (None, None))
-        else:
-            f_min, f_max = self._live_view.get('ylim_hz', (None, None))
-            
+        scope = self._cmb_scope.currentText()
+        xmin = xmax = None
+        if scope == "10k":
+            y_hz = (0.0, min(10000.0, nyq_hz))
+        elif scope == "Focal":
+            carrier = float(d.get("carrier_freq", 0.0) or 0.0)
+            if carrier > 0:
+                algo = getattr(self.session_context, "algo_params", None) or {}
+                tol = float(params.get("freq_tolerance_hz", algo.get("freq_tolerance_hz", 700.0)))
+                y_hz = (max(0.0, carrier - tol), min(nyq_hz, carrier + tol))
+            else:
+                y_hz = (float(params.get("b1_min", 3200.0)),
+                        min(nyq_hz, float(params.get("b1_max", 6000.0))))
+        elif scope == "Específico":
+            xlim = self._live_view.get("xlim")
+            ylim = self._live_view.get("ylim")
+            if xlim:
+                xmin, xmax = float(xlim[0]), float(xlim[1])
+            if ylim:
+                live_scale = 1000.0 if self._live_view.get("spec_unit", "kHz") == "kHz" else 1.0
+                y_hz = (float(ylim[0]) * live_scale, float(ylim[1]) * live_scale)
+            else:
+                y_hz = (0.0, nyq_hz)
+        else:  # Total
+            y_hz = (0.0, nyq_hz)
+        unit_div = 1000.0 if unit == "kHz" else 1.0
+        ymin, ymax = y_hz[0] / unit_div, y_hz[1] / unit_div
+
+        # DPI
         dpi_text = self._cmb_dpi.currentText()
         dpi = 300
-        if "150" in dpi_text: dpi = 150
-        elif "600" in dpi_text: dpi = 600
+        if dpi_text.startswith("600"):
+            dpi = 600
+        elif dpi_text.startswith("150"):
+            dpi = 150
+        elif dpi_text.startswith("72"):
+            dpi = 72
 
-        is_dark = (self._cmb_bg.currentIndex() == 1)
+        # Fundo
+        is_dark = (self._cmb_bg.currentIndex() == 1) and self._parent_dark
+        bg_color   = '#1E293B' if is_dark else '#FFFFFF'
+        ax_color   = '#E2E8F0' if is_dark else '#1E293B'
+        text_color = '#E2E8F0' if is_dark else '#1E293B'
 
+        # Formato
         fmt = "pdf" if self._rdo_pdf.isChecked() else "png"
 
         return ExportConfig(
-            filepath=filepath,
-            panels={
-                "wave_raw": self._chk_wave.isChecked() and self._chk_raw.isChecked(),
-                "wave_env": self._chk_wave.isChecked() and self._chk_env.isChecked(),
-                "psd": self._chk_psd.isChecked(),
-                "spectrogram": self._chk_spec.isChecked(),
-                "histogram": self._chk_hist.isChecked()
-            },
-            time_range=(t_min, t_max),
-            freq_range=(f_min, f_max),
-            apply_x_to_wave=self._chk_apply_x.isChecked(),
+            panels=panels,
+            show_raw=self._chk_raw.isChecked(),
+            show_env=self._chk_env.isChecked(),
+            show_markers=self._chk_markers.isChecked(),
             grid=self._chk_grid.isChecked(),
-            markers=self._chk_markers.isChecked(),
             spec_unit=unit,
+            spec_xmin=xmin,
+            spec_xmax=xmax,
+            wave_apply_xlim=self._chk_apply_x.isChecked(),
+            spec_ymin=ymin if ymin is not None else 0.0,
+            spec_ymax=ymax if ymax is not None else 10.0,
             dpi=dpi,
-            dark_mode=is_dark,
-            format=fmt
+            bg_color=bg_color,
+            ax_color=ax_color,
+            text_color=text_color,
+            annotation_color=text_color,
+            fmt=fmt,
         )
 
     def _on_export(self):
@@ -349,29 +416,29 @@ class ExportGraphDialog(QDialog):
             path, _ = QFileDialog.getSaveFileName(self, "Salvar PDF", "", "PDF Files (*.pdf)")
         else:
             path = QFileDialog.getExistingDirectory(self, "Selecionar pasta para PNGs")
-            
+
         if not path:
             return
 
-        cfg = self._build_config(path)
-        ctx = _SnapshotCtx(
-            spec_data=self.session_context.analysis_cache.get('spec_data'),
-            wave_data=self.session_context.analysis_cache.get('wave_data'),
-            chirps=self.session_context.analysis_cache.get('chirps'),
-            active_filename=getattr(self.session_context, 'active_filename', 'export')
-        )
+        cfg = self._build_config()
 
         self._btn_export.setEnabled(False)
         self._btn_cancel.setText("Abortar")
         self._progress.setVisible(True)
         self._progress.setRange(0, 0)
-        
-        self._worker = _ExportWorker(cfg, ctx, parent=self)
+
+        snapshot = _SnapshotCtx(
+            getattr(self.session_context, "active_heavy_data", None),
+            getattr(self.session_context, "algo_params", None),
+            getattr(self.session_context, "active_filename", None),
+        )
+        self._worker = _ExportWorker(cfg, snapshot, path, parent=self)
         self._worker.progress_update.connect(self._on_progress_update)
         self._worker.finished_ok.connect(self._on_finished)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.start()
-        
+
+
     def _on_progress_update(self, current: int, total: int):
         if self._progress.maximum() == 0 and total > 0:
             self._progress.setRange(0, total)

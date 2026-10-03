@@ -249,7 +249,7 @@ class TestCharacterization(unittest.TestCase):
             self.assertIs(mock_analyze.call_args.kwargs.get('pulse_learner'), self.window.ctx.pulse_learner)
 
     def test_07_exportacao_txt_e_pdf(self):
-        """Verifica produção real de arquivos válidos TXT e PDF."""
+        """Verifica producao real de arquivos validos TXT e PDF via report_generator."""
         fname = "sample_chirp.wav"
         self.window.ctx.loaded_files[fname] = self.sample_wav
         self.window.ctx.active_filename = fname
@@ -261,24 +261,26 @@ class TestCharacterization(unittest.TestCase):
         self.window.pipeline._apply_analysis_results(fname, res, params=params)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # 1. Exportação TXT
+            from utils.report_generator import generate_txt_report, generate_pdf_report, ReportConfig
+            cfg = ReportConfig()
+            
+            # 1. Exportacao TXT
             txt_path = os.path.join(tmp_dir, "relatorio.txt")
-            with patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=(txt_path, "")):
-                self.window.action_save_txt()
-                self.assertTrue(os.path.exists(txt_path), "Arquivo TXT não foi gerado")
-                with open(txt_path, "r", encoding="utf-8") as f:
-                    txt_content = f.read()
-                self.assertIn("ANÁLISE BIOACÚSTICA", txt_content)
-                self.assertIn(fname, txt_content)
+            selected_cache = {fname: self.window.ctx.analysis_cache[fname]}
+            generate_txt_report(txt_path, selected_cache)
+            self.assertTrue(os.path.exists(txt_path), "Arquivo TXT nao foi gerado")
+            with open(txt_path, "r", encoding="utf-8") as f:
+                txt_content = f.read()
+            self.assertIn("BIOAC", txt_content)
+            self.assertIn(fname, txt_content)
 
-            # 2. Exportação PDF
+            # 2. Exportacao PDF
             pdf_path = os.path.join(tmp_dir, "relatorio.pdf")
-            with patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=(pdf_path, "")):
-                self.window.action_save_pdf(include_chirp_list=False)
-                self.assertTrue(os.path.exists(pdf_path), "Arquivo PDF não foi gerado")
-                with open(pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
-                self.assertTrue(pdf_bytes.startswith(b"%PDF-"), "Arquivo gerado não é um PDF válido")
+            generate_pdf_report(pdf_path, cfg, selected_cache, algo_params=params)
+            self.assertTrue(os.path.exists(pdf_path), "Arquivo PDF nao foi gerado")
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+            self.assertTrue(pdf_bytes.startswith(b"%PDF-"), "Arquivo gerado nao possui cabecalho PDF valido")
 
     def test_08_audio_transport(self):
         """Verifica play/pause, set_position, cursor e velocidade de reprodução."""

@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.action_save_txt)
         self.export_submenu.addAction(self.action_export)
-        self.action_export_pdf_mod = QAction("Relatório Científico Modular (PDF)...", self)
+        self.action_export_pdf_mod = QAction("Exportar Relatório Modular...", self)
         self.action_export_pdf_mod.setIcon(make_ui_icon("export", color="#0284C7", size=16))
         self.action_export_pdf_mod.triggered.connect(self.open_export_report_dialog)
         self.export_submenu.addAction(self.action_export_pdf_mod)
@@ -826,7 +826,7 @@ class MainWindow(QMainWindow):
 
             # Consolida a nova geometria sem permitir callbacks de sincronização
             # durante o reparenting. Em seguida, libera a guarda e faz um único draw.
-            QApplication.processEvents()
+            # QApplication.processEvents()  # Removido (Preveno de Reentrncia - FASE 11)
             self._swapping_panels = False
             self._refresh_all_canvases()
         finally:
@@ -1016,7 +1016,7 @@ class MainWindow(QMainWindow):
             total_h = 750
         self.stack_splitter.setSizes([total_h, 0, 0])
 
-        QApplication.processEvents()
+        # QApplication.processEvents()  # Removido (Preveno de Reentrncia - FASE 11)
         self.apply_plot_geometry()
         self._schedule_focus_update()
         self._refresh_all_canvases()
@@ -1989,7 +1989,8 @@ class MainWindow(QMainWindow):
                     self._generate_txt_report(self.get_checked_files())
 
                 elif action == 'pdf_modular':
-                    self._generate_pdf_report_modular(self.get_checked_files(), args)
+                    cfg, wcsv, cpath, wtxt, tpath, cmode = args if isinstance(args, tuple) and len(args) == 6 else (args[0], args[1], args[2], args[3], args[4], "brazilian") if isinstance(args, tuple) and len(args)==5 else (args, False, None, False, None, "brazilian")
+                    self._generate_pdf_report_modular(self.get_checked_files(), cfg, want_csv=wcsv, csv_path=cpath, want_txt=wtxt, txt_path=tpath, csv_mode=cmode)
             else:
                 QMessageBox.warning(self, "Falha na Análise", "Não foi possível gerar o relatório pois alguns arquivos falharam na análise.")
             return
@@ -2235,12 +2236,10 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         menu.setObjectName("exportMenu")
-        act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📊 Relatório Científico Modular (PDF)...")
-        act_pdf_mod.triggered.connect(self.open_export_report_dialog)
-        menu.addSeparator()
-        act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), "📝 Exportar Relatório em Texto (.txt)")
+        act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), I18N[self.lang]["export"])
         act_txt.triggered.connect(self.action_save_txt)
-        
+        act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📊 Exportar Relatório Modular...")
+        act_pdf_mod.triggered.connect(self.open_export_report_dialog)
         menu.addSeparator()
         act_graphs = menu.addAction(make_ui_icon("export", color="#10B981", size=15), "📊 Exportar Gráficos (PNG/PDF)…")
         act_graphs.triggered.connect(self.open_export_graph_dialog)
@@ -2264,15 +2263,20 @@ class MainWindow(QMainWindow):
         from ui.dialogs.export_report_dialog import ExportReportDialog
         dlg = ExportReportDialog(self.ctx, checked_files=checked_files, parent=self)
         if dlg.exec():
-            config = dlg.config
+            config    = dlg.config
+            want_csv  = dlg.export_csv
+            csv_path  = dlg.csv_path
+            want_txt  = dlg.export_txt
+            txt_path  = dlg.txt_path
+            csv_mode  = getattr(dlg, 'csv_mode', 'brazilian')
             unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
             if unprocessed:
-                self._pending_export_action = ('pdf_modular', config)
+                self._pending_export_action = ('pdf_modular', (config, want_csv, csv_path, want_txt, txt_path, csv_mode))
                 self._start_batch_for_export(unprocessed)
                 return
-            self._generate_pdf_report_modular(checked_files, config)
+            self._generate_pdf_report_modular(checked_files, config, want_csv=want_csv, csv_path=csv_path, want_txt=want_txt, txt_path=txt_path, csv_mode=csv_mode)
             
-    def _generate_pdf_report_modular(self, checked_files, config):
+    def _generate_pdf_report_modular(self, checked_files, config, want_csv=False, csv_path=None, want_txt=False, txt_path=None, csv_mode="brazilian"):
         selected_cache = {fname: self.ctx.analysis_cache[fname] for fname in checked_files if fname in self.ctx.analysis_cache}
         if not selected_cache:
             QMessageBox.warning(self, "Sem dados", "Nenhum dos áudios selecionados possui dados válidos.")
@@ -2280,23 +2284,31 @@ class MainWindow(QMainWindow):
 
         from core.worker import GenericWorker
         def _task():
-            from utils.report_generator import generate_pdf_report
-            generate_pdf_report(
-                config.output_path,
-                config,
-                selected_cache,
-                self.ctx.algo_params
-            )
-            return config.output_path
+            results = []
+            if config.output_path:
+                from utils.report_generator import generate_pdf_report
+                generate_pdf_report(config.output_path, config, selected_cache, self.ctx.algo_params)
+                results.append(config.output_path)
+            if want_csv and csv_path:
+                from utils.report_generator import generate_csv_report
+                generate_csv_report(csv_path, selected_cache, config.metadata, csv_mode=csv_mode)
+                results.append(csv_path)
+            if want_txt and txt_path:
+                from utils.report_generator import generate_txt_report
+                generate_txt_report(txt_path, selected_cache, config.metadata)
+                results.append(txt_path)
+            return results
 
-        def _on_finished(path):
-            QMessageBox.information(self, I18N[self.lang]["success"], f"Relatório PDF modular gerado com sucesso!\n\nSalvo em:\n{path}")
+        def _on_finished(paths):
+            paths_str = "\n".join(paths) if paths else ""
+            QMessageBox.information(self, I18N[self.lang]["success"],
+                                    f"Relatório gerado com sucesso!\n\nSalvo em:\n{paths_str}")
             if getattr(self, "_batch_spinner", None) is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None
 
         def _on_error(err_msg):
-            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha ao gerar relatório em PDF:\n{err_msg}")
+            QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha ao gerar relatório:\n{err_msg}")
             if getattr(self, "_batch_spinner", None) is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None
@@ -2305,15 +2317,14 @@ class MainWindow(QMainWindow):
         self._report_worker = worker
         worker.finished_signal.connect(_on_finished)
         worker.error_signal.connect(_on_error)
-        
-        # Start spinner
+
         if hasattr(self, "btn_export_main"):
             from ui.widgets import ButtonSpinner
             if not getattr(self, "_batch_spinner", None):
-                spinner = ButtonSpinner(self.btn_export_main, "Gerando PDF...")
+                spinner = ButtonSpinner(self.btn_export_main, "Gerando relatório...")
                 spinner.start()
                 self._batch_spinner = spinner
-                
+
         worker.start()
 
     def toggle_playback(self):
