@@ -1,3 +1,4 @@
+from utils.i18n import I18N
 """
 ui/controllers/plot_renderers.py
 ---------------------------------
@@ -231,7 +232,7 @@ class PlotRenderers:
             f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}"
         )
         win.lbl_total.setText(str(len(chirps)))
-        win.lbl_metric_sub.setText(f"Média: {d['media']:.2f}   |   Variância: {d.get('variancia', 0.0):.2f}")
+        win.lbl_metric_sub.setText(f'{I18N[win.lang]["mean"]}: {d["media"]:.2f}   |   {I18N[win.lang]["variance"]}: {d.get("variancia", 0.0):.2f}')
 
         win.update_ml_toggle_ui()
 

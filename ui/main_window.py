@@ -302,18 +302,18 @@ class MainWindow(QMainWindow):
         self.action_load.triggered.connect(self.action_load_wav)
         self.file_menu.addAction(self.action_load)
         
-        self.export_submenu = self.file_menu.addMenu("Exportar" if self.lang == "pt" else "Export")
+        self.export_submenu = self.file_menu.addMenu(I18N[self.lang]["export"])
         self.export_submenu.setIcon(make_ui_icon("export", color="#FFFFFF", size=16))
         
         self.action_export = QAction(I18N[self.lang]["export"], self)
         self.action_export.triggered.connect(self.export_controller.request_txt_export)
         self.export_submenu.addAction(self.action_export)
-        self.action_export_pdf_mod = QAction("Exportar Relatório Modular...", self)
+        self.action_export_pdf_mod = QAction(I18N[self.lang]["export_modular"], self)
         self.action_export_pdf_mod.setIcon(make_ui_icon("export", color="#0284C7", size=16))
         self.action_export_pdf_mod.triggered.connect(self.export_controller.request_modular_report)
         self.export_submenu.addAction(self.action_export_pdf_mod)
         self.export_submenu.addSeparator()
-        self.action_export_graphs = QAction("Exportar Gráficos (PNG/PDF)…", self)
+        self.action_export_graphs = QAction(I18N[self.lang]["export_graphs"], self)
         self.action_export_graphs.setIcon(make_ui_icon("export", color="#10B981", size=16))
         self.action_export_graphs.triggered.connect(self.export_controller.request_graph_export)
         self.export_submenu.addAction(self.action_export_graphs)
@@ -327,28 +327,28 @@ class MainWindow(QMainWindow):
         self.action_report_config.triggered.connect(self.open_report_settings)
         self.settings_menu.addAction(self.action_report_config)
         
-        self.action_ai_params = QAction("Parâmetros de IA" if self.lang == "pt" else "AI Parameters", self)
+        self.action_ai_params = QAction(I18N[self.lang]["ai_params"], self)
         self.action_ai_params.triggered.connect(self.open_ai_params)
         self.settings_menu.addAction(self.action_ai_params)
-        self.view_menu = self.app_menu.addMenu("Exibir" if self.lang == "pt" else "View")
-        self.action_view_wave = QAction("Forma de Onda" if self.lang == "pt" else "Waveform", self, checkable=True)
+        self.view_menu = self.app_menu.addMenu(I18N[self.lang]["view"])
+        self.action_view_wave = QAction(I18N[self.lang]["waveform"], self, checkable=True)
         self.action_view_wave.setChecked(True)
         self.action_view_wave.triggered.connect(lambda c: self.toggle_plot_panel_by_key("wave", c))
         self.view_menu.addAction(self.action_view_wave)
-        self.action_view_hist = QAction("Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self, checkable=True)
+        self.action_view_hist = QAction(I18N[self.lang]["interval_hist"], self, checkable=True)
         self.action_view_hist.setChecked(True)
         self.action_view_hist.triggered.connect(lambda c: self.toggle_plot_panel_by_key("hist", c))
         self.view_menu.addAction(self.action_view_hist)
-        self.action_view_freq = QAction("Espectro de Potência (PSD)" if self.lang == "pt" else "Power Spectral Density (PSD)", self, checkable=True)
+        self.action_view_freq = QAction(I18N[self.lang]["psd"], self, checkable=True)
         self.action_view_freq.setChecked(True)
         self.action_view_freq.triggered.connect(lambda c: self.toggle_plot_panel_by_key("freq", c))
         self.view_menu.addAction(self.action_view_freq)
-        self.action_view_spec = QAction("Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self, checkable=True)
+        self.action_view_spec = QAction(I18N[self.lang]["focal_spec"], self, checkable=True)
         self.action_view_spec.setChecked(True)
         self.action_view_spec.triggered.connect(lambda c: self.toggle_plot_panel_by_key("spec", c))
         self.view_menu.addAction(self.action_view_spec)
         self.view_menu.addSeparator()
-        self.action_reset_layout = QAction("↺ Restaurar Layout Padrão" if self.lang == "pt" else "↺ Reset Plot Layout", self)
+        self.action_reset_layout = QAction(I18N[self.lang]["reset_layout"], self)
         self.action_reset_layout.triggered.connect(self.reset_plot_layout)
         self.view_menu.addAction(self.action_reset_layout)
 
@@ -366,13 +366,13 @@ class MainWindow(QMainWindow):
         l = self.lang
         self.file_menu.setTitle(I18N[l]["file"])
         if hasattr(self, "export_submenu"):
-            self.export_submenu.setTitle("Exportar" if l == "pt" else "Export")
+            self.export_submenu.setTitle(I18N[l]["export"].split(" ")[0])
         self.action_load.setText(I18N[l]["load"])
         self.action_export.setText(I18N[l]["export"])
         if hasattr(self, "action_export_pdf_full"):
-            self.action_export_pdf_full.setText("Exportar Relatório Completo (.pdf)" if l == "pt" else "Export Full Report (.pdf)")
+            self.action_export_pdf_full.setText(I18N[l]["export_full"])
         if hasattr(self, "action_export_pdf_simple"):
-            self.action_export_pdf_simple.setText("Exportar Relatório Simplificado (.pdf)" if l == "pt" else "Export Simplified Report (.pdf)")
+            self.action_export_pdf_simple.setText(I18N[l]["export_simple"])
         self.settings_menu.setTitle(I18N[l]["settings"])
         self.action_algo_config.setText(I18N[l]["algo_settings"])
         self.action_report_config.setText(I18N[l]["gen_settings"])
@@ -381,15 +381,15 @@ class MainWindow(QMainWindow):
         
         
         if hasattr(self, "view_menu"):
-            self.view_menu.setTitle("Exibir" if l == "pt" else "View")
+            self.view_menu.setTitle(I18N[l]["view"])
         if hasattr(self, "action_view_wave"):
-            self.action_view_wave.setText("Forma de Onda" if l == "pt" else "Waveform")
+            self.action_view_wave.setText(I18N[l]["waveform"])
         if hasattr(self, "action_view_hist"):
-            self.action_view_hist.setText("Histograma de Intervalos" if l == "pt" else "Interval Histogram")
+            self.action_view_hist.setText(I18N[l]["interval_hist"])
         if hasattr(self, "action_view_freq"):
-            self.action_view_freq.setText("Espectro de Potência (PSD)" if l == "pt" else "Power Spectral Density (PSD)")
+            self.action_view_freq.setText(I18N[l]["psd"])
         if hasattr(self, "action_view_spec"):
-            self.action_view_spec.setText("Espectrograma Focal" if l == "pt" else "Focal Spectrogram")
+            self.action_view_spec.setText(I18N[l]["focal_spec"])
         if hasattr(self, "action_reset_layout"):
             self.action_reset_layout.setText("↺ Restaurar Layout Padrão" if l == "pt" else "↺ Reset Plot Layout")
         if hasattr(self, "btn_plots_menu"):
@@ -455,7 +455,7 @@ class MainWindow(QMainWindow):
         nav_l.addWidget(version)
         nav_l.addStretch()
 
-        self.theme_label = QLabel("Tema")
+        self.theme_label = QLabel(I18N[self.lang]["theme"])
         self.theme_label.setObjectName("themeLabel")
         nav_l.addWidget(self.theme_label)
         self.theme_toggle = ThemeToggle()
@@ -525,7 +525,7 @@ class MainWindow(QMainWindow):
         batch_btn_layout.setContentsMargins(0, 0, 0, 0)
         batch_btn_layout.setSpacing(6)
 
-        self.btn_analyze_selected = QPushButton("⚡ Analisar Selecionados")
+        self.btn_analyze_selected = QPushButton(I18N[self.lang]["analyze_selected"])
         self.btn_analyze_selected.setObjectName("summaryAction")
         self.btn_analyze_selected.setToolTip("Executar análise em todos os arquivos de áudio selecionados (marcados)")
         self.btn_analyze_selected.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -556,9 +556,9 @@ class MainWindow(QMainWindow):
 
         summary_info = QVBoxLayout()
         summary_info.setSpacing(2)
-        self.lbl_eyebrow = QLabel("Arquivo em Análise")
+        self.lbl_eyebrow = QLabel(I18N[self.lang]["file_in_analysis"])
         self.lbl_eyebrow.setObjectName("eyebrow")
-        self.lbl_summary_file = QLabel("Nenhum arquivo selecionado")
+        self.lbl_summary_file = QLabel(I18N[self.lang]["no_file_selected"])
         self.lbl_summary_file.setObjectName("summaryFile")
         self.lbl_summary_meta = QLabel("Carregue um arquivo WAV para iniciar a análise")
         self.lbl_summary_meta.setObjectName("summaryMeta")
@@ -636,7 +636,7 @@ class MainWindow(QMainWindow):
         self.btn_sync.setToolTip("Sincronizar gráficos no eixo X")
         row_tools.addWidget(self.btn_sync)
 
-        self.btn_export_main = QPushButton("Exportar ▾")
+        self.btn_export_main = QPushButton(I18N[self.lang]["export_menu"])
         self.btn_export_main.setObjectName("summaryAction")
         self.btn_export_main.setIcon(make_ui_icon("export", color=init_sec_icon, size=14))
         self.btn_export_main.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -645,7 +645,7 @@ class MainWindow(QMainWindow):
         self.btn_export_main.clicked.connect(self.show_export_menu)
         row_tools.addWidget(self.btn_export_main)
 
-        self.btn_plots_menu = QPushButton("Gráficos ▾" if self.lang == "pt" else "Graphs ▾")
+        self.btn_plots_menu = QPushButton(I18N[self.lang]["graphs"])
         self.btn_plots_menu.setObjectName("summaryAction")
         self.btn_plots_menu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_plots_menu.setFixedHeight(26)
@@ -667,7 +667,7 @@ class MainWindow(QMainWindow):
         self.lbl_metric_title.setObjectName("metricTitle")
         self.lbl_total = QLabel("-")
         self.lbl_total.setObjectName("metricValue")
-        self.lbl_metric_sub = QLabel("Média: -   |   Variância: -")
+        self.lbl_metric_sub = QLabel(f"{I18N[self.lang]['mean']}: -   |   {I18N[self.lang]['variance']}: -")
         self.lbl_metric_sub.setObjectName("metricSub")
         self.lbl_model_status = QLabel("")
         self.lbl_model_status.setObjectName("metricSub")
@@ -1058,10 +1058,10 @@ class MainWindow(QMainWindow):
         menu.setObjectName("plotsDropdownMenu")
 
         panels_info = [
-            ("spec", "Espectrograma Focal" if self.lang == "pt" else "Focal Spectrogram", self.panel_spec),
-            ("hist", "Histograma de Intervalos" if self.lang == "pt" else "Interval Histogram", self.panel_hist),
-            ("wave", "Forma de Onda" if self.lang == "pt" else "Waveform", self.panel_wave),
-            ("freq", "Espectro de Potência (PSD)" if self.lang == "pt" else "Power Spectral Density (PSD)", self.panel_freq),
+            ("spec", I18N[self.lang]["focal_spec"], self.panel_spec),
+            ("hist", I18N[self.lang]["interval_hist"], self.panel_hist),
+            ("wave", I18N[self.lang]["waveform"], self.panel_wave),
+            ("freq", I18N[self.lang]["psd"], self.panel_freq),
         ]
         for key, label, panel in panels_info:
             act = menu.addAction(label)
@@ -1070,7 +1070,7 @@ class MainWindow(QMainWindow):
             act.toggled.connect(lambda checked, p=panel: self.toggle_plot_panel(p, checked))
 
         menu.addSeparator()
-        act_reset = menu.addAction("↺ Restaurar Layout Padrão" if self.lang == "pt" else "↺ Reset Default Layout")
+        act_reset = menu.addAction(I18N[self.lang]["reset_layout"])
         act_reset.triggered.connect(self.reset_plot_layout)
 
         def _on_close():
@@ -1244,10 +1244,45 @@ class MainWindow(QMainWindow):
     def refresh_ui_texts(self):
         l = self.lang
         self.lbl_arquivos.setText(I18N[l]["files"].replace("🎧 ", ""))
-        self.btn_reanalisar_main.setText("Reanalisar")
+        self.btn_reanalisar_main.setText(I18N[self.lang]["reanalyze"].replace("🔄 ", ""))
         self.btn_learn_corrections.setText(I18N[l]["learn_corrections"])
         self.btn_sync.setText(I18N[l]["sync"].replace("🔗 ", ""))
-        self.lbl_metric_title.setText("Chilreios Totais" if l == "pt" else "Total Chirps")
+        self.lbl_metric_title.setText(I18N[l]["total_chirps"])
+        if hasattr(self, "theme_label"):
+            self.theme_label.setText(I18N[l]["theme"])
+        if hasattr(self, "btn_analyze_selected"):
+            self.btn_analyze_selected.setText(I18N[l]["analyze_selected"])
+        if hasattr(self, "lbl_eyebrow"):
+            self.lbl_eyebrow.setText(I18N[l]["file_in_analysis"])
+        if hasattr(self, "btn_export_main"):
+            self.btn_export_main.setText(I18N[l]["export_menu"])
+        if hasattr(self, "lbl_summary_file") and not self.ctx.session_context.active_file:
+            self.lbl_summary_file.setText(I18N[l]["no_file_selected"])
+        if hasattr(self, "action_export_pdf_mod"):
+            self.action_export_pdf_mod.setText(I18N[l]["export_modular"])
+        if hasattr(self, "action_export_graphs"):
+            self.action_export_graphs.setText(I18N[l]["export_graphs"])
+        if hasattr(self, "empty_graph_placeholder"):
+            self.empty_graph_placeholder.setText(I18N[l]["placeholder_text"])
+        if hasattr(self.ctx, "session_context") and self.ctx.session_context.active_file:
+            self.lbl_summary_meta.setText(I18N[l]["audio_loaded"])
+            if self.ctx.session_context.active_heavy_data:
+                self.btn_reanalisar_main.setText(I18N[l]["reanalyze"].replace("🔄 ", ""))
+            else:
+                self.btn_reanalisar_main.setText(I18N[l]["analyze"])
+        else:
+            self.lbl_summary_meta.setText(I18N[l]["audio_empty"])
+        
+        # update ML button
+        if hasattr(self.ctx, "algo_params"):
+            is_ml = self.ctx.algo_params.get("use_ml", True)
+            if is_ml:
+                self.btn_toggle_ml.setText(I18N[l]["ml_enabled"])
+                self.lbl_model_status.setText(I18N[l]["ml_enabled"])
+            else:
+                self.btn_toggle_ml.setText(I18N[l]["ml_disabled"])
+                self.lbl_model_status.setText(I18N[l]["ml_disabled_dsp"])
+            
         for p in self.all_panels:
             p.update_lang(l)
         self.update_menu_text()
@@ -1497,7 +1532,7 @@ class MainWindow(QMainWindow):
         self.transport_panel.btn_play.setEnabled(True)
 
         if filename in self.ctx.analysis_cache:
-            self.btn_reanalisar_main.setText("Reanalisar")
+            self.btn_reanalisar_main.setText(I18N[self.lang]["reanalyze"].replace("🔄 ", ""))
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
             self.ctx.activate_cached_file(filename)
@@ -1509,7 +1544,7 @@ class MainWindow(QMainWindow):
                 self.panel_freq.set_carrier_info(carrier_freq, tol_val)
             self.plot_renderers.render_dashboard(filename)
         else:
-            self.btn_reanalisar_main.setText("Analisar")
+            self.btn_reanalisar_main.setText(I18N[self.lang]["analyze"])
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
             self.reset_audio_state(filename)
@@ -1563,7 +1598,7 @@ class MainWindow(QMainWindow):
             self.lbl_summary_meta.setText("Áudio carregado • Clique em 'Analisar'")
             self.transport_panel.timeline.set_data(0.0, [])
         self.lbl_total.setText("-")
-        self.lbl_metric_sub.setText("Média: --   |   Variância: --")
+        self.lbl_metric_sub.setText(f"{I18N[self.lang]['mean']}: --   |   {I18N[self.lang]['variance']}: --")
         for panel in self.all_panels:
             panel.ax.clear()
             panel.canvas.draw_idle()
@@ -1994,7 +2029,7 @@ class MainWindow(QMainWindow):
         curr = self.list_widget.currentItem()
         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
         if curr_name in self.ctx.analysis_cache and hasattr(self, "btn_reanalisar_main"):
-            self.btn_reanalisar_main.setText("Reanalisar")
+            self.btn_reanalisar_main.setText(I18N[self.lang]["reanalyze"].replace("🔄 ", ""))
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
             self.btn_reanalisar_main.setToolTip("Reanalisar este áudio com os parâmetros atuais")
 
@@ -2086,14 +2121,14 @@ class MainWindow(QMainWindow):
                 panel.canvas.draw_idle()
 
     def _update_summary_placeholder(self, filename=""):
-        self.lbl_summary_file.setText(filename or "Nenhum arquivo selecionado")
-        self.lbl_summary_meta.setText("Carregue um arquivo WAV para iniciar a análise")
+        self.lbl_summary_file.setText(filename or I18N[self.lang]["no_file_selected"])
+        self.lbl_summary_meta.setText(I18N[self.lang]["audio_empty"])
         self.lbl_total.setText("-")
-        self.lbl_metric_sub.setText("Média: -   |   Variância: -")
+        self.lbl_metric_sub.setText(f"{I18N[self.lang]['mean']}: -   |   {I18N[self.lang]['variance']}: -")
         if hasattr(self, 'lbl_elapsed'):
             self.transport_panel.lbl_elapsed.setText("00:00.00 / 00:00.00")
         if hasattr(self, 'btn_reanalisar_main'):
-            self.btn_reanalisar_main.setText("Analisar")
+            self.btn_reanalisar_main.setText(I18N[self.lang]["analyze"])
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
         self.transport_panel.timeline.set_data(0, [])

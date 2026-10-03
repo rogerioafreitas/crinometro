@@ -342,7 +342,7 @@ class PlotPanel(QFrame):
             self.btn_spec_preset_focal.clicked.connect(lambda: self._apply_preset("focal"))
             preset_layout.addWidget(self.btn_spec_preset_focal)
 
-            self.btn_spec_preset_full = QPushButton("Total")
+            self.btn_spec_preset_full = QPushButton(I18N[self.lang]["total"] if hasattr(self, "lang") else "Total")
             self.btn_spec_preset_full.setProperty("class", "segBtn")
             self.btn_spec_preset_full.setCursor(Qt.CursorShape.PointingHandCursor)
             self.btn_spec_preset_full.setToolTip("Visualização completa até a frequência de Nyquist")
@@ -539,6 +539,10 @@ class PlotPanel(QFrame):
 
     def update_lang(self, lang):
         self.lbl_title.setText(I18N[lang][self.title_key])
+        if hasattr(self, "lbl_tol_ref"):
+            self.lbl_tol_ref.setText(I18N[lang]["filter"])
+        if hasattr(self, "btn_spec_preset_full"):
+            self.btn_spec_preset_full.setText(I18N[lang]["total"])
 
     def apply_dark_theme(self):
         dark = getattr(self.window(), "theme_mode", "dark") == "dark"
@@ -1334,9 +1338,9 @@ class PlotPanel(QFrame):
         # Divisor vertical sutil
         layout.addWidget(self._make_vsep())
 
-        lbl_tol = QLabel("Filtro:")
-        lbl_tol.setProperty("class", "specCtrlMuted")
-        layout.addWidget(lbl_tol)
+        self.lbl_tol_ref = QLabel(I18N[self.lang]["filter"] if hasattr(self, "lang") else "Filtro:")
+        self.lbl_tol_ref.setProperty("class", "specCtrlMuted")
+        layout.addWidget(self.lbl_tol_ref)
 
         self.slider_carrier_tol = QSlider(Qt.Orientation.Horizontal)
         self.slider_carrier_tol.setProperty("class", "specSlider")

@@ -1,3 +1,4 @@
+from utils.i18n import I18N
 """
 ui/controllers/editor_controller.py
 -----------------------------------
@@ -440,7 +441,7 @@ class EditorController(QObject):
 
                 win.lbl_total.setText(str(len(chirps)))
 
-                win.lbl_metric_sub.setText(f"Média: {media:.2f}   |   Variância: {variancia:.2f}")
+                win.lbl_metric_sub.setText(f'{I18N[win.lang]["mean"]}: {media:.2f}   |   {I18N[win.lang]["variance"]}: {variancia:.2f}')
 
             metrics_payload = {
                 "total_chirps": len(chirps),
