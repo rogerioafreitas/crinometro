@@ -665,9 +665,9 @@ class MainWindow(QMainWindow):
         metrics.setSpacing(1)
         self.lbl_metric_title = QLabel("Chilreios Totais")
         self.lbl_metric_title.setObjectName("metricTitle")
-        self.lbl_total = QLabel("—")
+        self.lbl_total = QLabel("-")
         self.lbl_total.setObjectName("metricValue")
-        self.lbl_metric_sub = QLabel("Moda: —   |   Média: —")
+        self.lbl_metric_sub = QLabel("Média: -   |   Variância: -")
         self.lbl_metric_sub.setObjectName("metricSub")
         self.lbl_model_status = QLabel("")
         self.lbl_model_status.setObjectName("metricSub")
@@ -1545,7 +1545,7 @@ class MainWindow(QMainWindow):
         except Exception:
             self.lbl_summary_meta.setText("Áudio carregado • Clique em 'Analisar'")
             self.transport_panel.timeline.set_data(0.0, [])
-        self.lbl_total.setText("--")
+        self.lbl_total.setText("-")
         self.lbl_metric_sub.setText("Média: --   |   Variância: --")
         for panel in self.all_panels:
             panel.ax.clear()
@@ -2071,8 +2071,8 @@ class MainWindow(QMainWindow):
     def _update_summary_placeholder(self, filename=""):
         self.lbl_summary_file.setText(filename or "Nenhum arquivo selecionado")
         self.lbl_summary_meta.setText("Carregue um arquivo WAV para iniciar a análise")
-        self.lbl_total.setText("—")
-        self.lbl_metric_sub.setText("Moda: —   |   Média: —")
+        self.lbl_total.setText("-")
+        self.lbl_metric_sub.setText("Média: -   |   Variância: -")
         if hasattr(self, 'lbl_elapsed'):
             self.transport_panel.lbl_elapsed.setText("00:00.00 / 00:00.00")
         if hasattr(self, 'btn_reanalisar_main'):

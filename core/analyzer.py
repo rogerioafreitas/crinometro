@@ -346,7 +346,7 @@ class CricketAnalyzer:
                 discarded_reasons[p_int] = f"Pulso isolado / sequência incompleta (< {min_p} pulsos por chilreio)"
 
         all_distant = sorted(list(discarded_reasons.keys()))
-        return (peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons)
+        return (peaks, chirps, chirp_peaks_list, media, moda, variancia, all_distant, discarded_reasons)
 
     @staticmethod
     def regroup_chirps(peaks, params, rate, env, raw_signal=None):

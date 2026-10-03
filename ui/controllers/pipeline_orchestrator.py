@@ -128,7 +128,7 @@ class PipelineOrchestrator(QObject):
         use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
 
-        peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons = (
+        peaks, chirps, chirp_peaks_list, media, moda, variancia, all_distant, discarded_reasons = (
             CricketAnalyzer.reevaluate_carrier_tolerance(
                 valid_peaks_stage2, carrier_freq, new_tol,
                 rate, t_spec, dom_freqs, env, effective_params,
@@ -142,6 +142,7 @@ class PipelineOrchestrator(QObject):
         d["chirp_peaks_list"] = chirp_peaks_list
         d["media"] = media
         d["moda"] = moda
+        d["variancia"] = variancia
         d["distant_peaks"] = list(all_distant)
         d["discarded_peaks_reasons"] = discarded_reasons
         if "params" in d:
@@ -166,6 +167,9 @@ class PipelineOrchestrator(QObject):
 
         rate, data, data_b1, env, peaks, chirps, chirp_peaks_list, media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration = results[:14]
         variancia = results[21] if len(results) > 21 else 0.0
+        if variancia == 0.0 and chirps and len(chirps) > 1:
+            import statistics
+            variancia = float(statistics.variance(chirps))
         distant_peaks = results[14] if len(results) > 14 else []
         carrier_freq = float(results[15]) if len(results) > 15 else 0.0
         discarded_peaks_reasons = results[16] if len(results) > 16 else {}
@@ -224,7 +228,7 @@ class PipelineOrchestrator(QObject):
 
         heavy_data = {
             "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(file_peaks_detected), "chirps": chirps,
-            "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda,
+            "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda, "variancia": variancia,
             "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
             "duration": audio_duration, "params": params.copy(),
             "peaks_detected": list(file_peaks_detected),
