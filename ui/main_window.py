@@ -689,6 +689,17 @@ class MainWindow(QMainWindow):
         self.dashboard_splitter.splitterMoved.connect(self._on_dashboard_splitter_moved)
         right_layout.addWidget(self.dashboard_splitter, 1)
 
+        self.empty_graph_placeholder = QLabel(
+            "\n\n".join([
+                "Nenhum gráfico visível no momento.",
+                "Abra o menu 'Gráficos' logo acima para adicionar\no Espectrograma, Histograma, PSD ou Forma de Onda."
+            ])
+        )
+        self.empty_graph_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_graph_placeholder.setObjectName("emptyGraphPlaceholder")
+        self.empty_graph_placeholder.setVisible(False)
+        right_layout.addWidget(self.empty_graph_placeholder, 1)
+
         self.main_host = QWidget()
         self.main_host.setObjectName("mainHostWidget")
         self.main_host_layout = QVBoxLayout(self.main_host)
@@ -963,7 +974,11 @@ class MainWindow(QMainWindow):
 
         visible_stack = [p for p in self.stack_panels if not getattr(p, "_user_closed", False)]
         self.stack_splitter.setVisible(len(visible_stack) > 0)
-        self.dashboard_splitter.setVisible(main_vis or len(visible_stack) > 0)
+        any_visible = main_vis or len(visible_stack) > 0
+        self.dashboard_splitter.setVisible(any_visible)
+        
+        if hasattr(self, 'empty_graph_placeholder'):
+            self.empty_graph_placeholder.setVisible(not any_visible)
 
         # Se ambos estão visíveis, garante proporções válidas no dashboard_splitter
         if main_vis and len(visible_stack) > 0:

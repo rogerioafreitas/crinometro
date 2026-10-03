@@ -972,3 +972,10 @@ def get_modern_stylesheet(theme_mode="dark"):
     if theme_mode == "light":
         return DARK_STYLESHEET + "\n" + LIGHT_STYLESHEET_OVERRIDES
     return DARK_STYLESHEET
+
+DARK_STYLESHEET += """
+QLabel#emptyGraphPlaceholder { color: #64748B; font-size: 15px; font-weight: bold; background: transparent; }
+"""
+LIGHT_STYLESHEET_OVERRIDES += """
+QLabel#emptyGraphPlaceholder { color: #94A3B8; font-size: 15px; font-weight: bold; background: transparent; }
+"""
