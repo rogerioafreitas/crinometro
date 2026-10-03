@@ -80,6 +80,12 @@ I18N = {
         "export_graphs": "📉 Exportar Gráficos (PNG/PDF)...",
         "filter": "Filtro:",
         "total": "Total",
+        "ml_enabled_supervised": "🤖 IA: Ativada (Modelo Supervisionado)",
+        "ml_enabled_unsupervised": "🤖 IA: Ativada (GMM não-supervisionado)",
+        "ml_enabled_tooltip": "IA Ativada: filtra ruído e discrimina grilos distantes. Clique para desativar.",
+        "ml_disabled_tooltip": "IA Desativada: análise executada estritamente por processamento de sinal (DSP). Clique para ativar.",
+        "reset_ai_done_title": "Reset Concluído",
+        "reset_ai_done_msg": "O aprendizado de máquina foi completamente zerado. O algoritmo retornou ao estado original DSP.",
     },
     "en": {
         "app_title": f"Crinometer - {APP_VERSION_LABEL}",
@@ -157,6 +163,12 @@ I18N = {
         "export_graphs": "📉 Export Graphs (PNG/PDF)...",
         "filter": "Filter:",
         "total": "Full",
+        "ml_enabled_supervised": "🤖 AI: Enabled (Supervised Model)",
+        "ml_enabled_unsupervised": "🤖 AI: Enabled (Unsupervised GMM)",
+        "ml_enabled_tooltip": "AI Enabled: filters noise and discriminates distant crickets. Click to disable.",
+        "ml_disabled_tooltip": "AI Disabled: analysis executed strictly by signal processing (DSP). Click to enable.",
+        "reset_ai_done_title": "Reset Completed",
+        "reset_ai_done_msg": "Machine learning was completely cleared. The algorithm has returned to its original DSP state.",
     }
 }
 

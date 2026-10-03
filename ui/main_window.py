@@ -1274,14 +1274,7 @@ class MainWindow(QMainWindow):
             self.lbl_summary_meta.setText(I18N[l]["audio_empty"])
         
         # update ML button
-        if hasattr(self.ctx, "algo_params"):
-            is_ml = self.ctx.algo_params.get("use_ml", True)
-            if is_ml:
-                self.btn_toggle_ml.setText(I18N[l]["ml_enabled"])
-                self.lbl_model_status.setText(I18N[l]["ml_enabled"])
-            else:
-                self.btn_toggle_ml.setText(I18N[l]["ml_disabled"])
-                self.lbl_model_status.setText(I18N[l]["ml_disabled_dsp"])
+        self.update_ml_toggle_ui()
             
         for p in self.all_panels:
             p.update_lang(l)
@@ -1745,8 +1738,8 @@ class MainWindow(QMainWindow):
                 
                 QMessageBox.information(
                     self, 
-                    "Reset Concluído", 
-                    "O aprendizado de máquina foi completamente zerado. O algoritmo retornou ao estado original DSP."
+                    I18N[self.lang].get("reset_ai_done_title", "Reset Concluído"), 
+                    I18N[self.lang].get("reset_ai_done_msg", "O aprendizado de máquina foi completamente zerado. O algoritmo retornou ao estado original DSP.")
                 )
                 
                 # Se houver áudio carregado, força reanálise para aplicar o DSP limpo
