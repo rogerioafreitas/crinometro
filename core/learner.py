@@ -872,7 +872,7 @@ class PulseLearner:
         try:
             try:
                 with open(self.persistence_path, "rb") as f:
-                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype])
+                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
             except Exception:
                 with open(self.persistence_path, "rb") as f:
                     payload = pickle.load(f)
@@ -965,7 +965,7 @@ class PulseLearner:
                 return False
             model_bytes = base64.b64decode(payload["model_pickle_b64"])
             try:
-                self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier])
+                self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
             except Exception:
                 self.model = pickle.loads(model_bytes)
             return True
@@ -1012,7 +1012,7 @@ class PulseLearner:
             raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
         try:
             with open(filepath, "rb") as f:
-                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype])
+                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
         except Exception:
             with open(filepath, "rb") as f:
                 payload = pickle.load(f)
