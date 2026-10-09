@@ -1800,10 +1800,11 @@ class MainWindow(QMainWindow):
                 "corrections_by_file": {},
                 "pulse_learner": None
             }
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(clean_config, f, indent=4, ensure_ascii=False)
+            from utils.persistence import atomic_write_json
+            atomic_write_json(CONFIG_FILE, clean_config)
         except Exception as exc:
-            pass  # print(f"Erro ao limpar config: {exc}")
+            import logging
+            logging.getLogger("crinometro").error(f"Erro ao limpar config: {exc}", exc_info=True)
 
         # 5. Se houver arquivo ativo, reanalisa do zero com os padrões
         curr = self.list_widget.currentItem()
@@ -1928,8 +1929,8 @@ class MainWindow(QMainWindow):
                 if self.ctx.pulse_learner.model is not None:
                     config["pulse_learner"] = self.ctx.pulse_learner.serialize()
                     self.ctx.pulse_learner.save_persisted_training()
-                with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+                from utils.persistence import atomic_write_json
+                atomic_write_json(CONFIG_FILE, config)
                 if not silent:
                     QMessageBox.information(self, I18N[self.lang]["success"], I18N[self.lang]["config_saved"])
             except Exception as e:

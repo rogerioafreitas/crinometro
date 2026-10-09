@@ -840,11 +840,12 @@ class PulseLearner:
                     config = {}
                 config["pulse_learner"] = self.serialize()
                 config["pruning_rules"] = getattr(self, "pruning_rules", [])
-                with open(self.config_path, "w", encoding="utf-8") as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+                from utils.persistence import atomic_write_json
+                atomic_write_json(self.config_path, config)
                 return True
-            except (OSError, TypeError, ValueError) as exc:
-                pass  # print(f"Erro ao persistir modelo de aprendizado: {exc}")
+            except Exception as exc:
+                import logging
+                logging.getLogger("crinometro").error(f"Erro ao persistir modelo de aprendizado: {exc}", exc_info=True)
                 return False
 
         finally:
@@ -1048,8 +1049,9 @@ class PulseLearner:
             if os.path.exists(self.persistence_path):
                 try:
                     os.remove(self.persistence_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    import logging
+                    logging.getLogger("crinometro").error(f"Erro ao remover {self.persistence_path}: {e}", exc_info=True)
             try:
                 if os.path.exists(self.config_path):
                     with open(self.config_path, "r", encoding="utf-8") as f:
@@ -1057,9 +1059,10 @@ class PulseLearner:
                     if isinstance(config, dict):
                         config["pulse_learner"] = None
                         config["pruning_rules"] = []
-                        with open(self.config_path, "w", encoding="utf-8") as f:
-                            json.dump(config, f, indent=4, ensure_ascii=False)
-            except Exception:
-                pass
+                        from utils.persistence import atomic_write_json
+                        atomic_write_json(self.config_path, config)
+            except Exception as e:
+                import logging
+                logging.getLogger("crinometro").error(f"Erro no reset do pulse_learner config: {e}", exc_info=True)
 
 
