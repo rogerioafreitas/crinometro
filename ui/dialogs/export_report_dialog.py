@@ -122,13 +122,11 @@ class ExportReportDialog(QDialog):
         self.chk_resumo   = QCheckBox(t["chk_exec_summary"])
         self.chk_metricas = QCheckBox(t["chk_consolidated_metrics"])
         self.chk_cadencia = QCheckBox(t["chk_cadence_diag"])
-        self.chk_dolbear  = QCheckBox(t["chk_dolbear_est"])
         self.chk_pulsos   = QCheckBox(t["chk_pulse_listing"])
         
         for chk in (self.chk_resumo, self.chk_metricas, self.chk_cadencia,
                     self.chk_pulsos):
             vmod.addWidget(chk)
-        self.chk_dolbear.setVisible(False)
         mod_layout.addWidget(group_mod)
 
         # ── Formatos de exportação ─────────────────────────────────────────────
@@ -290,7 +288,6 @@ class ExportReportDialog(QDialog):
             resumo      = self.chk_resumo.isChecked(),
             metricas    = self.chk_metricas.isChecked(),
             cadencia    = self.chk_cadencia.isChecked(),
-            dolbear     = self.chk_dolbear.isChecked(),
             lista_pulsos= self.chk_pulsos.isChecked()
         )
 

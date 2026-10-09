@@ -43,3 +43,35 @@ class GenericWorker(QThread):
                 self.error_signal.emit(str(exc))
             else:
                 self.cancelled_signal.emit()
+
+class WorkerRegistry:
+    def __init__(self):
+        self._workers = []
+        
+    def retain(self, worker):
+        self._workers.append(worker)
+        worker.finished.connect(lambda: self._remove(worker))
+        worker.finished_signal.connect(lambda _: self._remove(worker))
+        worker.cancelled_signal.connect(lambda: self._remove(worker))
+        worker.error_signal.connect(lambda _: self._remove(worker))
+        
+    def _remove(self, worker):
+        if worker in self._workers:
+            self._workers.remove(worker)
+            
+    def abort_all(self):
+        for w in self._workers:
+            if w.isRunning():
+                w.abort()
+                
+    def wait_all(self, timeout_ms=3000):
+        for w in self._workers:
+            if w.isRunning():
+                w.wait(timeout_ms)
+                
+    def count(self):
+        return len([w for w in self._workers if w.isRunning()])
+    
+    def shutdown(self, timeout_ms=3000):
+        self.abort_all()
+        self.wait_all(timeout_ms)

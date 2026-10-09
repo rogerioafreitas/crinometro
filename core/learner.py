@@ -916,7 +916,7 @@ class PulseLearner:
                 self.model = model
             return self.model is not None or self.training_features.size > 0
         except Exception as exc:
-            logging.error(f"Erro ao carregar modelo: {exc}", exc_info=True)
+            logging.getLogger("crinometro").error(f"Erro ao carregar modelo: {exc}", exc_info=True)
             self.last_error = str(exc)
             self.degraded = True
             try:

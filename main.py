@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 
-from utils.helpers import setup_global_exception_handler
+from utils.helpers import setup_global_exception_handler, setup_logging
 from utils.icons import get_app_icon
 from ui.main_window import MainWindow
 from ui.widgets import LoadingScreen
@@ -19,6 +19,7 @@ from ui.widgets import LoadingScreen
 
 def main():
     setup_global_exception_handler()
+    setup_logging()
 
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--launcher-managed", action="store_true")

@@ -394,7 +394,6 @@ Campos planejados:
 - [x] Resumo Executivo e Tabela de Arquivos
 - [x] Métricas Temporais Consolidadas
 - [x] Diagnóstico de Cadência Rítmica
-- [x] Estimativa de Temperatura (Dolbear)
 - [x] Gráficos selecionados
 - [x] Listagem exaustiva de chilreios e pulsos
 

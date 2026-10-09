@@ -27,6 +27,16 @@ class ExportController(QObject):
         self._batch_spinner = None
         self._report_worker = None
         
+    def _retain(self, worker):
+        if not hasattr(self, '_workers'):
+            from core.worker import WorkerRegistry
+            self._workers = WorkerRegistry()
+        self._workers.retain(worker)
+        
+    def shutdown(self):
+        if hasattr(self, '_workers'):
+            self._workers.shutdown()
+        
         # Conectar sinal do batch analysis para destravar a exportação se estiver aguardando
         self.pipeline.batch_completed.connect(self._on_batch_completed)
         self.pipeline.batch_failed.connect(self._on_batch_failed)

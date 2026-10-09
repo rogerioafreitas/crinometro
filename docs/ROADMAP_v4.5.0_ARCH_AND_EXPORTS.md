@@ -1,28 +1,28 @@
-Ôªø# Roadmap de Implementa√ß√£o ‚Äî Arquitetura e Exporta√ß√£o Cient√≠fica (Crin√¥metro)
+# Roadmap de ImplementaÁ„o ó Arquitetura e ExportaÁ„o CientÌfica (CrinÙmetro)
 
-**Documento de Planejamento Arquitetural e Execu√ß√£o Passo a Passo**
-**Vers√£o Alvo:** v4.4.0 / v4.5.0 (Refatora√ß√£o Estrutural e Ferramentas de Exporta√ß√£o)
+**Documento de Planejamento Arquitetural e ExecuÁ„o Passo a Passo**
+**Vers„o Alvo:** v4.4.0 / v4.5.0 (RefatoraÁ„o Estrutural e Ferramentas de ExportaÁ„o)
 **Autor:** Antigravity (Arquiteto de Software e DSP)
 
-Este documento detalha o plano de execu√ß√£o exaustivo para o desacoplamento da `main_window.py` (God Class com mais de 4.000 linhas) e a implementa√ß√£o de novos fluxos de exporta√ß√£o cient√≠fica de alto n√≠vel. O planejamento √© estritamente baseado no levantamento arquitetural profundo realizado sobre o c√≥digo-fonte atual.
+Este documento detalha o plano de execuÁ„o exaustivo para o desacoplamento da `main_window.py` (God Class com mais de 4.000 linhas) e a implementaÁ„o de novos fluxos de exportaÁ„o cientÌfica de alto nÌvel. O planejamento È estritamente baseado no levantamento arquitetural profundo realizado sobre o cÛdigo-fonte atual.
 
 ---
 
-## 1. Vis√£o Geral da Arquitetura Alvo (Desacoplamento)
+## 1. Vis„o Geral da Arquitetura Alvo (Desacoplamento)
 
-Para resolver o anti-pattern de *God Class* da `MainWindow`, migraremos de um design monol√≠tico para um padr√£o baseado em **M√≥dulos Controladores Espec√≠ficos** injetados via composi√ß√£o. O estado global mut√°vel ser√° extra√≠do para um padr√£o *Mediator* ou *State Store* (Contexto de Sess√£o), eliminando depend√™ncias circulares.
+Para resolver o anti-pattern de *God Class* da `MainWindow`, migraremos de um design monolÌtico para um padr„o baseado em **MÛdulos Controladores EspecÌficos** injetados via composiÁ„o. O estado global mut·vel ser· extraÌdo para um padr„o *Mediator* ou *State Store* (Contexto de Sess„o), eliminando dependÍncias circulares.
 
 ```mermaid
 graph TD
-    MW[ui/main_window.py\n(Apenas UI Layout e Inje√ß√£o)] --> SS[core/session_context.py\n(Estado Compartilhado)]
+    MW[ui/main_window.py\n(Apenas UI Layout e InjeÁ„o)] --> SS[core/session_context.py\n(Estado Compartilhado)]
     MW --> C1[ui/controllers/pipeline_orchestrator.py]
     MW --> C2[ui/controllers/plot_renderers.py]
     MW --> C3[ui/controllers/navigation_controller.py]
     MW --> C4[ui/controllers/editor_controller.py]
     
-    C1 -. L√™/Grava .-> SS
-    C2 -. L√™ .-> SS
-    C3 -. L√™/Grava .-> SS
+    C1 -. LÍ/Grava .-> SS
+    C2 -. LÍ .-> SS
+    C3 -. LÍ/Grava .-> SS
     C4 -. Grava .-> SS
     
     C1 --> DSP[core/analyzer.py]
@@ -31,109 +31,108 @@ graph TD
 
 ---
 
-## BLOCO 1: REFATORA√á√ÉO E DESACOPLAMENTO DA MAIN WINDOW
+## BLOCO 1: REFATORA«√O E DESACOPLAMENTO DA MAIN WINDOW
 
-### 1.1. Extra√ß√£o do Estado Compartilhado (`core/session_context.py`)
-A `MainWindow` atualmente armazena centenas de vari√°veis de estado que misturam l√≥gica de neg√≥cio, dados DSP e metadados de UI. 
-- **A√ß√£o:** Criar a classe `SessionContext` para encapsular:
+### 1.1. ExtraÁ„o do Estado Compartilhado (`core/session_context.py`)
+A `MainWindow` atualmente armazena centenas de vari·veis de estado que misturam lÛgica de negÛcio, dados DSP e metadados de UI. 
+- **AÁ„o:** Criar a classe `SessionContext` para encapsular:
   - `active_heavy_data`, `analysis_cache`, `loaded_files`
   - `peaks_detected`, `peaks_user_verified`, `corrections_by_file`
   - `algo_params`, `_adaptive_overrides`, `report_params`
-  - `pulse_learner` (Inst√¢ncia do ML)
-- **Desacoplamento:** Controladores receber√£o a inst√¢ncia de `SessionContext` no `__init__`. Altera√ß√µes no estado disparar√£o sinais Qt (`pyqtSignal`) nativos do contexto (ex: `state_changed.emit("active_heavy_data")`), que a UI assinar√° para atualizar r√≥tulos e pain√©is de forma reativa.
+  - `pulse_learner` (Inst‚ncia do ML)
+- **Desacoplamento:** Controladores receber„o a inst‚ncia de `SessionContext` no `__init__`. AlteraÁıes no estado disparar„o sinais Qt (`pyqtSignal`) nativos do contexto (ex: `state_changed.emit("active_heavy_data")`), que a UI assinar· para atualizar rÛtulos e painÈis de forma reativa.
 
-### 1.2. M√≥dulo: `ui/controllers/pipeline_orchestrator.py`
-Respons√°vel pela execu√ß√£o ass√≠ncrona, controle do `GenericWorker` e atualiza√ß√£o de limites do DSP.
-- **M√©todos a migrar da MainWindow:**
+### 1.2. MÛdulo: `ui/controllers/pipeline_orchestrator.py`
+Respons·vel pela execuÁ„o assÌncrona, controle do `GenericWorker` e atualizaÁ„o de limites do DSP.
+- **MÈtodos a migrar da MainWindow:**
   - `force_reanalyze(self)`
   - `run_analysis(self, filename, params, render, validate_all)`
   - `_apply_analysis_results(self, ...)` 
   - `apply_realtime_freq_tolerance(self, new_tol, source_panel)`
   - `_execute_realtime_freq_tolerance(self)`
-- **Estrat√©gia:** O orquestrador n√£o desenhar√° na tela. Ap√≥s o `_apply_analysis_results` popular o `SessionContext`, o orquestrador emitir√° o sinal `analysis_completed(filename)`. A `MainWindow` assinar√° esse sinal para chamar o `PlotRenderers.render_dashboard()`.
+- **EstratÈgia:** O orquestrador n„o desenhar· na tela. ApÛs o `_apply_analysis_results` popular o `SessionContext`, o orquestrador emitir· o sinal `analysis_completed(filename)`. A `MainWindow` assinar· esse sinal para chamar o `PlotRenderers.render_dashboard()`.
 
-### 1.3. M√≥dulo: `ui/controllers/plot_renderers.py`
-Respons√°vel exclusivamente por coordenar as *engines* de alta performance e sobrepor marcadores nos eixos do Matplotlib.
-- **M√©todos a migrar:**
+### 1.3. MÛdulo: `ui/controllers/plot_renderers.py`
+Respons·vel exclusivamente por coordenar as *engines* de alta performance e sobrepor marcadores nos eixos do Matplotlib.
+- **MÈtodos a migrar:**
   - `render_dashboard(self, filename)`
   - `_refresh_histogram(self)`
   - `_refresh_user_peak_markers(self)`
   - `apply_spectrogram_y_limits(self, ymin, ymax, unit)`
-- **Estrat√©gia:** Receber√° refer√™ncias fracas (`weakref`) ou diretas aos pain√©is (`panel_wave`, `panel_spec`, etc.) durante a inicializa√ß√£o. Utilizar√° os dados do `SessionContext` para atualizar a tela.
+- **EstratÈgia:** Receber· referÍncias fracas (`weakref`) ou diretas aos painÈis (`panel_wave`, `panel_spec`, etc.) durante a inicializaÁ„o. Utilizar· os dados do `SessionContext` para atualizar a tela.
 
-### 1.4. M√≥dulo: `ui/controllers/navigation_controller.py`
-Concentrar√° toda a complexidade de eventos de mouse, manipula√ß√£o de viewport (Pan/Zoom) e otimiza√ß√£o por *blitting*.
-- **M√©todos a migrar:**
+### 1.4. MÛdulo: `ui/controllers/navigation_controller.py`
+Concentrar· toda a complexidade de eventos de mouse, manipulaÁ„o de viewport (Pan/Zoom) e otimizaÁ„o por *blitting*.
+- **MÈtodos a migrar:**
   - `on_press(self, event)`, `on_release(self, event)`, `on_motion(self, event)`, `zoom_graph(self, event)`
   - `_sync_render(self, ...)`, `_clamp_bounds(self, ...)`
   - `_refresh_synced_views(self)`
-  - `capture_backgrounds(self)` e gest√£o de `self.backgrounds`, `self.cursor_lines`, `self.bg_cache_valid`.
-- **Estrat√©gia:** O controlador se registrar√° aos eventos do canvas via `mpl_connect`. O Pan e Zoom atualizar√£o limites e acionar√£o o `_sync_render` internamente, sem tocar no escopo geral da UI.
+  - `capture_backgrounds(self)` e gest„o de `self.backgrounds`, `self.cursor_lines`, `self.bg_cache_valid`.
+- **EstratÈgia:** O controlador se registrar· aos eventos do canvas via `mpl_connect`. O Pan e Zoom atualizar„o limites e acionar„o o `_sync_render` internamente, sem tocar no escopo geral da UI.
 
-### 1.5. M√≥dulo: `ui/controllers/editor_controller.py`
-Controlar√° a l√≥gica de edi√ß√£o bidimensional (Tempo/Amplitude e Tempo/Frequ√™ncia) e a submiss√£o de corre√ß√µes ao Machine Learning.
-- **M√©todos a migrar:**
+### 1.5. MÛdulo: `ui/controllers/editor_controller.py`
+Controlar· a lÛgica de ediÁ„o bidimensional (Tempo/Amplitude e Tempo/FrequÍncia) e a submiss„o de correÁıes ao Machine Learning.
+- **MÈtodos a migrar:**
   - `_toggle_peak_marker(self, time_sec, panel, event, f_click, amp_click)`
   - `_find_nearest_user_peak(self, time_sec, tolerance)`
   - `learn_from_corrections(self)`
   - `_undo_pulse_edit(self)`, `_save_corrections_state(self)`
-- **Estrat√©gia:** L√≥gica isolada que consome o `SessionContext`, executa `CricketAnalyzer.regroup_chirps()`, e emite sinais para o `PlotRenderers` redesenhar marcadores e histograma.
+- **EstratÈgia:** LÛgica isolada que consome o `SessionContext`, executa `CricketAnalyzer.regroup_chirps()`, e emite sinais para o `PlotRenderers` redesenhar marcadores e histograma.
 
 ### 1.6. Limpeza Residual da `MainWindow`
-- A `main_window.py` passar√° de 4075 linhas para cerca de 800-1000 linhas.
-- Conter√° estritamente: `setup_ui`, `setup_menu`, `apply_modern_styles`, instiga√ß√£o dos 4 controladores, roteamento de sinais base (ex: clique em bot√£o aciona controlador), barra de transporte (`toggle_playback`, `update_playback_cursor`) e layouts estruturais (`QSplitter`).
+- A `main_window.py` passar· de 4075 linhas para cerca de 800-1000 linhas.
+- Conter· estritamente: `setup_ui`, `setup_menu`, `apply_modern_styles`, instigaÁ„o dos 4 controladores, roteamento de sinais base (ex: clique em bot„o aciona controlador), barra de transporte (`toggle_playback`, `update_playback_cursor`) e layouts estruturais (`QSplitter`).
 
 ---
 
-## BLOCO 2: DI√ÅLOGO DE EXPORTA√á√ÉO GR√ÅFICA PARA PUBLICA√á√ÉO CIENT√çFICA
+## BLOCO 2: DI¡LOGO DE EXPORTA«√O GR¡FICA PARA PUBLICA«√O CIENTÕFICA
 
-O fluxo atual exporta o PDF estruturado, mas faltam exporta√ß√µes vetoriais/raster em alta resolu√ß√£o diretas dos gr√°ficos exibidos.
+O fluxo atual exporta o PDF estruturado, mas faltam exportaÁıes vetoriais/raster em alta resoluÁ„o diretas dos gr·ficos exibidos.
 
 ### 2.1. Novo Componente: `ui/dialogs/export_graph_dialog.py`
-- **Interface Gr√°fica (`QDialog` modal):**
-  - **Matriz de Sele√ß√£o (Checkboxes):** Permitir√° escolher quais pain√©is exportar (Oscilograma, Histograma, PSD, Espectrograma focal).
-  - **Camada de Anota√ß√µes:** Toggle para incluir/excluir eixos, grade, r√≥tulos e marcadores de pulso do usu√°rio.
-  - **Formato:** Seletor (PDF multi-p√°gina paisagem vetorial vs. Arquivos PNG isolados).
-  - **DPI (Para PNG):** 150 (Rascunho), 300 (Publica√ß√£o), 600 (Alta Qualidade).
-- **Pipeline Off-Screen (Renderiza√ß√£o Segura):**
-  - **Problema a evitar:** Congelamento da UI ou contamina√ß√£o pelo tamanho atual da janela (viewport dependente de tela).
-  - **Solu√ß√£o:** O controlador instanciar√° objetos `Figure` do Matplotlib independentes usando o backend n√£o-interativo `Agg` (`matplotlib.use('Agg')` num escopo isolado).
-  - Receber√° o dicion√°rio puro de dados do `SessionContext.active_heavy_data` e desenhar√° os gr√°ficos limpos nas dimens√µes f√≠sicas corretas (ex: 7x5 polegadas), iterando e salvando via `fig.savefig(dpi=...)`.
+- **Interface Gr·fica (`QDialog` modal):**
+  - **Matriz de SeleÁ„o (Checkboxes):** Permitir· escolher quais painÈis exportar (Oscilograma, Histograma, PSD, Espectrograma focal).
+  - **Camada de AnotaÁıes:** Toggle para incluir/excluir eixos, grade, rÛtulos e marcadores de pulso do usu·rio.
+  - **Formato:** Seletor (PDF multi-p·gina paisagem vetorial vs. Arquivos PNG isolados).
+  - **DPI (Para PNG):** 150 (Rascunho), 300 (PublicaÁ„o), 600 (Alta Qualidade).
+- **Pipeline Off-Screen (RenderizaÁ„o Segura):**
+  - **Problema a evitar:** Congelamento da UI ou contaminaÁ„o pelo tamanho atual da janela (viewport dependente de tela).
+  - **SoluÁ„o:** O controlador instanciar· objetos `Figure` do Matplotlib independentes usando o backend n„o-interativo `Agg` (`matplotlib.use('Agg')` num escopo isolado).
+  - Receber· o dicion·rio puro de dados do `SessionContext.active_heavy_data` e desenhar· os gr·ficos limpos nas dimensıes fÌsicas corretas (ex: 7x5 polegadas), iterando e salvando via `fig.savefig(dpi=...)`.
 
 ---
 
-## BLOCO 3: DI√ÅLOGO UNIFICADO DE RELAT√ìRIO PDF
+## BLOCO 3: DI¡LOGO UNIFICADO DE RELAT”RIO PDF
 
-O relat√≥rio PDF atual carece de valida√ß√£o de metadados antes da gera√ß√£o e op√ß√µes para ligar/desligar se√ß√µes de an√°lise, al√©m do problema de contraste visual identificado (cores excessivamente claras para linhas e grades).
+O relatÛrio PDF atual carece de validaÁ„o de metadados antes da geraÁ„o e opÁıes para ligar/desligar seÁıes de an·lise, alÈm do problema de contraste visual identificado (cores excessivamente claras para linhas e grades).
 
 ### 3.1. Novo Componente: `ui/dialogs/export_report_dialog.py`
-- **Unifica√ß√£o do Menu de Exporta√ß√£o PDF:** No menu 'Exportar' (show_export_menu e a√ß√µes de menu), remova a divis√£o legada entre 'Relat√≥rio Completo em PDF' e 'Relat√≥rio Resumido em PDF'. Substitua-as por uma √∫nica a√ß√£o: 'üìÑ Relat√≥rio Cient√≠fico em PDF...', que abrir√° diretamente o novo ExportReportDialog (onde o usu√°rio marcar√° o que deseja incluir via checkboxes e validar√° os metadados antes de gerar).
-- **Interface Gr√°fica (`QDialog` modal):**
-  - **Aba Metadados:** Campos validados para Esp√©cie (Input texto), C√≥digo do Esp√©cime, Localidade, Temperatura (¬∞C), Equipamento e Nome do Gravador. (Avisa/Marca em vermelho se campos essenciais estiverem vazios antes da emiss√£o).
-  - **Aba Se√ß√µes Modulares (Checkboxes):** 
+- **UnificaÁ„o do Menu de ExportaÁ„o PDF:** No menu 'Exportar' (show_export_menu e aÁıes de menu), remova a divis„o legada entre 'RelatÛrio Completo em PDF' e 'RelatÛrio Resumido em PDF'. Substitua-as por uma ˙nica aÁ„o: '?? RelatÛrio CientÌfico em PDF...', que abrir· diretamente o novo ExportReportDialog (onde o usu·rio marcar· o que deseja incluir via checkboxes e validar· os metadados antes de gerar).
+- **Interface Gr·fica (`QDialog` modal):**
+  - **Aba Metadados:** Campos validados para EspÈcie (Input texto), CÛdigo do EspÈcime, Localidade, Temperatura (∞C), Equipamento e Nome do Gravador. (Avisa/Marca em vermelho se campos essenciais estiverem vazios antes da emiss„o).
+  - **Aba SeÁıes Modulares (Checkboxes):** 
     - [x] Resumo Executivo e Tabela de Arquivos
-    - [x] M√©tricas Temporais Consolidadas
-    - [x] Diagn√≥stico de Cad√™ncia R√≠tmica
-    - [x] Estimativa de Temperatura (Dolbear)
-    - [x] Gr√°ficos de Espectrograma e PSD (Nova integra√ß√£o com o Bloco 2)
+    - [x] MÈtricas Temporais Consolidadas
+    - [x] DiagnÛstico de CadÍncia RÌtmica
+    - [x] Gr·ficos de Espectrograma e PSD (Nova integraÁ„o com o Bloco 2)
     - [ ] Listagem Exaustiva de Chilreios e Pulsos (Tabela longa)
-  - Bot√£o "Gerar Relat√≥rio em Segundo Plano".
+  - Bot„o "Gerar RelatÛrio em Segundo Plano".
 
-### 3.2. Refatora√ß√£o em `utils/report_generator.py`
-- **Corre√ß√£o de UI Cr√≠tica:** Ajustar a cor `#E2E8F0` em todos os `INNERGRID` dos `TableStyle` (linhas 301, 397, 475, 514, 572). Substituir por `#CBD5E1` (Bordas internas) e `#94A3B8` (Bordas externas) para legibilidade em impressoras P&B e visores de alto brilho.
-- **Adapta√ß√£o Modular:** A fun√ß√£o `generate_pdf_report` passar√° a aceitar um objeto `ReportConfig` que conter√° os metadados ricos (passados do Dialog) e uma lista booleana ativando/desativando se√ß√µes `section_flags = {'cadence': True, 'graphs': True, 'chirp_list': False, ...}`.
-- **Processamento Ass√≠ncrono:** A compila√ß√£o PDF (`doc.build()`) pode levar de 5 a 15 segundos para grandes lotes (centenas de chilreios longos). Ser√° movida para `GenericWorker` com captura de exce√ß√µes `_on_error` reportando √† janela principal sem travar a thread de GUI.
+### 3.2. RefatoraÁ„o em `utils/report_generator.py`
+- **CorreÁ„o de UI CrÌtica:** Ajustar a cor `#E2E8F0` em todos os `INNERGRID` dos `TableStyle` (linhas 301, 397, 475, 514, 572). Substituir por `#CBD5E1` (Bordas internas) e `#94A3B8` (Bordas externas) para legibilidade em impressoras P&B e visores de alto brilho.
+- **AdaptaÁ„o Modular:** A funÁ„o `generate_pdf_report` passar· a aceitar um objeto `ReportConfig` que conter· os metadados ricos (passados do Dialog) e uma lista booleana ativando/desativando seÁıes `section_flags = {'cadence': True, 'graphs': True, 'chirp_list': False, ...}`.
+- **Processamento AssÌncrono:** A compilaÁ„o PDF (`doc.build()`) pode levar de 5 a 15 segundos para grandes lotes (centenas de chilreios longos). Ser· movida para `GenericWorker` com captura de exceÁıes `_on_error` reportando ‡ janela principal sem travar a thread de GUI.
 
 ---
 
-## MATRIZ DE RISCOS DA MIGRA√á√ÉO
+## MATRIZ DE RISCOS DA MIGRA«√O
 
-| Componente | Risco | Mitiga√ß√£o |
+| Componente | Risco | MitigaÁ„o |
 | :--- | :--- | :--- |
-| **Mouse Hover (`on_motion`)** | Quebra de responsividade (Lag). O throttle cr√≠tico depende de cache r√°pido. | O `navigation_controller.py` deve assumir estritamente o `pulse_hover_data` e c√°lculos de proximidade em pixels. |
-| **Sincroniza√ß√£o de Viewport** | Depend√™ncia circular (Controller de Navega√ß√£o precisa do Controller de Renderiza√ß√£o para o `_sync_render`). | Uso rigoroso de inje√ß√£o de depend√™ncias ou emiss√£o de sinal expl√≠cito `viewport_changed(xmin, xmax)` capturado pelo Orchestrator. |
-| **Background Blitting** | Corrup√ß√£o gr√°fica / tra√ßos fantasma deixados na tela durante pans r√°pidos. | Centralizar as rotinas de `capture_backgrounds` num gerenciador de renderiza√ß√£o at√¥mico associado ao `navigation_controller`. |
-| **Memory Leaks no Matplotlib** | Cria√ß√£o de gr√°ficos off-screen no Bloco 2 estourando a mem√≥ria RAM. | Assegurar chamadas mandat√≥rias a `plt.close(fig)` em blocos `finally` no exportador `Agg`. |
+| **Mouse Hover (`on_motion`)** | Quebra de responsividade (Lag). O throttle crÌtico depende de cache r·pido. | O `navigation_controller.py` deve assumir estritamente o `pulse_hover_data` e c·lculos de proximidade em pixels. |
+| **SincronizaÁ„o de Viewport** | DependÍncia circular (Controller de NavegaÁ„o precisa do Controller de RenderizaÁ„o para o `_sync_render`). | Uso rigoroso de injeÁ„o de dependÍncias ou emiss„o de sinal explÌcito `viewport_changed(xmin, xmax)` capturado pelo Orchestrator. |
+| **Background Blitting** | CorrupÁ„o gr·fica / traÁos fantasma deixados na tela durante pans r·pidos. | Centralizar as rotinas de `capture_backgrounds` num gerenciador de renderizaÁ„o atÙmico associado ao `navigation_controller`. |
+| **Memory Leaks no Matplotlib** | CriaÁ„o de gr·ficos off-screen no Bloco 2 estourando a memÛria RAM. | Assegurar chamadas mandatÛrias a `plt.close(fig)` em blocos `finally` no exportador `Agg`. |
 
 ---
-**Status do Roadmap:** Elaborado com base no rastreamento de 4.075 linhas de c√≥digo GUI e 590 linhas de gera√ß√£o de relat√≥rios (Set/2026). Pronto para aprova√ß√£o do desenvolvedor l√≠der.
+**Status do Roadmap:** Elaborado com base no rastreamento de 4.075 linhas de cÛdigo GUI e 590 linhas de geraÁ„o de relatÛrios (Set/2026). Pronto para aprovaÁ„o do desenvolvedor lÌder.
