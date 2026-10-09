@@ -31,18 +31,25 @@ class HighPerfLineEngine:
         block_size = len(y) // num_blocks
         
         y_trunc = y[:block_size * num_blocks].reshape(num_blocks, block_size)
-        t_trunc = t[:block_size * num_blocks:block_size]
+        t_trunc = t[:block_size * num_blocks].reshape(num_blocks, block_size)
         
-        y_min = y_trunc.min(axis=1)
-        y_max = y_trunc.max(axis=1)
+        idx_min = y_trunc.argmin(axis=1)
+        idx_max = y_trunc.argmax(axis=1)
         
-        t_env = np.empty(num_blocks * 2, dtype=t.dtype)
-        y_env = np.empty(num_blocks * 2, dtype=y.dtype)
+        row_idx = np.arange(num_blocks)
+        t_min = t_trunc[row_idx, idx_min]
+        y_min = y_trunc[row_idx, idx_min]
         
-        t_env[0::2] = t_trunc
-        t_env[1::2] = t_trunc
-        y_env[0::2] = y_min
-        y_env[1::2] = y_max
+        t_max = t_trunc[row_idx, idx_max]
+        y_max = y_trunc[row_idx, idx_max]
+        
+        t_comb = np.column_stack((t_min, t_max))
+        y_comb = np.column_stack((y_min, y_max))
+        
+        sort_idx = np.argsort(t_comb, axis=1)
+        
+        t_env = np.take_along_axis(t_comb, sort_idx, axis=1).flatten()
+        y_env = np.take_along_axis(y_comb, sort_idx, axis=1).flatten()
         
         return t_env, y_env
 
