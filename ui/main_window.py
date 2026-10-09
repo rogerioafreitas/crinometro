@@ -1876,7 +1876,11 @@ class MainWindow(QMainWindow):
                     data = json.load(f)
                 if isinstance(data, dict):
                     if isinstance(data.get("algo_params"), dict):
-                        self.ctx.algo_params.update(data["algo_params"])
+                        for k, v in data["algo_params"].items():
+                            if k in DEFAULT_ALGO_PARAMS:
+                                expected_type = type(DEFAULT_ALGO_PARAMS[k])
+                                if isinstance(v, expected_type) or (expected_type is float and isinstance(v, int)):
+                                    self.ctx.algo_params[k] = expected_type(v)
                     if isinstance(data.get("report_params"), dict):
                         self.ctx.report_params.update(data["report_params"])
                     theme = data.get("theme")
