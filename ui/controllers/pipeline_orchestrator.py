@@ -71,25 +71,19 @@ class PipelineOrchestrator(QObject):
 
         # Ajuste seguro e fisiológico de proeminência relativa
         target_prom = float(np.percentile(features[:, 6], 20)) * 0.08
-        current_prominence = float(self.ctx._adaptive_overrides.get(
-            "prominence", self.ctx.algo_params.get("prominence", 0.01)
-        ))
+        current_prominence = float(self.ctx.algo_params.get("prominence", 0.01))
         new_prom = (1.0 - adaptation) * current_prominence + adaptation * target_prom
         
         overrides = dict(self.ctx._adaptive_overrides)
         overrides["prominence"] = float(np.clip(new_prom, 0.002, 0.08))
 
         # Manutenção de noise_floor em faixa segura (0.85 a 1.05)
-        current_noise = float(overrides.get(
-            "noise_floor", self.ctx.algo_params.get("noise_floor", 0.90)
-        ))
+        current_noise = float(self.ctx.algo_params.get("noise_floor", 0.90))
         overrides["noise_floor"] = float(np.clip(current_noise, 0.85, 1.05))
 
         target_width_ms = float(np.median(features[:, 1]) * 1000.0)
         if target_width_ms > 0:
-            current_width = float(overrides.get(
-                "width_min_ms", self.ctx.algo_params.get("width_min_ms", 0.0)
-            ))
+            current_width = float(self.ctx.algo_params.get("width_min_ms", 0.0))
             new_width = (1.0 - adaptation) * current_width + adaptation * (target_width_ms * 0.40)
             overrides["width_min_ms"] = float(np.clip(new_width, 0.0, 25.0))
 
@@ -237,7 +231,7 @@ class PipelineOrchestrator(QObject):
             "rate": rate, "data": data, "data_b1": data_b1, "env": env, "peaks": list(file_peaks_detected), "chirps": chirps,
             "chirp_peaks_list": chirp_peaks_list, "chirp_peaks": list(chirp_peaks_list), "media": media, "moda": moda, "variancia": variancia,
             "f_spec": f_spec, "t_spec": t_spec, "Sxx_db": Sxx_db, "dom_freqs": dom_freqs,
-            "duration": audio_duration, "params": params.copy(),
+            "duration": audio_duration, "params": effective_params.copy(),
             "peaks_detected": list(file_peaks_detected),
             "peaks_user_verified": list(file_peaks_user_verified),
             "distant_peaks": list(distant_peaks),
