@@ -45,13 +45,22 @@ class CricketAnalyzer:
                 raise AnalysisAborted()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", WavFileWarning)
-            rate, data = wavfile.read(file_path)
-        if len(data.shape) > 1:
-            data = data[:, 0]
-
-        data = data.astype(np.float64)
-        if len(data) == 0:
-            raise ValueError("O arquivo de áudio está vazio.")
+            rate, raw = wavfile.read(file_path)
+        if rate <= 0:
+            raise ValueError(f"Taxa de amostragem inv\u00e1lida: {rate}")
+        raw = np.asarray(raw)
+        if raw.size == 0:
+            raise ValueError("O arquivo de \u00e1udio est\u00e1 vazio.")
+        if raw.ndim > 1:
+            data = raw.astype(np.float64)
+            if not np.isfinite(data).all():
+                raise ValueError("O arquivo cont\u00e9m valores NaN/Inf.")
+            rms = np.sqrt(np.mean(data ** 2, axis=0))
+            data = data[:, int(np.argmax(rms))]
+        else:
+            data = raw.astype(np.float64)
+        if not np.isfinite(data).all():
+            raise ValueError("O arquivo cont\u00e9m valores NaN/Inf.")
 
         # Remove offset DC e ruídos de baixa frequência / vento (< 50 Hz)
         data = data - np.mean(data)
