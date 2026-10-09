@@ -118,7 +118,7 @@ class PulseLearner:
     @staticmethod
     def extract_features_for_peak(peak_idx, rate, env_signal, raw_signal=None, prior_p_focal=1.0):
         peak_idx = int(np.asarray(peak_idx).item())
-        n_features = 20
+        n_features = 19
         if peak_idx < 0 or peak_idx >= len(env_signal):
             return np.zeros(n_features, dtype=float)
 
