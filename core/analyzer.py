@@ -10,6 +10,7 @@ import statistics
 from scipy.io import wavfile
 from scipy.io.wavfile import WavFileWarning
 from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram, welch
+from scipy.fft import next_fast_len
 
 class AnalysisAborted(Exception):
     pass
@@ -77,6 +78,8 @@ class CricketAnalyzer:
             raise ValueError("O arquivo de áudio é curto demais para o janelamento espectral (mínimo de 1024 frames).")
 
         audio_duration_sec = len(data) / rate
+        if audio_duration_sec > 1200.0:
+            raise ValueError(f"O arquivo excede a dura\u00e7\u00e3o m\u00e1xima permitida de 20 minutos ({audio_duration_sec / 60:.1f} min).")
 
         # Filtragem passa-faixa Butterworth IIR em unidades físicas (isolamento da banda estridulatória)
         b1_max = min(nyq - 20.0, float(params.get("b1_max", 6000)))
@@ -87,7 +90,7 @@ class CricketAnalyzer:
             b1_min = max(20.0, b1_max - 20.0)
         sos_b1 = butter(4, [b1_min / nyq, b1_max / nyq], btype='band', output='sos')
         data_b1 = sosfiltfilt(sos_b1, data)
-        env1 = np.abs(hilbert(data_b1))
+        env1 = np.abs(hilbert(data_b1, N=next_fast_len(len(data_b1)))[:len(data_b1)])
         _chk()
 
         # Normalização robusta baseada na energia da banda estridulatória (imune a estalos e ruído grave)
