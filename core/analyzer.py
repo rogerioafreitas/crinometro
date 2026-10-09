@@ -70,7 +70,6 @@ class CricketAnalyzer:
         audio_duration_sec = len(data) / rate
 
         # Filtragem passa-faixa Butterworth IIR em unidades físicas (isolamento da banda estridulatória)
-        _chk()
         b1_max = min(nyq - 20.0, float(params.get("b1_max", 6000)))
         b1_min = max(20.0, float(params.get("b1_min", 3200)))
         if b1_max - b1_min < 100.0:
@@ -80,6 +79,7 @@ class CricketAnalyzer:
         sos_b1 = butter(4, [b1_min / nyq, b1_max / nyq], btype='band', output='sos')
         data_b1 = sosfiltfilt(sos_b1, data)
         env1 = np.abs(hilbert(data_b1))
+        _chk()
 
         # Normalização robusta baseada na energia da banda estridulatória (imune a estalos e ruído grave)
         scale_p99 = float(np.percentile(env1, 99.85)) if len(env1) > 1000 else float(np.max(env1))
@@ -111,7 +111,6 @@ class CricketAnalyzer:
             dom_freqs = cached_spec["dom_freqs"]
         else:
             # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
-            _chk()
             f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
             Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
             f_spec = f_spec.astype(np.float32)
@@ -157,6 +156,7 @@ class CricketAnalyzer:
 
         dist_samples = max(1, int(rate * (float(params.get("gap_min", 25.0)) / 1000.0 * 0.88)))
 
+        _chk()
         raw_peaks, _ = find_peaks(env1_smooth, height=(search_thresh, params.get("amp_max", 2.0)),
                                   distance=dist_samples, prominence=prominence_val,
                                   width=(width_min, width_max))
@@ -255,6 +255,7 @@ class CricketAnalyzer:
             candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
             distant_peaks = []
 
+        _chk()
         # Classificação contextual e segregação focal/distante (ML)
         if pulse_learner is not None and len(candidate_peaks) > 0:
             gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85

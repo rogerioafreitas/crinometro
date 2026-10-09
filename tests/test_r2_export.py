@@ -10,12 +10,19 @@ class TestExportDialogR2(unittest.TestCase):
         from ui.dialogs.export_report_dialog import ExportReportDialog
         from utils.report_generator import ReportConfig
         
-        dlg = ExportReportDialog()
+        from core.session_context import SessionContext
+        ctx = SessionContext()
+        dlg = ExportReportDialog(ctx)
         # Preencher os campos minimos
-        dlg.txt_specimen.setText("Test")
+        dlg.txt_temp.setText("25")
         
         # Simular clique em aceitar
-        dlg.accept()
+        dlg.chk_fmt_csv.setChecked(False)
+        dlg.chk_fmt_txt.setChecked(False)
+        dlg.chk_fmt_pdf.setChecked(True)
+        from unittest.mock import patch
+        with patch('ui.dialogs.export_report_dialog.QFileDialog.getSaveFileName', return_value=('dummy.pdf', '')):
+            dlg._on_export()
         
         self.assertIsNotNone(dlg.config)
         self.assertIsInstance(dlg.config, ReportConfig)

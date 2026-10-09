@@ -332,7 +332,6 @@ class PipelineOrchestrator(QObject):
                         worker.result_ready_signal.emit(fname, res)
                         success_count += 1
                 except AnalysisAborted:
-                    worker.cancelled_signal.emit()
                     break
                 except Exception as exc:
                     errors.append(f"{fname}: {exc}")
@@ -369,6 +368,7 @@ class PipelineOrchestrator(QObject):
         worker.progress_signal.connect(_on_progress)
         worker.finished_signal.connect(_on_finished)
         worker.error_signal.connect(_on_error)
+        worker.cancelled_signal.connect(self.batch_cancelled.emit)
 
         worker.start()
         return True
@@ -430,7 +430,10 @@ class PipelineOrchestrator(QObject):
                         "dom_freqs": self.ctx.active_heavy_data.get("dom_freqs"),
                     }
 
-            res = CricketAnalyzer.analyze(file_path, effective_params, pulse_learner=learner, cached_spec=cached_spec)
+            res = CricketAnalyzer.analyze(
+                file_path, effective_params, pulse_learner=learner, 
+                cached_spec=cached_spec, should_abort=lambda: worker.abort_requested
+            )
             return res
 
         worker = GenericWorker(_task)
@@ -447,6 +450,7 @@ class PipelineOrchestrator(QObject):
 
         worker.finished_signal.connect(_on_finished)
         worker.error_signal.connect(_on_error)
+        worker.cancelled_signal.connect(lambda: self.analysis_cancelled.emit(filename))
         worker.start()
 
     # ------------------------------------------------------------------ #

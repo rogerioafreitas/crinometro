@@ -86,6 +86,16 @@ class MainWindow(QMainWindow):
 
     # ---------- FASE 5: Aliases de compatibilidade para EditorController ----------
 
+    def closeEvent(self, event):
+        if hasattr(self, 'export_ctrl'):
+            self.export_ctrl.shutdown()
+        if hasattr(self, 'pipeline'):
+            if hasattr(self.pipeline, '_batch_worker') and self.pipeline._batch_worker:
+                self.pipeline._batch_worker.abort()
+            if hasattr(self.pipeline, '_reanalyze_worker') and self.pipeline._reanalyze_worker:
+                self.pipeline._reanalyze_worker.abort()
+        event.accept()
+
     def __init__(self):
         super().__init__()
         self.ctx = SessionContext(self)
