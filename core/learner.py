@@ -73,45 +73,47 @@ class PulseLearner:
         self.load_persisted_training()
 
     def is_trained(self):
-        return self.model is not None
+        with self._model_lock:
+            return self.model is not None
 
     def _build_model(self, n_samples=None):
-        if n_samples is None:
-            n_samples = len(self.training_labels) if hasattr(self, "training_labels") else 0
-        if HistGradientBoostingClassifier is not None:
-            if n_samples > 0 and n_samples < 30:
-                # Regularização robusta para poucas amostras de correção ativa
+        with self._model_lock:
+            if n_samples is None:
+                n_samples = len(self.training_labels) if hasattr(self, "training_labels") else 0
+            if HistGradientBoostingClassifier is not None:
+                if n_samples > 0 and n_samples < 30:
+                    # Regularização robusta para poucas amostras de correção ativa
+                    return HistGradientBoostingClassifier(
+                        max_iter=50,
+                        max_depth=3,
+                        min_samples_leaf=2,
+                        learning_rate=0.08,
+                        l2_regularization=2.0,
+                        random_state=42,
+                        class_weight="balanced",
+                    )
                 return HistGradientBoostingClassifier(
-                    max_iter=50,
-                    max_depth=3,
-                    min_samples_leaf=2,
+                    max_iter=80,
+                    max_depth=4,
+                    min_samples_leaf=5,
                     learning_rate=0.08,
-                    l2_regularization=2.0,
+                    l2_regularization=1.0,
                     random_state=42,
                     class_weight="balanced",
                 )
-            return HistGradientBoostingClassifier(
-                max_iter=80,
-                max_depth=4,
-                min_samples_leaf=5,
-                learning_rate=0.08,
-                l2_regularization=1.0,
-                random_state=42,
-                class_weight="balanced",
-            )
-        elif RandomForestClassifier is not None:
-            return RandomForestClassifier(
-                n_estimators=80,
-                max_depth=5,
-                min_samples_split=6,
-                min_samples_leaf=3,
-                max_features="sqrt",
-                class_weight="balanced",
-                random_state=42,
-                n_jobs=-1,
-            )
-        else:
-            raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
+            elif RandomForestClassifier is not None:
+                return RandomForestClassifier(
+                    n_estimators=80,
+                    max_depth=5,
+                    min_samples_split=6,
+                    min_samples_leaf=3,
+                    max_features="sqrt",
+                    class_weight="balanced",
+                    random_state=42,
+                    n_jobs=-1,
+                )
+            else:
+                raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
 
     @staticmethod
     def extract_features_for_peak(peak_idx, rate, env_signal, raw_signal=None, prior_p_focal=1.0):
@@ -465,65 +467,67 @@ class PulseLearner:
         return X, y
 
     def fit(self, X, y):
-        X = np.asarray(X, dtype=float)
-        y = np.asarray(y, dtype=int)
-        if X.size == 0 or y.size == 0:
-            raise ValueError("Sem dados de treinamento disponíveis.")
-        self.model = self._build_model(n_samples=len(y))
-        self.model.fit(X, y)
-        self.training_features = X.copy()
-        self.training_labels = y.copy()
-        self.save_persisted_training()
-        return self.model
+        with self._model_lock:
+            X = np.asarray(X, dtype=float)
+            y = np.asarray(y, dtype=int)
+            if X.size == 0 or y.size == 0:
+                raise ValueError("Sem dados de treinamento disponíveis.")
+            self.model = self._build_model(n_samples=len(y))
+            self.model.fit(X, y)
+            self.training_features = X.copy()
+            self.training_labels = y.copy()
+            self.save_persisted_training()
+            return self.model
 
     def update_from_corrections(self, peaks_detected, peaks_user_verified, rate, env_signal, raw_signal=None):
-        X_new, y_new = self.build_training_matrix(
-            peaks_detected, peaks_user_verified, rate, env_signal,
-            raw_signal=raw_signal, require_both_classes=False,
-        )
-        if self.training_features.size:
-            if self.training_features.shape[1] != X_new.shape[1]:
-                # Salvaguarda 3: alinhamento dinâmico de dimensões
-                if self.training_features.shape[1] < X_new.shape[1]:
-                    pad = np.zeros((len(self.training_features), X_new.shape[1] - self.training_features.shape[1]), dtype=float)
-                    self.training_features = np.hstack((self.training_features, pad))
-                else:
-                    self.training_features = self.training_features[:, :X_new.shape[1]]
-            X = np.vstack((self.training_features, X_new))
-            y = np.concatenate((self.training_labels, y_new))
-        else:
-            X, y = X_new, y_new
-        stacked = np.column_stack((X, y))
-        _, first_idx = np.unique(stacked, axis=0, return_index=True)
-        stacked = stacked[np.sort(first_idx)]
-        self.training_features = stacked[:, :-1]
-        self.training_labels = stacked[:, -1].astype(int)
-
-        _MAX_SAMPLES = 5000
-        if len(self.training_features) > _MAX_SAMPLES:
-            self.training_features = self.training_features[-_MAX_SAMPLES:]
-            self.training_labels = self.training_labels[-_MAX_SAMPLES:]
-
-        if np.unique(self.training_labels).size < 2:
-            self.save_persisted_training()
-            return False
-
-        # Indução de regras de poda contrastivas (Hard Negative Rule Induction)
-        explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
-        valid_pulses = sorted(set(peaks_user_verified))
-        if explicit_negatives and valid_pulses:
-            induced = self.induce_pruning_rules(
-                valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
+        with self._model_lock:
+            X_new, y_new = self.build_training_matrix(
+                peaks_detected, peaks_user_verified, rate, env_signal,
+                raw_signal=raw_signal, require_both_classes=False,
             )
-            if induced:
-                pass  # print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
-                for r in induced:
-                    pass  # print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
+            if self.training_features.size:
+                if self.training_features.shape[1] != X_new.shape[1]:
+                    # Salvaguarda 3: alinhamento dinâmico de dimensões
+                    if self.training_features.shape[1] < X_new.shape[1]:
+                        pad = np.zeros((len(self.training_features), X_new.shape[1] - self.training_features.shape[1]), dtype=float)
+                        self.training_features = np.hstack((self.training_features, pad))
+                    else:
+                        self.training_features = self.training_features[:, :X_new.shape[1]]
+                X = np.vstack((self.training_features, X_new))
+                y = np.concatenate((self.training_labels, y_new))
+            else:
+                X, y = X_new, y_new
+            stacked = np.column_stack((X, y))
+            _, first_idx = np.unique(stacked, axis=0, return_index=True)
+            stacked = stacked[np.sort(first_idx)]
+            self.training_features = stacked[:, :-1]
+            self.training_labels = stacked[:, -1].astype(int)
 
-        self.model = self._build_model(n_samples=len(self.training_labels))
-        self.model.fit(self.training_features, self.training_labels)
-        self.save_persisted_training()
-        return True
+            _MAX_SAMPLES = 5000
+            if len(self.training_features) > _MAX_SAMPLES:
+                self.training_features = self.training_features[-_MAX_SAMPLES:]
+                self.training_labels = self.training_labels[-_MAX_SAMPLES:]
+
+            if np.unique(self.training_labels).size < 2:
+                self.save_persisted_training()
+                return False
+
+            # Indução de regras de poda contrastivas (Hard Negative Rule Induction)
+            explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
+            valid_pulses = sorted(set(peaks_user_verified))
+            if explicit_negatives and valid_pulses:
+                induced = self.induce_pruning_rules(
+                    valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
+                )
+                if induced:
+                    pass  # print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
+                    for r in induced:
+                        pass  # print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
+
+            self.model = self._build_model(n_samples=len(self.training_labels))
+            self.model.fit(self.training_features, self.training_labels)
+            self.save_persisted_training()
+            return True
 
     def induce_pruning_rules(self, valid_peaks, false_positive_peaks, rate, env_signal, raw_signal=None):
         """Induz regras rígidas de poda contrastiva (Hard Negative Rule Induction).
@@ -632,31 +636,32 @@ class PulseLearner:
         return False, None
 
     def predict(self, X):
-        if self.model is None:
-            return np.asarray([], dtype=int)
-        X = np.asarray(X, dtype=float)
-        if X.size == 0:
-            return np.asarray([], dtype=int)
-        if X.ndim == 1:
-            X = X.reshape(1, -1)
+        with self._model_lock:
+            if self.model is None:
+                return np.asarray([], dtype=int)
+            X = np.asarray(X, dtype=float)
+            if X.size == 0:
+                return np.asarray([], dtype=int)
+            if X.ndim == 1:
+                X = X.reshape(1, -1)
 
-        n_expected = getattr(self.model, "n_features_in_", None)
-        if n_expected is not None and n_expected > 0:
-            if X.shape[1] > n_expected:
-                X_used = X[:, :n_expected]
-            elif X.shape[1] < n_expected:
-                pad = np.zeros((X.shape[0], n_expected - X.shape[1]), dtype=float)
-                X_used = np.hstack((X, pad))
+            n_expected = getattr(self.model, "n_features_in_", None)
+            if n_expected is not None and n_expected > 0:
+                if X.shape[1] > n_expected:
+                    X_used = X[:, :n_expected]
+                elif X.shape[1] < n_expected:
+                    pad = np.zeros((X.shape[0], n_expected - X.shape[1]), dtype=float)
+                    X_used = np.hstack((X, pad))
+                else:
+                    X_used = X
             else:
                 X_used = X
-        else:
-            X_used = X
 
-        try:
-            return self.model.predict(X_used).astype(int)
-        except Exception as exc:
-            pass  # print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
-            return np.ones(X.shape[0], dtype=int)
+            try:
+                return self.model.predict(X_used).astype(int)
+            except Exception as exc:
+                pass  # print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
+                return np.ones(X.shape[0], dtype=int)
 
     def filter_peaks(self, peaks, rate, env_signal, raw_signal=None,
                      gap_min_s=0.020, gap_max_s=0.040, focal_sensitivity=0.60):
@@ -664,159 +669,161 @@ class PulseLearner:
 
         Retorna (kept_peaks, distant_peaks).
         """
-        peaks = np.asarray(sorted(peaks), dtype=int)
-        if peaks.size == 0:
-            return peaks, np.asarray([], dtype=int)
+        with self._model_lock:
+            peaks = np.asarray(sorted(peaks), dtype=int)
+            if peaks.size == 0:
+                return peaks, np.asarray([], dtype=int)
 
-        amps = env_signal[peaks]
-        # Piso de amplitude focal: evita que grilos de fundo (< -10 dB do grilo focal) entrem
-        a_focal = float(np.percentile(amps, 85)) if len(amps) >= 5 else float(np.max(amps))
-        focal_floor = max(0.06, a_focal * (0.22 + 0.10 * focal_sensitivity))
+            amps = env_signal[peaks]
+            # Piso de amplitude focal: evita que grilos de fundo (< -10 dB do grilo focal) entrem
+            a_focal = float(np.percentile(amps, 85)) if len(amps) >= 5 else float(np.max(amps))
+            focal_floor = max(0.06, a_focal * (0.22 + 0.10 * focal_sensitivity))
 
-        # Etapa 2: Priors não-supervisionados de focalidade (GMM Bimodal)
-        priors = PulseLearner.compute_unsupervised_focal_priors(peaks, rate, env_signal, raw_signal)
+            # Etapa 2: Priors não-supervisionados de focalidade (GMM Bimodal)
+            priors = PulseLearner.compute_unsupervised_focal_priors(peaks, rate, env_signal, raw_signal)
 
-        # Etapa 2.1: Filtro Rápido Pré-Inferência via Regras Rígidas de Poda (Hard Negative Gate)
-        pruned_indices = set()
-        if getattr(self, "pruning_rules", None):
-            for i, p in enumerate(peaks):
-                f_vec = PulseLearner.extract_features_for_peak(
+            # Etapa 2.1: Filtro Rápido Pré-Inferência via Regras Rígidas de Poda (Hard Negative Gate)
+            pruned_indices = set()
+            if getattr(self, "pruning_rules", None):
+                for i, p in enumerate(peaks):
+                    f_vec = PulseLearner.extract_features_for_peak(
+                        int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
+                    )
+                    violated, rule = self.check_pruning_rules(f_vec)
+                    if violated:
+                        pruned_indices.add(i)
+
+            # Se não há modelo supervisionado treinado, o GMM atua como classificador bimodal calibrado
+            if self.model is None:
+                gmm_thresh = 0.50 + 0.30 * focal_sensitivity
+                # Picos aceitos: alta probabilidade no GMM e amplitude acima do piso focal
+                kept_mask = (priors >= gmm_thresh) & (amps >= focal_floor)
+
+                # Resgate contextual iterativo: propaga a aceitação através do chilreio (ataque e decaimento)
+                changed = True
+                pass_count = 0
+                while changed and pass_count < 5:
+                    changed = False
+                    pass_count += 1
+                    for i in range(len(peaks)):
+                        if not kept_mask[i] and (priors[i] >= 0.30 or amps[i] >= max(0.03, focal_floor * 0.50)):
+                            t_cur = peaks[i] / float(rate)
+                            has_left = (i > 0 and kept_mask[i - 1] and
+                                        (gap_min_s * 0.85 <= t_cur - peaks[i - 1] / float(rate) <= gap_max_s * 1.15) and
+                                        (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
+                            has_right = (i < len(peaks) - 1 and kept_mask[i + 1] and
+                                         (gap_min_s * 0.85 <= peaks[i + 1] / float(rate) - t_cur <= gap_max_s * 1.15) and
+                                         (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
+                            if has_left or has_right:
+                                kept_mask[i] = True
+                                changed = True
+
+                if pruned_indices:
+                    for idx in pruned_indices:
+                        kept_mask[idx] = False
+
+                if not np.any(kept_mask) and len(priors) > 0:
+                    kept_mask = (priors >= np.percentile(priors, 75))
+                    if pruned_indices:
+                        for idx in pruned_indices:
+                            kept_mask[idx] = False
+                return peaks[kept_mask], peaks[~kept_mask]
+
+            # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest)
+            features = np.asarray([
+                PulseLearner.extract_features_for_peak(
                     int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
                 )
-                violated, rule = self.check_pruning_rules(f_vec)
-                if violated:
-                    pruned_indices.add(i)
+                for i, p in enumerate(peaks)
+            ], dtype=float)
 
-        # Se não há modelo supervisionado treinado, o GMM atua como classificador bimodal calibrado
-        if self.model is None:
-            gmm_thresh = 0.50 + 0.30 * focal_sensitivity
-            # Picos aceitos: alta probabilidade no GMM e amplitude acima do piso focal
-            kept_mask = (priors >= gmm_thresh) & (amps >= focal_floor)
+            n_expected = getattr(self.model, "n_features_in_", None)
+            if n_expected is not None and n_expected > 0:
+                if features.shape[1] > n_expected:
+                    X_used = features[:, :n_expected]
+                elif features.shape[1] < n_expected:
+                    pad = np.zeros((features.shape[0], n_expected - features.shape[1]), dtype=float)
+                    X_used = np.hstack((features, pad))
+                else:
+                    X_used = features
+            else:
+                X_used = features
 
-            # Resgate contextual iterativo: propaga a aceitação através do chilreio (ataque e decaimento)
+            try:
+                if hasattr(self.model, "predict_proba"):
+                    probs = self.model.predict_proba(X_used)
+                    classes = list(self.model.classes_)
+                    class1_idx = classes.index(1) if 1 in classes else -1
+                    pos_probs = probs[:, class1_idx] if class1_idx >= 0 else np.ones(len(peaks))
+                else:
+                    pos_probs = self.model.predict(X_used).astype(float)
+            except Exception as exc:
+                pass  # print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
+                return peaks, np.asarray([], dtype=int)
+
+            # Combinação linear: 65% confiança supervisionada + 35% prior físico GMM
+            combined_score = 0.65 * pos_probs + 0.35 * priors
+
+            # Limiares restritivos modulados pelo controle de sensibilidade focal
+            HIGH_CONF_THRESH = 0.58 + 0.25 * focal_sensitivity
+            LOW_CONF_THRESH = 0.42 + 0.20 * focal_sensitivity
+
+            n = len(peaks)
+            kept_mask = np.zeros(n, dtype=bool)
+            pulse_times = peaks / float(rate)
+
+            # 1. Pulsos de alta confiança e que respeitam o piso focal: aprovados diretamente
+            kept_mask[(combined_score >= HIGH_CONF_THRESH) & (amps >= focal_floor)] = True
+
+            # 2. Contextual Gating iterativo: resgata pulsos de ataque e decaimento intra-chilreio
+            # vizinhos a pulso já confirmado
             changed = True
             pass_count = 0
             while changed and pass_count < 5:
                 changed = False
                 pass_count += 1
-                for i in range(len(peaks)):
-                    if not kept_mask[i] and (priors[i] >= 0.30 or amps[i] >= max(0.03, focal_floor * 0.50)):
-                        t_cur = peaks[i] / float(rate)
-                        has_left = (i > 0 and kept_mask[i - 1] and
-                                    (gap_min_s * 0.85 <= t_cur - peaks[i - 1] / float(rate) <= gap_max_s * 1.15) and
-                                    (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
-                        has_right = (i < len(peaks) - 1 and kept_mask[i + 1] and
-                                     (gap_min_s * 0.85 <= peaks[i + 1] / float(rate) - t_cur <= gap_max_s * 1.15) and
-                                     (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
-                        if has_left or has_right:
+                for i in range(n):
+                    if not kept_mask[i] and (combined_score[i] >= LOW_CONF_THRESH or amps[i] >= max(0.03, focal_floor * 0.50)):
+                        t_cur = pulse_times[i]
+                        has_prev_match = (i > 0 and kept_mask[i - 1] and
+                                          gap_min_s * 0.85 <= (t_cur - pulse_times[i - 1]) <= gap_max_s * 1.15 and
+                                          (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
+                        has_next_match = (i < n - 1 and kept_mask[i + 1] and
+                                          gap_min_s * 0.85 <= (pulse_times[i + 1] - t_cur) <= gap_max_s * 1.15 and
+                                          (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
+                        if has_prev_match or has_next_match:
                             kept_mask[i] = True
                             changed = True
 
+            # Aplicação mandatória de regras rígidas de poda pré-inferência
             if pruned_indices:
-                for idx in pruned_indices:
-                    kept_mask[idx] = False
-
-            if not np.any(kept_mask) and len(priors) > 0:
-                kept_mask = (priors >= np.percentile(priors, 75))
-                if pruned_indices:
+                # Salvaguarda: se as regras de poda descartarem mais de 75% de todos os candidatos
+                # de um novo áudio, não aniquila cegamente; poda apenas candidatos de baixa confiança
+                if len(pruned_indices) < 0.75 * n:
                     for idx in pruned_indices:
                         kept_mask[idx] = False
+                else:
+                    for idx in pruned_indices:
+                        if combined_score[idx] < LOW_CONF_THRESH:
+                            kept_mask[idx] = False
+
+            # Salvaguarda de resgate: se nenhum pico foi aceito mas há candidatos com energia
+            if not np.any(kept_mask) and n > 0:
+                top_cutoff = np.percentile(combined_score, 80) if n >= 5 else np.min(combined_score)
+                kept_mask = (combined_score >= top_cutoff) & (amps >= np.median(amps) * 0.5)
+
             return peaks[kept_mask], peaks[~kept_mask]
 
-        # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest)
-        features = np.asarray([
-            PulseLearner.extract_features_for_peak(
-                int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
-            )
-            for i, p in enumerate(peaks)
-        ], dtype=float)
-
-        n_expected = getattr(self.model, "n_features_in_", None)
-        if n_expected is not None and n_expected > 0:
-            if features.shape[1] > n_expected:
-                X_used = features[:, :n_expected]
-            elif features.shape[1] < n_expected:
-                pad = np.zeros((features.shape[0], n_expected - features.shape[1]), dtype=float)
-                X_used = np.hstack((features, pad))
-            else:
-                X_used = features
-        else:
-            X_used = features
-
-        try:
-            if hasattr(self.model, "predict_proba"):
-                probs = self.model.predict_proba(X_used)
-                classes = list(self.model.classes_)
-                class1_idx = classes.index(1) if 1 in classes else -1
-                pos_probs = probs[:, class1_idx] if class1_idx >= 0 else np.ones(len(peaks))
-            else:
-                pos_probs = self.model.predict(X_used).astype(float)
-        except Exception as exc:
-            pass  # print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
-            return peaks, np.asarray([], dtype=int)
-
-        # Combinação linear: 65% confiança supervisionada + 35% prior físico GMM
-        combined_score = 0.65 * pos_probs + 0.35 * priors
-
-        # Limiares restritivos modulados pelo controle de sensibilidade focal
-        HIGH_CONF_THRESH = 0.58 + 0.25 * focal_sensitivity
-        LOW_CONF_THRESH = 0.42 + 0.20 * focal_sensitivity
-
-        n = len(peaks)
-        kept_mask = np.zeros(n, dtype=bool)
-        pulse_times = peaks / float(rate)
-
-        # 1. Pulsos de alta confiança e que respeitam o piso focal: aprovados diretamente
-        kept_mask[(combined_score >= HIGH_CONF_THRESH) & (amps >= focal_floor)] = True
-
-        # 2. Contextual Gating iterativo: resgata pulsos de ataque e decaimento intra-chilreio
-        # vizinhos a pulso já confirmado
-        changed = True
-        pass_count = 0
-        while changed and pass_count < 5:
-            changed = False
-            pass_count += 1
-            for i in range(n):
-                if not kept_mask[i] and (combined_score[i] >= LOW_CONF_THRESH or amps[i] >= max(0.03, focal_floor * 0.50)):
-                    t_cur = pulse_times[i]
-                    has_prev_match = (i > 0 and kept_mask[i - 1] and
-                                      gap_min_s * 0.85 <= (t_cur - pulse_times[i - 1]) <= gap_max_s * 1.15 and
-                                      (amps[i] >= 0.20 * amps[i - 1] or amps[i - 1] >= 0.20 * amps[i]))
-                    has_next_match = (i < n - 1 and kept_mask[i + 1] and
-                                      gap_min_s * 0.85 <= (pulse_times[i + 1] - t_cur) <= gap_max_s * 1.15 and
-                                      (amps[i] >= 0.20 * amps[i + 1] or amps[i + 1] >= 0.20 * amps[i]))
-                    if has_prev_match or has_next_match:
-                        kept_mask[i] = True
-                        changed = True
-
-        # Aplicação mandatória de regras rígidas de poda pré-inferência
-        if pruned_indices:
-            # Salvaguarda: se as regras de poda descartarem mais de 75% de todos os candidatos
-            # de um novo áudio, não aniquila cegamente; poda apenas candidatos de baixa confiança
-            if len(pruned_indices) < 0.75 * n:
-                for idx in pruned_indices:
-                    kept_mask[idx] = False
-            else:
-                for idx in pruned_indices:
-                    if combined_score[idx] < LOW_CONF_THRESH:
-                        kept_mask[idx] = False
-
-        # Salvaguarda de resgate: se nenhum pico foi aceito mas há candidatos com energia
-        if not np.any(kept_mask) and n > 0:
-            top_cutoff = np.percentile(combined_score, 80) if n >= 5 else np.min(combined_score)
-            kept_mask = (combined_score >= top_cutoff) & (amps >= np.median(amps) * 0.5)
-
-        return peaks[kept_mask], peaks[~kept_mask]
-
     def serialize(self):
-        if self.model is None:
-            return None
-        payload = skio.dumps(self.model)
-        return {
-            "model_type": type(self.model).__name__,
-            "feature_names": self.feature_names,
-            "model_pickle_b64": base64.b64encode(payload).decode("ascii"),
-        }
+        with self._model_lock:
+            if self.model is None:
+                return None
+            payload = skio.dumps(self.model)
+            return {
+                "model_type": type(self.model).__name__,
+                "feature_names": self.feature_names,
+                "model_pickle_b64": base64.b64encode(payload).decode("ascii"),
+            }
 
     def save_to_config(self):
         try:
@@ -843,210 +850,216 @@ class PulseLearner:
         finally:
             CONFIG_LOCK.release()
     def save_persisted_training(self):
-        payload = {
-            "model": self.model,
-            "training_features": self.training_features,
-            "training_labels": self.training_labels,
-            "feature_names": self.feature_names,
-            "pruning_rules": getattr(self, "pruning_rules", []),
-            "version": APP_VERSION,
-        }
-        temp_path = self.persistence_path + ".tmp"
-        try:
-            with open(temp_path, "wb") as f:
-                skio.dump(payload, f)
-            os.replace(temp_path, self.persistence_path)
+        with self._model_lock:
+            payload = {
+                "model": self.model,
+                "training_features": self.training_features,
+                "training_labels": self.training_labels,
+                "feature_names": self.feature_names,
+                "pruning_rules": getattr(self, "pruning_rules", []),
+                "version": APP_VERSION,
+            }
+            temp_path = self.persistence_path + ".tmp"
+            try:
+                with open(temp_path, "wb") as f:
+                    skio.dump(payload, f)
+                os.replace(temp_path, self.persistence_path)
             
-            # Remove o .pkl antigo se existir
-            old_path = self.persistence_path.replace(".skops", ".pkl")
-            if old_path != self.persistence_path and os.path.exists(old_path):
-                try: os.remove(old_path)
-                except: pass
+                # Remove o .pkl antigo se existir
+                old_path = self.persistence_path.replace(".skops", ".pkl")
+                if old_path != self.persistence_path and os.path.exists(old_path):
+                    try: os.remove(old_path)
+                    except: pass
                 
-            return True
-        except (OSError, Exception) as exc:
-            pass  # print(f"Erro ao persistir treinamento: {exc}")
-            return False
+                return True
+            except (OSError, Exception) as exc:
+                pass  # print(f"Erro ao persistir treinamento: {exc}")
+                return False
 
     def _features_compatible(self, payload_names):
         return list(payload_names or []) == list(self.feature_names)
 
     def load_persisted_training(self):
-        # Migração transparente
-        if not os.path.exists(self.persistence_path):
-            old_path = self.persistence_path.replace(".skops", ".pkl")
-            if os.path.exists(old_path):
-                self.persistence_path = old_path
-            else:
-                return False
-                
-        try:
-            with open(self.persistence_path, "rb") as f:
-                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-            if not isinstance(payload, dict):
-                return False
-            if not self._features_compatible(payload.get("feature_names")):
-                return False
-            features = np.asarray(payload.get("training_features", []), dtype=float)
-            labels = np.asarray(payload.get("training_labels", []), dtype=int)
-            if features.ndim == 2 and len(labels) == len(features):
-                if features.shape[1] < len(self.feature_names):
-                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
-                    self.training_features = np.hstack((features, pad))
-                elif features.shape[1] == len(self.feature_names):
-                    self.training_features = features
+        with self._model_lock:
+            # Migração transparente
+            if not os.path.exists(self.persistence_path):
+                old_path = self.persistence_path.replace(".skops", ".pkl")
+                if os.path.exists(old_path):
+                    self.persistence_path = old_path
                 else:
-                    self.training_features = features[:, :len(self.feature_names)]
-                self.training_labels = labels
-
-            # Salvaguarda contra modelos degenerados (sem exemplos negativos de ruído/distantes)
-            if self.training_labels.size > 0:
-                n_neg = int(np.sum(self.training_labels == 0))
-                n_pos = int(np.sum(self.training_labels == 1))
-                if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
-                    pass
-                    self.model = None
-                    self.model = None
-                    self.training_features = np.empty((0, len(self.feature_names)))
-                    self.training_labels = np.empty(0, dtype=int)
                     return False
-            self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
-            model = payload.get("model")
-            if model is not None and hasattr(model, "predict"):
-                self.model = model
-            return self.model is not None or self.training_features.size > 0
-        except Exception as exc:
-            logging.getLogger("crinometro").error(f"Erro ao carregar modelo: {exc}", exc_info=True)
-            self.last_error = str(exc)
-            self.degraded = True
+                
             try:
-                import time
-                os.rename(self.persistence_path, self.persistence_path + f".corrupt-{int(time.time())}")
-            except Exception:
-                pass
-            return False
+                with open(self.persistence_path, "rb") as f:
+                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
+                if not isinstance(payload, dict):
+                    return False
+                if not self._features_compatible(payload.get("feature_names")):
+                    return False
+                features = np.asarray(payload.get("training_features", []), dtype=float)
+                labels = np.asarray(payload.get("training_labels", []), dtype=int)
+                if features.ndim == 2 and len(labels) == len(features):
+                    if features.shape[1] < len(self.feature_names):
+                        pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
+                        self.training_features = np.hstack((features, pad))
+                    elif features.shape[1] == len(self.feature_names):
+                        self.training_features = features
+                    else:
+                        self.training_features = features[:, :len(self.feature_names)]
+                    self.training_labels = labels
+
+                # Salvaguarda contra modelos degenerados (sem exemplos negativos de ruído/distantes)
+                if self.training_labels.size > 0:
+                    n_neg = int(np.sum(self.training_labels == 0))
+                    n_pos = int(np.sum(self.training_labels == 1))
+                    if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
+                        pass
+                        self.model = None
+                        self.model = None
+                        self.training_features = np.empty((0, len(self.feature_names)))
+                        self.training_labels = np.empty(0, dtype=int)
+                        return False
+                self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
+                model = payload.get("model")
+                if model is not None and hasattr(model, "predict"):
+                    self.model = model
+                return self.model is not None or self.training_features.size > 0
+            except Exception as exc:
+                logging.getLogger("crinometro").error(f"Erro ao carregar modelo: {exc}", exc_info=True)
+                self.last_error = str(exc)
+                self.degraded = True
+                try:
+                    import time
+                    os.rename(self.persistence_path, self.persistence_path + f".corrupt-{int(time.time())}")
+                except Exception:
+                    pass
+                return False
 
     def load_from_config(self):
-        try:
-            CONFIG_LOCK.acquire()
-            if not os.path.exists(self.config_path):
-                return False
+        with self._model_lock:
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                if not isinstance(config, dict):
+                CONFIG_LOCK.acquire()
+                if not os.path.exists(self.config_path):
                     return False
-                self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
-                payload = config.get("pulse_learner")
-                if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
-                    return False
-                # Skip checking feature names if not present to not break backwards compatibility
-                if "feature_names" in payload and not self._features_compatible(payload.get("feature_names")):
-                    return False
-                model_bytes = base64.b64decode(payload["model_pickle_b64"])
                 try:
-                    self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-                    return True
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                    if not isinstance(config, dict):
+                        return False
+                    self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
+                    payload = config.get("pulse_learner")
+                    if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
+                        return False
+                    # Skip checking feature names if not present to not break backwards compatibility
+                    if "feature_names" in payload and not self._features_compatible(payload.get("feature_names")):
+                        return False
+                    model_bytes = base64.b64decode(payload["model_pickle_b64"])
+                    try:
+                        self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
+                        return True
+                    except Exception as exc:
+                        self.model = None
+                        return False
                 except Exception as exc:
+                    pass
                     self.model = None
                     return False
-            except Exception as exc:
-                pass
-                self.model = None
-                return False
 
-        finally:
-            CONFIG_LOCK.release()
+            finally:
+                CONFIG_LOCK.release()
     def export_model_file(self, filepath):
         """Exporta o modelo treinado completo, conjunto de dados e metadados para um arquivo independente."""
-        if self.model is None and self.training_features.size == 0:
-            raise ValueError("Não há modelo ou dados de treinamento disponíveis para exportar.")
-        payload = {
-            "model": self.model,
-            "training_features": self.training_features,
-            "training_labels": self.training_labels,
-            "feature_names": self.feature_names,
-            "version": APP_VERSION,
-            "timestamp": time.time(),
-        }
-        with open(filepath, "wb") as f:
-            skio.dump(payload, f)
-        return True
+        with self._model_lock:
+            if self.model is None and self.training_features.size == 0:
+                raise ValueError("Não há modelo ou dados de treinamento disponíveis para exportar.")
+            payload = {
+                "model": self.model,
+                "training_features": self.training_features,
+                "training_labels": self.training_labels,
+                "feature_names": self.feature_names,
+                "version": APP_VERSION,
+                "timestamp": time.time(),
+            }
+            with open(filepath, "wb") as f:
+                skio.dump(payload, f)
+            return True
 
     def import_model_file(self, filepath):
         """Carrega e valida um modelo de treinamento exportado anteriormente, com verificação de versão."""
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
-        try:
-            with open(filepath, "rb") as f:
-                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-        except Exception:
-            raise ValueError("Formato de arquivo de treinamento inválido ou inseguro.")
+        with self._model_lock:
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
+            try:
+                with open(filepath, "rb") as f:
+                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
+            except Exception:
+                raise ValueError("Formato de arquivo de treinamento inválido ou inseguro.")
                 
-        if not isinstance(payload, dict):
-            raise ValueError("Formato de arquivo de treinamento inválido.")
-        if not self._features_compatible(payload.get("feature_names")):
-            raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine.")
+            if not isinstance(payload, dict):
+                raise ValueError("Formato de arquivo de treinamento inválido.")
+            if not self._features_compatible(payload.get("feature_names")):
+                raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine.")
 
-        # Verificação de versão do arquivo em relação à versão do app
-        file_version = str(payload.get("version", "1.0.0"))
-        if is_version_newer(file_version, APP_VERSION):
-            raise ValueError(
-                f"O arquivo de treinamento foi gerado por uma versão mais recente do Crinômetro (v{file_version}).\n\n"
-                f"Sua versão atual é v{APP_VERSION}.\n\n"
-                f"Por favor, atualize seu aplicativo em:\n"
-                f"https://github.com/rogerioafreitas/crinometro"
-            )
+            # Verificação de versão do arquivo em relação à versão do app
+            file_version = str(payload.get("version", "1.0.0"))
+            if is_version_newer(file_version, APP_VERSION):
+                raise ValueError(
+                    f"O arquivo de treinamento foi gerado por uma versão mais recente do Crinômetro (v{file_version}).\n\n"
+                    f"Sua versão atual é v{APP_VERSION}.\n\n"
+                    f"Por favor, atualize seu aplicativo em:\n"
+                    f"https://github.com/rogerioafreitas/crinometro"
+                )
 
-        features = np.asarray(payload.get("training_features", []), dtype=float)
-        labels = np.asarray(payload.get("training_labels", []), dtype=int)
-        model = payload.get("model")
+            features = np.asarray(payload.get("training_features", []), dtype=float)
+            labels = np.asarray(payload.get("training_labels", []), dtype=int)
+            model = payload.get("model")
 
-        # Adaptação para modelos antigos com 7 ou outros números de features
-        if features.size > 0 and labels.size > 0:
-            if features.ndim == 2:
-                if features.shape[1] < len(self.feature_names):
-                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
-                    self.training_features = np.hstack((features, pad))
+            # Adaptação para modelos antigos com 7 ou outros números de features
+            if features.size > 0 and labels.size > 0:
+                if features.ndim == 2:
+                    if features.shape[1] < len(self.feature_names):
+                        pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
+                        self.training_features = np.hstack((features, pad))
+                    else:
+                        self.training_features = features[:, :len(self.feature_names)]
                 else:
-                    self.training_features = features[:, :len(self.feature_names)]
+                    self.training_features = features
+                self.training_labels = labels
+
+            if model is not None and hasattr(model, "predict"):
+                self.model = model
+            elif self.training_features.size > 0 and self.training_labels.size > 0 and np.unique(self.training_labels).size >= 2:
+                self.model = self._build_model()
+                self.model.fit(self.training_features, self.training_labels)
             else:
-                self.training_features = features
-            self.training_labels = labels
+                raise ValueError("O arquivo não contém um classificador válido ou dados suficientes para treino.")
 
-        if model is not None and hasattr(model, "predict"):
-            self.model = model
-        elif self.training_features.size > 0 and self.training_labels.size > 0 and np.unique(self.training_labels).size >= 2:
-            self.model = self._build_model()
-            self.model.fit(self.training_features, self.training_labels)
-        else:
-            raise ValueError("O arquivo não contém um classificador válido ou dados suficientes para treino.")
-
-        self.save_persisted_training()
-        self.save_to_config()
-        return True
+            self.save_persisted_training()
+            self.save_to_config()
+            return True
 
     def reset(self):
         """Zera completamente o modelo, dados de treino e arquivos persistidos."""
-        self.model = None
-        self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
-        self.training_labels = np.empty((0,), dtype=int)
-        self.pruning_rules = []
-        if os.path.exists(self.persistence_path):
+        with self._model_lock:
+            self.model = None
+            self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
+            self.training_labels = np.empty((0,), dtype=int)
+            self.pruning_rules = []
+            if os.path.exists(self.persistence_path):
+                try:
+                    os.remove(self.persistence_path)
+                except OSError:
+                    pass
             try:
-                os.remove(self.persistence_path)
-            except OSError:
+                if os.path.exists(self.config_path):
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                    if isinstance(config, dict):
+                        config["pulse_learner"] = None
+                        config["pruning_rules"] = []
+                        with open(self.config_path, "w", encoding="utf-8") as f:
+                            json.dump(config, f, indent=4, ensure_ascii=False)
+            except Exception:
                 pass
-        try:
-            if os.path.exists(self.config_path):
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                if isinstance(config, dict):
-                    config["pulse_learner"] = None
-                    config["pruning_rules"] = []
-                    with open(self.config_path, "w", encoding="utf-8") as f:
-                        json.dump(config, f, indent=4, ensure_ascii=False)
-        except Exception:
-            pass
 
 

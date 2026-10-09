@@ -411,7 +411,6 @@ class PipelineOrchestrator(QObject):
                         self.ctx.pulse_learner.update_from_corrections(
                             peaks_det, peaks_verif, rate, env, raw_signal=data_b1
                         )
-                        self._adapt_advanced_params()
                         self.ctx.pulse_learner.save_to_config()
                     except Exception:
                         pass
@@ -441,6 +440,8 @@ class PipelineOrchestrator(QObject):
         self._retain(worker)
 
         def _on_finished(results):
+            # Adapta os parmetros avanados aps aprendizado na main thread (A4)
+            self._adapt_advanced_params()
             # _apply_analysis_results atualiza active_heavy_data e cache
             self._apply_analysis_results(filename, results)
             self.analysis_completed.emit(filename)
