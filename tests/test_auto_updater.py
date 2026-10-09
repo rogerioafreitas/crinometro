@@ -60,7 +60,7 @@ class TestAutoUpdater(unittest.TestCase):
         corrupted_target = "C:\\Program Files\\Crin\ufffdmetro"
         
         # Dispara a geração sem executar o processo em background
-        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False)
+        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False, require_hash=False)
 
         self.assertTrue(os.path.exists(self.ps1_file), "apply_update.ps1 deve existir!")
         self.assertTrue(os.path.exists(self.bat_file), "apply_update.bat deve existir!")
@@ -86,7 +86,7 @@ class TestAutoUpdater(unittest.TestCase):
     def test_powershell_syntax_validation(self):
         """Valida se o PowerShell do Windows compila a sintaxe do script apply_update.ps1 sem erros."""
         corrupted_target = "C:\\Program Files\\Crin\ufffdmetro"
-        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False)
+        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False, require_hash=False)
 
         self.assertTrue(os.path.exists(self.ps1_file), "apply_update.ps1 deve existir para o teste de sintaxe!")
 
@@ -118,7 +118,7 @@ class TestAutoUpdater(unittest.TestCase):
         with open(zip_update, "wb") as f:
             f.write(b"MOCK_ZIP")
 
-        launch_windows_updater(zip_update, target_dir=r"C:\Program Files\Crinômetro", execute=False)
+        launch_windows_updater(zip_update, target_dir=r"C:\Program Files\Crinômetro", execute=False, require_hash=False)
 
         with open(self.ps1_file, "r", encoding="utf-8-sig") as f:
             content = f.read()

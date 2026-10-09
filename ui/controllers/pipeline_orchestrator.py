@@ -12,7 +12,7 @@ import os
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
-from core.analyzer import CricketAnalyzer
+from core.analyzer import CricketAnalyzer, AnalysisAborted
 from core.worker import GenericWorker
 from core.learner import PulseLearner
 
@@ -133,11 +133,14 @@ class PipelineOrchestrator(QObject):
                 valid_peaks_stage2, carrier_freq, new_tol,
                 rate, t_spec, dom_freqs, env, effective_params,
                 data_b1=data_b1, pulse_learner=learner,
-                base_discarded_reasons=d.get("discarded_peaks_reasons", {})
+                base_discarded_reasons=d.get("discarded_peaks_reasons", {}),
+                user_added_peaks=d.get("user_added_peaks", []),
+                user_removed_peaks=d.get("user_removed_peaks", [])
             )
         )
 
         d["peaks"] = list(peaks)
+        d["peaks_detected"] = list(peaks)
         d["chirps"] = chirps
         d["chirp_peaks_list"] = chirp_peaks_list
         d["media"] = media
@@ -267,7 +270,7 @@ class PipelineOrchestrator(QObject):
         self.ctx.active_filename = filename
         effective_params = params if params else {**self.ctx.algo_params, **self.ctx._adaptive_overrides}
         
-        from core.analyzer import CricketAnalyzer
+        from core.analyzer import CricketAnalyzer, AnalysisAborted
         use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
         file_path = self.ctx.loaded_files[filename]
@@ -324,10 +327,13 @@ class PipelineOrchestrator(QObject):
                     continue
                 try:
                     fpath = self.ctx.loaded_files[fname]
-                    res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=learner)
+                    res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=learner, should_abort=lambda: worker.abort_requested)
                     if worker and not worker.abort_requested:
                         worker.result_ready_signal.emit(fname, res)
                         success_count += 1
+                except AnalysisAborted:
+                    worker.cancelled_signal.emit()
+                    break
                 except Exception as exc:
                     errors.append(f"{fname}: {exc}")
 
@@ -338,6 +344,7 @@ class PipelineOrchestrator(QObject):
 
         worker = GenericWorker(_task)
         self._batch_worker = worker
+        self._retain(worker)
 
         def _on_single_result(fname, res):
             is_active = (self.ctx.active_filename == fname)
@@ -371,6 +378,8 @@ class PipelineOrchestrator(QObject):
     # ------------------------------------------------------------------ #
     def force_reanalyze(self, filename):
         """Inicia análise em thread secundária GenericWorker."""
+        if self._reanalyze_worker is not None and self._reanalyze_worker.isRunning():
+            return False
         if not filename or filename not in self.ctx.loaded_files or not os.path.exists(self.ctx.loaded_files[filename]):
             self.analysis_failed.emit(filename or "", "Arquivo não carregado ou não encontrado.")
             return
@@ -384,13 +393,23 @@ class PipelineOrchestrator(QObject):
             use_ml = self.ctx.use_machine_learning
             if (self.ctx.active_heavy_data and self.ctx.active_filename == filename and
                 filename in self.ctx.corrections_by_file and self.ctx.peaks_user_verified and use_ml):
+                
+                # Snapshot imediato e isolado
+                import numpy as np
                 rate = float(self.ctx.active_heavy_data.get("rate", 1.0))
-                env = self.ctx.active_heavy_data.get("env")
-                data_b1 = self.ctx.active_heavy_data.get("data_b1")
-                if env is not None:
+                env_orig = self.ctx.active_heavy_data.get("env", np.array([]))
+                env = np.copy(env_orig) if env_orig is not None else np.array([])
+                
+                data_b1_orig = self.ctx.active_heavy_data.get("data_b1", np.array([]))
+                data_b1 = np.copy(data_b1_orig) if data_b1_orig is not None else np.array([])
+                
+                peaks_det = list(self.ctx.peaks_detected)
+                peaks_verif = list(self.ctx.peaks_user_verified)
+                
+                if env.size > 0:
                     try:
                         self.ctx.pulse_learner.update_from_corrections(
-                            self.ctx.peaks_detected, self.ctx.peaks_user_verified, rate, env, raw_signal=data_b1
+                            peaks_det, peaks_verif, rate, env, raw_signal=data_b1
                         )
                         self._adapt_advanced_params()
                         self.ctx.pulse_learner.save_to_config()
@@ -416,6 +435,7 @@ class PipelineOrchestrator(QObject):
 
         worker = GenericWorker(_task)
         self._reanalyze_worker = worker
+        self._retain(worker)
 
         def _on_finished(results):
             # _apply_analysis_results atualiza active_heavy_data e cache
@@ -441,9 +461,23 @@ class PipelineOrchestrator(QObject):
         if self._batch_worker and self._batch_worker.isRunning():
             self._batch_worker.abort()
             aborted = True
-            self.batch_cancelled.emit()
-
+    
         if aborted:
             active_name = self.ctx.active_filename or ""
             self.analysis_cancelled.emit(active_name)
         return aborted
+
+    def _retain(self, worker):
+        if not hasattr(self, '_retained_workers'):
+            self._retained_workers = set()
+        self._retained_workers.add(worker)
+        worker.finished.connect(lambda w=worker: self._retained_workers.discard(w))
+
+    def shutdown(self, timeout_ms=8000):
+        if not hasattr(self, '_retained_workers'):
+            return
+        pending = list(self._retained_workers)
+        for w in pending:
+            w.abort()
+        for w in pending:
+            w.wait(timeout_ms)

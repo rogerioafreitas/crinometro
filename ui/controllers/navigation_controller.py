@@ -227,7 +227,7 @@ class NavigationController(QObject):
             except Exception:
                 pass
         self._click_alignment_lines = []
-        for panel in (self.panel_wave, self.panel_freq, self.panel_spec):
+        for panel in (self.panel_wave, self.panel_spec):
             if panel is not None and hasattr(panel, 'figure'):
                 for ax in panel.figure.axes:
                     self._click_alignment_lines.append(
@@ -470,6 +470,7 @@ class NavigationController(QObject):
             and clicked_panel
             and getattr(clicked_panel, 'pulse_edit_mode', False)
             and event.xdata is not None
+            and clicked_panel != self.panel_freq
         ):
             d = self.session_context.active_heavy_data
             if d:
@@ -607,8 +608,6 @@ class NavigationController(QObject):
 
             if is_wave:
                 target_panel = self.panel_wave
-            elif is_freq:
-                target_panel = self.panel_freq
             elif is_spec:
                 target_panel = self.panel_spec
 

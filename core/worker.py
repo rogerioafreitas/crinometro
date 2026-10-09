@@ -7,6 +7,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 class GenericWorker(QThread):
     """Executa tarefas computacionalmente intensas em background sem travar a interface gráfica."""
     finished_signal = pyqtSignal(object)
+    cancelled_signal = pyqtSignal()
     error_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int)   # (current, total) para lote
     result_ready_signal = pyqtSignal(str, object) # (filename, result_payload)
@@ -35,6 +36,10 @@ class GenericWorker(QThread):
             res = self.target_fn(*self.args, **self.kwargs)
             if not self._abort_event.is_set():
                 self.finished_signal.emit(res)
+            else:
+                self.cancelled_signal.emit()
         except Exception as exc:
             if not self._abort_event.is_set():
                 self.error_signal.emit(str(exc))
+            else:
+                self.cancelled_signal.emit()

@@ -396,7 +396,7 @@ Campos planejados:
 - [x] Diagnóstico de Cadência Rítmica
 - [x] Estimativa de Temperatura (Dolbear)
 - [x] Gráficos selecionados
-- [ ] Listagem exaustiva de chilreios e pulsos
+- [x] Listagem exaustiva de chilreios e pulsos
 
 Esses padrões são defaults de interface e não devem substituir escolhas explícitas do usuário quando o relatório permitir configuração.
 

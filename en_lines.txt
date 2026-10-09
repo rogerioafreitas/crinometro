@@ -1,0 +1,7 @@
+        "ml_enabled": "🤖 AI: Enabled",
+        "ml_disabled": "🤖 AI: Disabled",
+        "ml_disabled_dsp": "🤖 AI: Disabled (DSP Mode)",
+        "ml_enabled_supervised": "🤖 AI: Enabled (Supervised Model)",
+        "ml_enabled_unsupervised": "🤖 AI: Enabled (Unsupervised GMM)",
+        "ml_enabled_tooltip": "AI Enabled: filters noise and discriminates distant crickets. Click to disable.",
+        "ml_disabled_tooltip": "AI Disabled: analysis executed strictly by signal processing (DSP). Click to enable.",

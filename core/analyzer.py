@@ -11,6 +11,9 @@ from scipy.io import wavfile
 from scipy.io.wavfile import WavFileWarning
 from scipy.signal import hilbert, find_peaks, butter, sosfiltfilt, peak_widths, spectrogram, welch
 
+class AnalysisAborted(Exception):
+    pass
+
 class CricketAnalyzer:
     @staticmethod
     def _safe_mode(values):
@@ -35,7 +38,11 @@ class CricketAnalyzer:
         return f[1:], Pxx_db[1:]
 
     @staticmethod
-    def analyze(file_path, params, pulse_learner=None, cached_spec=None):
+    def analyze(file_path, params, pulse_learner=None, cached_spec=None, should_abort=None):
+
+        def _chk():
+            if should_abort is not None and should_abort():
+                raise AnalysisAborted()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", WavFileWarning)
             rate, data = wavfile.read(file_path)
@@ -56,12 +63,20 @@ class CricketAnalyzer:
         max_abs = np.max(np.abs(data))
         if max_abs == 0:
             raise ValueError("O arquivo de áudio está mudo.")
+        
+        if len(data) < 1024:
+            raise ValueError("O arquivo de áudio é curto demais para o janelamento espectral (mínimo de 1024 frames).")
 
         audio_duration_sec = len(data) / rate
 
         # Filtragem passa-faixa Butterworth IIR em unidades físicas (isolamento da banda estridulatória)
-        b1_min = max(20.0, float(params.get("b1_min", 3200)))
+        _chk()
         b1_max = min(nyq - 20.0, float(params.get("b1_max", 6000)))
+        b1_min = max(20.0, float(params.get("b1_min", 3200)))
+        if b1_max - b1_min < 100.0:
+            raise ValueError(f"Taxa de amostragem de {rate} Hz incompatível com a banda configurada ({b1_min:.0f}–{float(params.get('b1_max', 6000)):.0f} Hz; Nyquist = {nyq:.0f} Hz). Ajuste b1_min/b1_max ou use uma gravação com taxa maior.")
+        elif b1_min >= b1_max:
+            b1_min = max(20.0, b1_max - 20.0)
         sos_b1 = butter(4, [b1_min / nyq, b1_max / nyq], btype='band', output='sos')
         data_b1 = sosfiltfilt(sos_b1, data)
         env1 = np.abs(hilbert(data_b1))
@@ -96,6 +111,7 @@ class CricketAnalyzer:
             dom_freqs = cached_spec["dom_freqs"]
         else:
             # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
+            _chk()
             f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
             Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
             f_spec = f_spec.astype(np.float32)
@@ -127,7 +143,6 @@ class CricketAnalyzer:
                 p_valid = non_zero & (p >= -1.0) & (p <= 1.0)
                 dom_freqs[valid_cols[p_valid]] = f_spec[k[p_valid]] + p[p_valid] * df
             dom_freqs = dom_freqs.astype(np.float32)
-        dist_samples = max(1, int(rate * (params.get("gap_min", 25.0) / 1000.0 * 0.75)))
 
         # Limiar adaptativo restritivo de alta especificidade (prioriza precisão e elimina falsos positivos)
         noise_floor_param = float(params.get("noise_floor", 1.00))
@@ -161,8 +176,8 @@ class CricketAnalyzer:
             peak_dur_dict = dict(zip(peaks_filtered, pulse_durations_s))
 
             dur_tol = 0.45
-            dur_min_lim = (params["dur_min"] / 1000.0) * (1 - dur_tol)
-            dur_max_lim = (params["dur_max"] / 1000.0) * (1 + dur_tol)
+            dur_min_lim = (float(params.get("dur_min", 14.0)) / 1000.0) * (1 - dur_tol)
+            dur_max_lim = (float(params.get("dur_max", 80.0)) / 1000.0) * (1 + dur_tol)
             for p in peaks_filtered:
                 dur = peak_dur_dict[p]
                 if dur_min_lim <= dur <= dur_max_lim:
@@ -283,12 +298,12 @@ class CricketAnalyzer:
     def reevaluate_carrier_tolerance(
         valid_peaks_stage2, carrier_freq, new_tol_hz,
         rate, t_spec, dom_freqs, env, params, data_b1=None,
-        pulse_learner=None, base_discarded_reasons=None
+        pulse_learner=None, base_discarded_reasons=None, user_added_peaks=None, user_removed_peaks=None
     ):
         """Re-avalia rapidamente em tempo real a tolerância espectral da portadora.
 
         Executa em menos de 30 ms sem recalcular transformadas pesadas.
-        Retorna: (peaks, chirps, chirp_peaks_list, media, moda, all_distant, discarded_reasons)
+        Retorna: (peaks, chirps, chirp_peaks_list, media, moda, variancia, all_distant, discarded_reasons)
         """
         valid_peaks_stage2 = np.asarray(valid_peaks_stage2, dtype=int)
         freq_tol = float(new_tol_hz)
@@ -325,12 +340,27 @@ class CricketAnalyzer:
         else:
             candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
 
-        # 3. Classificação ML (Removido daqui pois já foi processado na análise principal e não depende da tolerância)
-        # O array candidate_peaks já reflete o estágio 2 (pós-ML)
-        pass
+        # 3. Classificação contextual e segregação focal/distante (ML)
+        if pulse_learner is not None and len(candidate_peaks) > 0:
+            gap_min_s = float(params.get("gap_min", 25.0)) / 1000.0 * 0.85
+            gap_max_s = float(params.get("gap_max", 35.0)) / 1000.0 * 1.15
+            focal_sens = float(params.get("focal_sensitivity", 0.60))
+            candidate_peaks, ml_distant_peaks = pulse_learner.filter_peaks(
+                candidate_peaks, rate, env, raw_signal=data_b1,
+                gap_min_s=gap_min_s, gap_max_s=gap_max_s, focal_sensitivity=focal_sens
+            )
+            for p in ml_distant_peaks:
+                discarded_reasons[int(p)] = "Classificado pelo modelo ML como ruído / canto distante" 
 
+        # 3.5. Reaplicar correções manuais do usuário antes de reagrupar
+        final_peaks = set(candidate_peaks)
+        if user_removed_peaks:
+            final_peaks.difference_update(user_removed_peaks)
+        if user_added_peaks:
+            final_peaks.update(user_added_peaks)
+        
         # 4. Agrupamento em chilreios
-        peaks = np.asarray(sorted(candidate_peaks), dtype=int)
+        peaks = np.asarray(sorted(final_peaks), dtype=int)
         chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
             peaks, params, rate, env, raw_signal=data_b1
         )
@@ -357,7 +387,7 @@ class CricketAnalyzer:
         Picos forçados (user_added_peaks) são sempre preservados se respeitarem o intervalo temporal.
         """
         if len(peaks) < 2:
-            return [], [], 0.0, 0
+            return [], [], 0.0, 0, 0.0
         peaks = np.asarray(sorted(peaks), dtype=int)
         pulse_times_s = peaks / float(rate)
         # Tolerância fisiológica rigorosa no intervalo inter-pulso (gap)

@@ -264,7 +264,7 @@ class LauncherLoadingScreen(QWidget):
 
     def _on_update_check_error(self, err_msg: str):
         """Em caso de falha de conexão com o GitHub, não impede o app de abrir."""
-        print(f"[Auto-Updater] Verificação ignorada: {err_msg}")
+        pass  # print(f"[Auto-Updater] Verificação ignorada: {err_msg}")
         if self.core_ready and self.anim_state == "sleeping":
             self.anim_state = "waking"
 
@@ -327,7 +327,7 @@ class LauncherLoadingScreen(QWidget):
             # Transiciona para reinicialização suave
             QTimer.singleShot(1400, self._step_restart_app)
         except Exception as e:
-            print(f"[Auto-Updater] Erro ao iniciar atualização: {e}")
+            pass  # print(f"[Auto-Updater] Erro ao iniciar atualização: {e}")
             import traceback
             traceback.print_exc()
             self.update_status_text = "Erro na instalação. Iniciando versão atual..."
@@ -352,13 +352,13 @@ class LauncherLoadingScreen(QWidget):
         os._exit(0)
 
     def _on_download_error(self, err_msg: str):
-        print(f"[Auto-Updater] Erro no download: {err_msg}")
+        pass  # print(f"[Auto-Updater] Erro no download: {err_msg}")
         self.update_status_text = "Erro no download. Iniciando versão atual..."
         self.update()
         QTimer.singleShot(1500, self._on_remind_later_clicked)
 
     def _on_core_error(self, err_trace: str):
-        print(f"Erro ao carregar Crinômetro:\n{err_trace}")
+        pass  # print(f"Erro ao carregar Crinômetro:\n{err_trace}")
         self.fps_timer.stop()
         self.phrase_timer.stop()
         msg = QMessageBox(self)

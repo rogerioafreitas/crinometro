@@ -510,6 +510,8 @@ class EditorController(QObject):
 
     def learn_from_corrections(self, filename: str = None, blocking: bool = False):
         """Coordena o retreinamento do classificador PulseLearner com base nas correções do usuário."""
+        if getattr(self, "_learn_worker", None) is not None and self._learn_worker.isRunning():
+            return False, "Treinamento já em andamento."
         ctx = self.session_context
 
         # Sincroniza coerência entre o argumento filename e o arquivo ativo no SessionContext
@@ -570,7 +572,6 @@ class EditorController(QObject):
             learner.update_from_corrections(
                 detected, verified, rate, env, raw_signal=data_b1
             )
-            self._adapt_advanced_params()
             learner.save_to_config()
             return len(detected_set ^ verified_set)
 
@@ -579,6 +580,7 @@ class EditorController(QObject):
         if blocking:
             try:
                 num_corrections = _task()
+                self._adapt_advanced_params()
                 self.learning_completed.emit(num_corrections, active_fn)
                 return True, num_corrections
             except Exception as e:
@@ -590,6 +592,7 @@ class EditorController(QObject):
         self._learn_worker = worker
 
         def _on_finished(num_corrections):
+            self._adapt_advanced_params()
             self.learning_completed.emit(num_corrections, active_fn)
 
         def _on_error(err_msg):

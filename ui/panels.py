@@ -142,6 +142,7 @@ class PlotPanel(QFrame):
         self.expand_callback = expand_callback
         self.pulse_edit_mode = False
         self._y_locked = False
+        self.main = bool(main)
 
         self.setObjectName("plotCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -481,7 +482,9 @@ class PlotPanel(QFrame):
         """Ativa/desativa o modo de edição de pulsos para este painel."""
         self.pulse_edit_mode = checked
         parent = self.window()
-        if hasattr(parent, '_update_pulse_edit_buttons'):
+        if hasattr(parent, 'editor_controller') and hasattr(parent.editor_controller, 'update_pulse_edit_buttons'):
+            parent.editor_controller.update_pulse_edit_buttons(self)
+        elif hasattr(parent, '_update_pulse_edit_buttons'):
             parent._update_pulse_edit_buttons(self)
         if checked:
             self.btn_pulse_edit.setToolTip("Modo de edição ativo! Clique nos picos para adicionar/remover")
@@ -531,6 +534,7 @@ class PlotPanel(QFrame):
                 self.chip_box.setVisible(show_chips)
 
     def set_main(self, main):
+        self.main = bool(main)
         self._set_main_visual(main)
         self.btn_expand.setToolTip(
             "Restaurar posição" if main else "Colocar este gráfico na posição principal"
@@ -538,11 +542,35 @@ class PlotPanel(QFrame):
         self._update_responsive_controls()
 
     def update_lang(self, lang):
-        self.lbl_title.setText(I18N[lang][self.title_key])
+        self.lang = lang
+        t = I18N[lang]
+        self.lbl_title.setText(t[self.title_key])
         if hasattr(self, "lbl_tol_ref"):
-            self.lbl_tol_ref.setText(I18N[lang]["filter"])
+            self.lbl_tol_ref.setText(t["filter"])
         if hasattr(self, "btn_spec_preset_full"):
-            self.btn_spec_preset_full.setText(I18N[lang]["total"])
+            self.btn_spec_preset_full.setText(t["total"])
+        if hasattr(self, "title_bar"):
+            self.title_bar.setToolTip(t["drag_bar_reorder_tt"])
+        if hasattr(self, "spin_spec_ymin"):
+            self.spin_spec_ymin.setToolTip(t["spec_ymin_tt"])
+        if hasattr(self, "spin_spec_ymax"):
+            self.spin_spec_ymax.setToolTip(t["spec_ymax_tt"])
+        if hasattr(self, "combo_spec_unit"):
+            self.combo_spec_unit.setToolTip(t["spec_unit_tt"])
+        if hasattr(self, "btn_spec_preset_focal"):
+            self.btn_spec_preset_focal.setToolTip(t["spec_preset_focal_tt"])
+        if hasattr(self, "btn_spec_preset_full"):
+            self.btn_spec_preset_full.setToolTip(t["spec_preset_full_tt"])
+        if hasattr(self, "slider_spec_y"):
+            self.slider_spec_y.setToolTip(t["spec_slider_y_tt"])
+        if hasattr(self, "btn_pulse_edit"):
+            self.btn_pulse_edit.setToolTip(t["pulse_edit_on_tt"] if self.pulse_edit_mode else t["pulse_edit_off_tt"])
+        if hasattr(self, "btn_expand"):
+            self.btn_expand.setToolTip(t["expand_restore_tt"] if self.main else t["expand_main_tt"])
+        if hasattr(self, "slider_carrier_tol"):
+            self.slider_carrier_tol.setToolTip(t["carrier_tol_slider_tt"])
+        if hasattr(self, "spin_carrier_tol"):
+            self.spin_carrier_tol.setToolTip(t["carrier_tol_spin_tt"])
 
     def apply_dark_theme(self):
         dark = getattr(self.window(), "theme_mode", "dark") == "dark"
@@ -1429,18 +1457,16 @@ class PlotPanel(QFrame):
             return
         fc = getattr(self, "_carrier_freq", 0.0)
         unit = getattr(self, "spec_unit", "kHz")
+        t = I18N[getattr(self, "lang", "pt")]
         if fc and fc > 0:
             if unit == "kHz":
                 self.lbl_carrier_info.setText(f"FP: {fc / 1000.0:.2f} kHz")
             else:
                 self.lbl_carrier_info.setText(f"FP: {fc:.0f} Hz")
-            self.lbl_carrier_info.setToolTip(
-                f"Frequência Portadora (FP): {fc:.1f} Hz\n"
-                f"Detectada por densidade modal dos picos estridulatórios"
-            )
+            self.lbl_carrier_info.setToolTip(t["carrier_info_tt_detected"].format(fc=fc))
         else:
             self.lbl_carrier_info.setText("FP: —")
-            self.lbl_carrier_info.setToolTip("Frequência Portadora (FP) ainda não detectada")
+            self.lbl_carrier_info.setToolTip(t["carrier_info_tt_none"])
 
     def set_carrier_tolerance(self, val, notify=True):
         val = int(val)

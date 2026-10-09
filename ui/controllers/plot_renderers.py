@@ -229,7 +229,7 @@ class PlotRenderers:
         meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
         win.lbl_summary_meta.setText(meta_str)
         win.lbl_summary_meta.setToolTip(
-            f"Duração: {d['duration']:.2f} segundos\nParâmetros: {p_txt}"
+            I18N[win.lang]["meta_tooltip_fmt"].format(dur=d['duration'], params=p_txt)
         )
         win.lbl_total.setText(str(len(chirps)))
         win.lbl_metric_sub.setText(f'{I18N[win.lang]["mean"]}: {d["media"]:.2f}   |   {I18N[win.lang]["variance"]}: {d.get("variancia", 0.0):.2f}')
@@ -552,7 +552,8 @@ class PlotRenderers:
                     path_effects=[outline_dur]
                 )
 
-            ax2.set_ylabel("Duração (ms)", fontsize=7.5, color=dur_color)
+            lang = win.lang if win else "pt"
+            ax2.set_ylabel(I18N[lang]["duration_axis_label"], fontsize=7.5, color=dur_color)
             ax2.tick_params(axis='y', labelsize=7, colors=dur_color, length=2)
             for sp in ax2.spines.values():
                 sp.set_visible(False)

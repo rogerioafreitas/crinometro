@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from ui.dialogs.theme import get_dialog_theme
+from utils.i18n import I18N
 from utils.report_generator import ReportConfig, ReportSectionFlags, extract_specimen_id
 
 
@@ -26,7 +27,9 @@ class ExportReportDialog(QDialog):
         super().__init__(parent)
         self.session_context = session_context
         self.checked_files = checked_files or []
-        self.setWindowTitle("Exportar Relatório Bioacústico")
+        self.lang = getattr(parent, "lang", None) or getattr(session_context, "report_params", {}).get("lang", "pt")
+        t = I18N.get(self.lang, I18N["pt"])
+        self.setWindowTitle(t["export_report_title"])
         self.resize(620, 700)
         
         self.config = None
@@ -39,6 +42,7 @@ class ExportReportDialog(QDialog):
         self._load_defaults()
 
     def _build_ui(self):
+        t = I18N.get(getattr(self, "lang", "pt"), I18N["pt"])
         layout = QVBoxLayout(self)
 
         self.tabs = QTabWidget()
@@ -47,29 +51,27 @@ class ExportReportDialog(QDialog):
         self.tab_meta = QWidget()
         meta_layout = QVBoxLayout(self.tab_meta)
 
-        group_global = QGroupBox("Metadados Globais (Gravação / Contexto)")
+        group_global = QGroupBox(t["meta_global_group"])
         global_layout = QFormLayout(group_global)
         global_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self.txt_location   = QLineEdit()
         self.txt_temp       = QLineEdit()
         self.txt_equip      = QLineEdit()
         self.txt_researcher = QLineEdit()
         self.txt_inst       = QLineEdit()
 
-        global_layout.addRow("Localidade:", self.txt_location)
-        global_layout.addRow("Temperatura (°C):", self.txt_temp)
-        global_layout.addRow("Equipamento:", self.txt_equip)
-        global_layout.addRow("Pesquisador:", self.txt_researcher)
-        global_layout.addRow("Instituição:", self.txt_inst)
+        global_layout.addRow(t["temp_lbl"], self.txt_temp)
+        global_layout.addRow(t["equip_lbl"], self.txt_equip)
+        global_layout.addRow(t["researcher_lbl"], self.txt_researcher)
+        global_layout.addRow(t["inst_lbl"], self.txt_inst)
         
         meta_layout.addWidget(group_global)
 
         # Campos por Arquivo
-        group_files = QGroupBox("Metadados por Áudio (Espécie / Cód. Espécime)")
+        group_files = QGroupBox(t["meta_files_group"])
         files_layout = QVBoxLayout(group_files)
         
         self.table_files = QTableWidget(len(self.checked_files), 3)
-        self.table_files.setHorizontalHeaderLabels(["Arquivo", "Espécie", "Cód. Espécime"])
+        self.table_files.setHorizontalHeaderLabels([t["th_file"], t["th_species"], t["th_specimen"]])
         self.table_files.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table_files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table_files.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -91,16 +93,16 @@ class ExportReportDialog(QDialog):
 
         btn_layout_table = QHBoxLayout()
         
-        btn_apply_all = QPushButton("Espécie = Todos")
-        btn_apply_all.setToolTip("Copia a espécie da 1 linha para todas")
+        btn_apply_all = QPushButton(t["btn_species_all"])
+        btn_apply_all.setToolTip(t["btn_species_all_tt"])
         btn_apply_all.clicked.connect(self._apply_species_to_all)
         
-        btn_apply_sel_sp = QPushButton("Agrupar Espécie")
-        btn_apply_sel_sp.setToolTip("Copia a espécie da primeira linha selecionada para as demais selecionadas")
+        btn_apply_sel_sp = QPushButton(t["btn_group_species"])
+        btn_apply_sel_sp.setToolTip(t["btn_group_species_tt"])
         btn_apply_sel_sp.clicked.connect(self._apply_species_to_selected)
         
-        btn_apply_sel_id = QPushButton("Agrupar Espécime")
-        btn_apply_sel_id.setToolTip("Copia o espécime da primeira linha selecionada para as demais selecionadas")
+        btn_apply_sel_id = QPushButton(t["btn_group_specimen"])
+        btn_apply_sel_id.setToolTip(t["btn_group_specimen_tt"])
         btn_apply_sel_id.clicked.connect(self._apply_specimen_to_selected)
         
         btn_layout_table.addWidget(btn_apply_all)
@@ -109,42 +111,40 @@ class ExportReportDialog(QDialog):
         files_layout.addLayout(btn_layout_table)
 
         meta_layout.addWidget(group_files)
-        self.tabs.addTab(self.tab_meta, "Metadados")
+        self.tabs.addTab(self.tab_meta, t["tab_metadata"])
 
         # ── Aba 2: Conteúdo / Módulos ────────────────────────────────────────
         self.tab_modules = QWidget()
         mod_layout = QVBoxLayout(self.tab_modules)
         
-        group_mod = QGroupBox("Seções Inclusas no PDF")
+        group_mod = QGroupBox(t["sec_included_group"])
         vmod = QVBoxLayout(group_mod)
-        self.chk_resumo   = QCheckBox("Resumo Executivo e Tabela de Arquivos")
-        self.chk_metricas = QCheckBox("Métricas Temporais Consolidadas (inclui Variância de Pulsos)")
-        self.chk_cadencia = QCheckBox("Diagnóstico de Cadência Rítmica")
-        self.chk_dolbear  = QCheckBox("Estimativa de Temperatura (Lei de Dolbear)")
-        self.chk_graficos = QCheckBox("Gráficos selecionados (Em breve)")
-        self.chk_pulsos   = QCheckBox("Listagem exaustiva de chilreios e pulsos")
-        
-        self.chk_graficos.setEnabled(False)
+        self.chk_resumo   = QCheckBox(t["chk_exec_summary"])
+        self.chk_metricas = QCheckBox(t["chk_consolidated_metrics"])
+        self.chk_cadencia = QCheckBox(t["chk_cadence_diag"])
+        self.chk_dolbear  = QCheckBox(t["chk_dolbear_est"])
+        self.chk_pulsos   = QCheckBox(t["chk_pulse_listing"])
         
         for chk in (self.chk_resumo, self.chk_metricas, self.chk_cadencia,
-                    self.chk_dolbear, self.chk_graficos, self.chk_pulsos):
+                    self.chk_pulsos):
             vmod.addWidget(chk)
+        self.chk_dolbear.setVisible(False)
         mod_layout.addWidget(group_mod)
 
         # ── Formatos de exportação ─────────────────────────────────────────────
-        group_fmt = QGroupBox("Formatos de Exportação (Selecione um ou mais)")
+        group_fmt = QGroupBox(t["export_formats_group"])
         fmt_layout = QVBoxLayout(group_fmt)
 
-        self.chk_fmt_pdf = QCheckBox("Exportar em PDF (Relatório completo formatado)")
-        self.chk_fmt_csv = QCheckBox("Exportar em CSV (Planilha com métricas de cada chilreio)")
+        self.chk_fmt_pdf = QCheckBox(t["chk_export_pdf"])
+        self.chk_fmt_csv = QCheckBox(t["chk_export_csv"])
         
         
         self.csv_options_widget = QWidget()
         csv_opt_layout = QVBoxLayout(self.csv_options_widget)
         csv_opt_layout.setContentsMargins(30, 0, 0, 0)
         
-        self.rdo_csv_br = QRadioButton("Padrão Brasileiro (Excel pt-BR: delimitador ';', decimal ',')")
-        self.rdo_csv_univ = QRadioButton("Padrão Universal (Python/R: delimitador ',', decimal '.')")
+        self.rdo_csv_br = QRadioButton(t["rdo_csv_br"])
+        self.rdo_csv_univ = QRadioButton(t["rdo_csv_univ"])
         self.rdo_csv_br.setChecked(True)
         
         self.csv_group = QButtonGroup(self)
@@ -157,7 +157,7 @@ class ExportReportDialog(QDialog):
         self.chk_fmt_csv.toggled.connect(self.csv_options_widget.setVisible)
         self.csv_options_widget.setVisible(False)
 
-        self.chk_fmt_txt = QCheckBox("Exportar em TXT (Relatório em texto simples)")
+        self.chk_fmt_txt = QCheckBox(t["chk_export_txt"])
 
         self.chk_fmt_pdf.setChecked(True)
 
@@ -168,14 +168,14 @@ class ExportReportDialog(QDialog):
         mod_layout.addWidget(group_fmt)
 
         mod_layout.addStretch()
-        self.tabs.addTab(self.tab_modules, "Conteúdo")
+        self.tabs.addTab(self.tab_modules, t["tab_content"])
 
         layout.addWidget(self.tabs)
 
         # ── Botões ───────────────────────────────────────────────────────────
         btn_layout = QHBoxLayout()
-        self.btn_cancel = QPushButton("Cancelar")
-        self.btn_export = QPushButton("Gerar Relatório")
+        self.btn_cancel = QPushButton(t["cancel"])
+        self.btn_export = QPushButton(t["btn_generate_report"])
         self.btn_export.setDefault(True)
         self.btn_export.setObjectName("primaryButton")
         btn_layout.setContentsMargins(0, 16, 0, 0)
@@ -226,7 +226,6 @@ class ExportReportDialog(QDialog):
         self.chk_resumo.setChecked(True)
         self.chk_metricas.setChecked(True)
         self.chk_cadencia.setChecked(True)
-        self.chk_dolbear.setChecked(True)
         self.chk_pulsos.setChecked(False)
 
     def _build_meta(self):
@@ -239,7 +238,6 @@ class ExportReportDialog(QDialog):
             file_meta[fname] = {"species": species, "specimen": specimen}
 
         meta = {
-            "location":        self.txt_location.text().strip(),
             "temperature":     self.txt_temp.text().strip(),
             "equipment":       self.txt_equip.text().strip(),
             "researcher_name": self.txt_researcher.text().strip(),
@@ -257,12 +255,13 @@ class ExportReportDialog(QDialog):
         return meta
 
     def _on_export(self):
+        t = I18N.get(getattr(self, "lang", "pt"), I18N["pt"])
         want_pdf = self.chk_fmt_pdf.isChecked()
         want_csv = self.chk_fmt_csv.isChecked()
         want_txt = self.chk_fmt_txt.isChecked()
 
         if not (want_pdf or want_csv or want_txt):
-            QMessageBox.warning(self, "Aviso", "Por favor, selecione pelo menos um formato para exportação.")
+            QMessageBox.warning(self, t["warning"], t["select_one_format_warn"])
             return
 
         pdf_path = None
@@ -271,19 +270,19 @@ class ExportReportDialog(QDialog):
 
         if want_pdf:
             pdf_path, _ = QFileDialog.getSaveFileName(
-                self, "Salvar Relatório PDF", _default_filename("pdf"), "PDF Files (*.pdf)"
+                self, t["save_pdf_title"], _default_filename("pdf"), "PDF Files (*.pdf)"
             )
             if not pdf_path: return
 
         if want_csv:
             csv_path, _ = QFileDialog.getSaveFileName(
-                self, "Salvar Relatório CSV", _default_filename("csv"), "CSV Files (*.csv)"
+                self, t["save_csv_title"], _default_filename("csv"), "CSV Files (*.csv)"
             )
             if not csv_path: return
 
         if want_txt:
             txt_path, _ = QFileDialog.getSaveFileName(
-                self, "Salvar Relatório TXT", _default_filename("txt"), "Text Files (*.txt)"
+                self, t["save_txt_title"], _default_filename("txt"), "Text Files (*.txt)"
             )
             if not txt_path: return
 
@@ -292,7 +291,6 @@ class ExportReportDialog(QDialog):
             metricas    = self.chk_metricas.isChecked(),
             cadencia    = self.chk_cadencia.isChecked(),
             dolbear     = self.chk_dolbear.isChecked(),
-            graficos    = self.chk_graficos.isChecked(),
             lista_pulsos= self.chk_pulsos.isChecked()
         )
 

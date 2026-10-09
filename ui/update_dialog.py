@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 
 from utils.constants import APP_VERSION, APP_VERSION_LABEL
+from utils.i18n import I18N
 from core.updater import UpdateDownloaderThread, launch_windows_updater
 
 
@@ -26,13 +27,17 @@ class UpdateDialog(QDialog):
         self.download_url = update_info.get("download_url", "")
         self.html_url = update_info.get("html_url", "")
         self.is_frozen = update_info.get("is_frozen", False)
+        self.expected_hash = update_info.get("expected_hash", "")
 
-        self.setWindowTitle("Nova Versão Disponível - Crinômetro")
+        self.lang = getattr(parent, "lang", "pt")
+        t = I18N[self.lang]
+        self.setWindowTitle(t["update_dialog_title"])
         self.setMinimumSize(540, 420)
         self.apply_styles()
         self._setup_ui()
 
     def _setup_ui(self):
+        t = I18N[self.lang]
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
         layout.setSpacing(12)
@@ -43,19 +48,31 @@ class UpdateDialog(QDialog):
         header_l.setContentsMargins(0, 0, 0, 0)
         header_l.setSpacing(4)
 
-        lbl_title = QLabel("🚀 Nova Versão Disponível!")
+        lbl_title = QLabel(t["update_header_title"])
         lbl_title.setObjectName("lbl_update_title")
         lbl_title.setStyleSheet("font-size: 19px; font-weight: bold; color: #3B82F6;")
 
-        lbl_sub = QLabel(f"Versão atual: <b>v{APP_VERSION_LABEL}</b>  ➜  Nova versão: <b style='color:#10B981;'>v{self.new_version}</b>")
+        lbl_sub = QLabel(f"{t['update_cur_ver']} <b>v{APP_VERSION_LABEL}</b>  ➜  {t['update_new_ver']} <b style='color:#10B981;'>v{self.new_version}</b>")
         lbl_sub.setStyleSheet("font-size: 13px; color: #94A3B8;")
 
         header_l.addWidget(lbl_title)
         header_l.addWidget(lbl_sub)
+
+        if self.expected_hash:
+            lbl_hash = QLabel(f"🔒 SHA-256: <span style='font-family: Consolas, monospace; color: #10B981;'>{self.expected_hash[:8]}...{self.expected_hash[-8:]}</span>")
+            lbl_hash.setToolTip(f"Checksum SHA-256 verificado: {self.expected_hash}")
+            lbl_hash.setStyleSheet("font-size: 11px; color: #94A3B8;")
+            header_l.addWidget(lbl_hash)
+        else:
+            lbl_hash = QLabel(f"⚠️ <span style='color: #F59E0B;'>{t['update_no_hash_warn']}</span>")
+            lbl_hash.setToolTip(t["update_no_hash_tooltip"])
+            lbl_hash.setStyleSheet("font-size: 11px; color: #D97706;")
+            header_l.addWidget(lbl_hash)
+
         layout.addWidget(header_frame)
 
         # Changelog / Notas da Versão
-        lbl_notes = QLabel("Notas da Atualização:")
+        lbl_notes = QLabel(t["update_notes_lbl"])
         lbl_notes.setStyleSheet("font-size: 12px; font-weight: 600;")
         layout.addWidget(lbl_notes)
 
@@ -63,7 +80,7 @@ class UpdateDialog(QDialog):
         self.txt_notes.setOpenExternalLinks(True)
         body_text = self.update_info.get("changelog", "")
         if not body_text.strip():
-            body_text = "Esta atualização inclui melhorias de desempenho, correções e novas funcionalidades."
+            body_text = t["update_default_notes"]
         # Formata quebras de linha básicas para HTML legível
         html_body = body_text.replace("\r\n", "<br>").replace("\n", "<br>")
         self.txt_notes.setHtml(f"<div style='font-family: Segoe UI, sans-serif; font-size: 12px; line-height: 1.5;'>{html_body}</div>")
@@ -87,19 +104,19 @@ class UpdateDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
 
-        self.btn_web = QPushButton("🌐 Abrir no GitHub")
+        self.btn_web = QPushButton(t["btn_open_github"])
         self.btn_web.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_web.clicked.connect(self._open_web)
 
         btn_layout.addWidget(self.btn_web)
         btn_layout.addStretch()
 
-        self.btn_cancel = QPushButton("Lembrar Mais Tarde")
+        self.btn_cancel = QPushButton(t["btn_remind_later"])
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(self.btn_cancel)
 
-        self.btn_update = QPushButton("⚡ Atualizar Agora")
+        self.btn_update = QPushButton(t["btn_update_now"])
         self.btn_update.setObjectName("btn_primary")
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.clicked.connect(self._start_update)
@@ -112,13 +129,13 @@ class UpdateDialog(QDialog):
         QDesktopServices.openUrl(QUrl(url))
 
     def _start_update(self):
+        t = I18N[self.lang]
         if not self.download_url:
             # Se não houver asset executável direto cadastrado na release do GitHub, redireciona para a página de download
             QMessageBox.information(
                 self,
-                "Download Manual",
-                f"A nova versão v{self.new_version} foi lançada!\n\n"
-                "Você será direcionado à página oficial de lançamentos para efetuar o download."
+                t["download_manual_title"],
+                t["download_manual_msg"].format(ver=self.new_version)
             )
             self._open_web()
             self.accept()
@@ -130,32 +147,50 @@ class UpdateDialog(QDialog):
         self.prog_bar.setVisible(True)
         self.prog_bar.setValue(0)
         self.lbl_status.setVisible(True)
-        self.lbl_status.setText("Baixando nova versão...")
+        self.lbl_status.setText(t["status_downloading"])
 
-        self.downloader = UpdateDownloaderThread(self.download_url, parent=self)
+        self.downloader = UpdateDownloaderThread(
+            self.download_url,
+            expected_hash=self.expected_hash,
+            parent=self
+        )
         self.downloader.progress.connect(self._on_download_progress)
         self.downloader.finished.connect(self._on_download_finished)
         self.downloader.error.connect(self._on_download_error)
         self.downloader.start()
 
     def _on_download_progress(self, val: int):
+        t = I18N[self.lang]
         self.prog_bar.setValue(val)
-        self.lbl_status.setText(f"Baixando pacote da atualização... {val}%")
+        self.lbl_status.setText(t["status_downloading_pct"].format(val=val))
 
     def _on_download_finished(self, file_path: str):
-        self.lbl_status.setText("Download concluído! Preparando instalação...")
+        t = I18N[self.lang]
+        self.lbl_status.setText(t["status_download_done"])
+        if self.expected_hash:
+            prompt_msg = t.get(
+                "restart_update_prompt_verified",
+                t["restart_update_prompt"]
+            ).format(ver=self.new_version, hash=f"{self.expected_hash[:8]}...{self.expected_hash[-8:]}")
+        else:
+            prompt_msg = t.get(
+                "restart_update_prompt_unverified",
+                t["restart_update_prompt"]
+            ).format(ver=self.new_version)
+
         reply = QMessageBox.question(
             self,
-            "Reiniciar e Atualizar",
-            f"O download da versão v{self.new_version} foi concluído com sucesso.\n\n"
-            "O Crinômetro precisa ser reiniciado para aplicar a atualização.\n"
-            "Deseja atualizar e reiniciar agora?",
+            t["restart_update_title"],
+            prompt_msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                launch_windows_updater(file_path)
+                if self.expected_hash:
+                    launch_windows_updater(file_path, expected_hash=self.expected_hash)
+                else:
+                    launch_windows_updater(file_path)
                 import os
                 app = QApplication.instance()
                 if app:
@@ -164,21 +199,21 @@ class UpdateDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(
                     self,
-                    "Falha ao Atualizar",
-                    f"Ocorreu um erro ao iniciar o instalador automático:\n\n{str(e)}"
+                    t["update_failed_title"],
+                    t["update_failed_msg"].format(err=str(e))
                 )
         else:
             self.accept()
 
     def _on_download_error(self, err_msg: str):
+        t = I18N[self.lang]
         self.btn_update.setEnabled(True)
         self.btn_cancel.setEnabled(True)
-        self.lbl_status.setText("Erro no download.")
+        self.lbl_status.setText(t["status_download_err"])
         QMessageBox.warning(
             self,
-            "Falha na Atualização",
-            f"Não foi possível concluir o download automático:\n\n{err_msg}\n\n"
-            "Você pode baixar a versão diretamente na página do GitHub."
+            t["update_failed_title"],
+            t["update_failed_download_msg"].format(err=err_msg)
         )
 
     def apply_styles(self):

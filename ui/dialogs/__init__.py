@@ -33,10 +33,10 @@ class AlgoSettingsDialog(QDialog):
         
         self.inputs = {}
         fields = [
-            ("min_p", "Mín. pulsos para formar um chilreio:" if lang == "pt" else "Min Pulses to form a Chirp:", QSpinBox, 1, 50, 1),
-            ("max_p", "Máx. pulsos por chilreio (limite superior):" if lang == "pt" else "Max Pulses per Chirp (upper limit):", QSpinBox, 1, 100, 1),
-            ("amp_min", "Altura mínima do pico (limiar de detecção):" if lang == "pt" else "Min Peak Height (detection threshold):", QDoubleSpinBox, 0.01, 2.00, 0.01),
-            ("gap_min", "Dist. mínima entre pulsos consecutivos (ms):" if lang == "pt" else "Min Distance between consecutive Pulses (ms):", QDoubleSpinBox, 1.0, 500.0, 1.0),
+            ("min_p", I18N[lang]["min_p_lbl"], QSpinBox, 1, 50, 1),
+            ("max_p", I18N[lang]["max_p_lbl"], QSpinBox, 1, 100, 1),
+            ("amp_min", I18N[lang]["amp_min_lbl"], QDoubleSpinBox, 0.01, 2.00, 0.01),
+            ("gap_min", I18N[lang]["gap_min_lbl"], QDoubleSpinBox, 1.0, 500.0, 1.0),
         ]
         for key, label, WidgetClass, vmin, vmax, step in fields:
             widget = WidgetClass()
@@ -52,7 +52,7 @@ class AlgoSettingsDialog(QDialog):
 
         layout.addLayout(form)
 
-        self.advanced_button = QPushButton("⚙️ Configurações Avançadas..." if lang == "pt" else "⚙️ Advanced Settings...")
+        self.advanced_button = QPushButton(I18N[lang]["adv_settings_btn"])
         self.advanced_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.advanced_button.clicked.connect(self.open_advanced)
         layout.addWidget(self.advanced_button)
@@ -62,7 +62,7 @@ class AlgoSettingsDialog(QDialog):
         # Action Buttons
         btn_box = QHBoxLayout()
         
-        self.btn_reset = QPushButton("Resetar" if lang == "pt" else "Reset")
+        self.btn_reset = QPushButton(I18N[lang]["reset_btn"])
         self.btn_reset.setObjectName("btn_secondary")
         self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset.clicked.connect(self.reset_defaults)
@@ -70,13 +70,13 @@ class AlgoSettingsDialog(QDialog):
         
         btn_box.addStretch()
         
-        self.btn_save = QPushButton("Salvar configurações atuais" if lang == "pt" else "Save current settings")
+        self.btn_save = QPushButton(I18N[lang]["save_settings_btn"])
         self.btn_save.setObjectName("btn_primary")
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.clicked.connect(self.accept)
         btn_box.addWidget(self.btn_save)
         
-        self.btn_close = QPushButton("Fechar" if lang == "pt" else "Close")
+        self.btn_close = QPushButton(I18N[lang]["close_btn"])
         self.btn_close.setObjectName("btn_secondary")
         self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_close.clicked.connect(self.reject)
@@ -235,7 +235,7 @@ class GeneralSettingsDialog(QDialog):
         self.name_input = QLineEdit(current_params.get("researcher_name", ""))
         
         self.role_input = QComboBox()
-        self.role_input.addItems(["", "Discente", "Docente"] if lang == "pt" else ["", "Student", "Professor"])
+        self.role_input.addItems(["", I18N[lang]["role_student"], I18N[lang]["role_professor"]])
         self.role_input.setCurrentText(current_params.get("role", ""))
         
         self.level_input = QComboBox()
@@ -564,7 +564,7 @@ class AIParamsDialog(QDialog):
         super().__init__(parent)
         self.main_window = main_window
         self.lang = lang
-        self.setWindowTitle("Parâmetros de IA" if lang == "pt" else "AI Parameters")
+        self.setWindowTitle(I18N[lang]["ai_params_title"])
         self.setMinimumWidth(500)
         self.apply_styles()
         
@@ -580,13 +580,13 @@ class AIParamsDialog(QDialog):
         has_model = learner and learner.is_trained()
         
         if has_model:
-            status_text = "<b>Status:</b> IA Treinada e Ativa<br><br>"
+            status_text = I18N[lang]["ai_status_trained"]
             trees = getattr(learner.model, "max_iter", getattr(learner.model, "n_estimators", "N/A")) if getattr(learner, "model", None) else "N/A"
             status_text += f"Iterações/Árvores de Decisão (Floresta): {trees}<br>"
             n_samples = len(learner.training_labels) if hasattr(learner, "training_labels") else 0
             status_text += f"Amostras de Correção (Ligações Cruzadas): {n_samples}<br>"
         else:
-            status_text = "<b>Status:</b> IA Não Treinada<br>A IA passará a operar automaticamente após você fazer algumas correções manuais nos gráficos e clicar em 'Aprender Correções'."
+            status_text = I18N[lang]["ai_status_untrained"]
             
         status_lbl.setText(status_text)
         status_lbl.setStyleSheet("font-size: 13px; background: transparent; padding: 5px;")
@@ -594,31 +594,31 @@ class AIParamsDialog(QDialog):
         
         # Difference from DSP
         if has_model:
-            diff_group = QGroupBox("Divergência do DSP (Impacto da IA)")
+            diff_group = QGroupBox(I18N[lang]["ai_diff_group"])
             diff_layout = QVBoxLayout(diff_group)
-            lbl_diff = QLabel("A IA está ajustando os parâmetros originais baseada nas suas correções.")
+            lbl_diff = QLabel(I18N[lang]["ai_diff_desc"])
             lbl_diff.setObjectName("lbl_desc")
             lbl_diff.setStyleSheet("font-size: 12px; background: transparent;")
             diff_layout.addWidget(lbl_diff)
             layout.addWidget(diff_group)
         
         # Actions
-        actions_group = QGroupBox("Gerenciamento de Aprendizado")
+        actions_group = QGroupBox(I18N[lang]["ai_actions_group"])
         actions_layout = QHBoxLayout(actions_group)
         
-        self.btn_export = QPushButton("Exportar .pkl")
+        self.btn_export = QPushButton(I18N[lang]["btn_export_pkl"])
         self.btn_export.setObjectName("btn_secondary")
         self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_export.clicked.connect(self._on_export)
         actions_layout.addWidget(self.btn_export)
         
-        self.btn_import = QPushButton("Importar .pkl")
+        self.btn_import = QPushButton(I18N[lang]["btn_import_pkl"])
         self.btn_import.setObjectName("btn_secondary")
         self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_import.clicked.connect(self._on_import)
         actions_layout.addWidget(self.btn_import)
         
-        self.btn_reset = QPushButton("Resetar Aprendizado")
+        self.btn_reset = QPushButton(I18N[lang]["btn_reset_ai_mgmt"])
         self.btn_reset.setObjectName("btn_danger")
         self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset.clicked.connect(self._on_reset_ai)

@@ -4,7 +4,25 @@ Crinômetro - Constantes Globais e Parâmetros de Configuração.
 
 APP_VERSION = "4.5.0"          # versão numérica pura — usada por parse_version_tuple, updater e learner
 APP_VERSION_LABEL = "4.5.0 beta"  # rótulo de exibição — usado pela UI, título de janela e relatórios
-CONFIG_FILE = "crinometro_config.json"
+import os, shutil
+
+def _user_config_dir():
+    base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".config")
+    d = os.path.join(base, "Crinometro")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+CONFIG_FILE = os.path.join(_user_config_dir(), "crinometro_config.json")
+
+_legacy = os.path.abspath("crinometro_config.json")
+if not os.path.exists(CONFIG_FILE) and os.path.exists(_legacy):
+    try:
+        shutil.copy2(_legacy, CONFIG_FILE)
+    except OSError:
+        pass
+
+import threading
+CONFIG_LOCK = threading.RLock()
 
 DEFAULT_ALGO_PARAMS = {
     "amp_min": 0.30, "amp_max": 1.00, "amp_var": 0.40,

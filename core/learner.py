@@ -1,3 +1,4 @@
+import logging
 """
 Crinômetro - Módulo de Machine Learning e Active Learning (PulseLearner).
 """
@@ -24,7 +25,7 @@ except Exception:
     RandomForestClassifier = None
     GaussianMixture = None
 
-from utils.constants import APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
+from utils.constants import CONFIG_LOCK, APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
 from utils.helpers import parse_version_tuple, is_version_newer
 
 class PulseLearner:
@@ -40,6 +41,10 @@ class PulseLearner:
         config_dir = os.path.dirname(os.path.abspath(config_path))
         self.persistence_path = os.path.join(config_dir, "modelo_treinado.skops")
         self.model = None
+        self.degraded = False
+        self.last_error = None
+        import threading
+        self._model_lock = threading.RLock()
         self.feature_names = [
             "peak_amp_rel",           # 1. Amplitude do pico relativa à mediana local
             "peak_width_s",           # 2. Largura temporal a 50% (FWHM)
@@ -60,7 +65,6 @@ class PulseLearner:
             "attack_time_10_90_ms",   # 17. Tempo de subida 10%-90% do envelope (ms)
             "local_hnr_db",           # 18. Harmonic-to-Noise Ratio local em dB
             "multiscale_energy_ratio",# 19. Razão de energia multi-escala (15 ms / 80 ms)
-            "prior_p_focal",          # 20. Prior físico de focalidade via GMM bimodal
         ]
         self.training_features = np.empty((0, len(self.feature_names)), dtype=float)
         self.training_labels = np.empty((0,), dtype=int)
@@ -268,7 +272,6 @@ class PulseLearner:
         multiscale_energy_ratio = float(e_short / e_long)
 
         # 20. Prior P(focal)
-        prior_p_focal_val = float(np.clip(prior_p_focal, 0.0, 1.0))
 
         feat = np.asarray([
             peak_amp_rel,
@@ -290,7 +293,6 @@ class PulseLearner:
             attack_time_10_90_ms,
             local_hnr_db,
             multiscale_energy_ratio,
-            prior_p_focal_val,
         ], dtype=float)
         return np.nan_to_num(feat, nan=0.0, posinf=10000.0, neginf=-10000.0)
 
@@ -491,9 +493,11 @@ class PulseLearner:
             y = np.concatenate((self.training_labels, y_new))
         else:
             X, y = X_new, y_new
-        samples = np.unique(np.column_stack((X, y)), axis=0)
-        self.training_features = samples[:, :-1]
-        self.training_labels = samples[:, -1].astype(int)
+        stacked = np.column_stack((X, y))
+        _, first_idx = np.unique(stacked, axis=0, return_index=True)
+        stacked = stacked[np.sort(first_idx)]
+        self.training_features = stacked[:, :-1]
+        self.training_labels = stacked[:, -1].astype(int)
 
         _MAX_SAMPLES = 5000
         if len(self.training_features) > _MAX_SAMPLES:
@@ -512,9 +516,9 @@ class PulseLearner:
                 valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
             )
             if induced:
-                print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
+                pass  # print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
                 for r in induced:
-                    print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
+                    pass  # print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
 
         self.model = self._build_model(n_samples=len(self.training_labels))
         self.model.fit(self.training_features, self.training_labels)
@@ -651,7 +655,7 @@ class PulseLearner:
         try:
             return self.model.predict(X_used).astype(int)
         except Exception as exc:
-            print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
+            pass  # print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
             return np.ones(X.shape[0], dtype=int)
 
     def filter_peaks(self, peaks, rate, env_signal, raw_signal=None,
@@ -748,7 +752,7 @@ class PulseLearner:
             else:
                 pos_probs = self.model.predict(X_used).astype(float)
         except Exception as exc:
-            print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
+            pass  # print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
             return peaks, np.asarray([], dtype=int)
 
         # Combinação linear: 65% confiança supervisionada + 35% prior físico GMM
@@ -815,25 +819,29 @@ class PulseLearner:
         }
 
     def save_to_config(self):
-        if self.model is None:
-            return False
         try:
+            CONFIG_LOCK.acquire()
+            if self.model is None:
+                return False
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-            except FileNotFoundError:
-                config = {}
-            if not isinstance(config, dict):
-                config = {}
-            config["pulse_learner"] = self.serialize()
-            config["pruning_rules"] = getattr(self, "pruning_rules", [])
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
-            return True
-        except (OSError, TypeError, ValueError) as exc:
-            print(f"Erro ao persistir modelo de aprendizado: {exc}")
-            return False
+                try:
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                except FileNotFoundError:
+                    config = {}
+                if not isinstance(config, dict):
+                    config = {}
+                config["pulse_learner"] = self.serialize()
+                config["pruning_rules"] = getattr(self, "pruning_rules", [])
+                with open(self.config_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=4, ensure_ascii=False)
+                return True
+            except (OSError, TypeError, ValueError) as exc:
+                pass  # print(f"Erro ao persistir modelo de aprendizado: {exc}")
+                return False
 
+        finally:
+            CONFIG_LOCK.release()
     def save_persisted_training(self):
         payload = {
             "model": self.model,
@@ -857,8 +865,11 @@ class PulseLearner:
                 
             return True
         except (OSError, Exception) as exc:
-            print(f"Erro ao persistir treinamento: {exc}")
+            pass  # print(f"Erro ao persistir treinamento: {exc}")
             return False
+
+    def _features_compatible(self, payload_names):
+        return list(payload_names or []) == list(self.feature_names)
 
     def load_persisted_training(self):
         # Migração transparente
@@ -870,54 +881,11 @@ class PulseLearner:
                 return False
                 
         try:
-            try:
-                with open(self.persistence_path, "rb") as f:
-                    payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-            except Exception:
-                with open(self.persistence_path, "rb") as f:
-                    payload = pickle.load(f)
-                # Força a migração do formato antigo para o novo (skops)
-                if self.persistence_path.endswith(".pkl"):
-                    self.persistence_path = self.persistence_path.replace(".pkl", ".skops")
-                    self.save_persisted_training()
-                    
-            if not isinstance(payload, dict):
-                return False
-            features = np.asarray(payload.get("training_features", []), dtype=float)
-            labels = np.asarray(payload.get("training_labels", []), dtype=int)
-            if features.ndim == 2 and len(labels) == len(features):
-                if features.shape[1] < len(self.feature_names):
-                    pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
-                    self.training_features = np.hstack((features, pad))
-                elif features.shape[1] == len(self.feature_names):
-                    self.training_features = features
-                else:
-                    self.training_features = features[:, :len(self.feature_names)]
-                self.training_labels = labels
-
-            # Salvaguarda contra modelos degenerados (sem exemplos negativos de ruído/distantes)
-            if self.training_labels.size > 0:
-                n_neg = int(np.sum(self.training_labels == 0))
-                n_pos = int(np.sum(self.training_labels == 1))
-                if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
-                    print("Aviso: Base de treinamento legada com desbalanceamento extremo detectada. Reiniciando modelo para modo restritivo de alta precisão.")
-                    self.model = None
-                    self.training_features = np.empty((0, len(self.feature_names)))
-                    self.training_labels = np.empty(0, dtype=int)
-                    return False
-
-            self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
-            model = payload.get("model")
-            if model is not None and hasattr(model, "predict"):
-                self.model = model
-            return self.model is not None or self.training_features.size > 0
-        except Exception as exc:
-            print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
-            return False
-        try:
             with open(self.persistence_path, "rb") as f:
-                payload = pickle.load(f)
+                payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
             if not isinstance(payload, dict):
+                return False
+            if not self._features_compatible(payload.get("feature_names")):
                 return False
             features = np.asarray(payload.get("training_features", []), dtype=float)
             labels = np.asarray(payload.get("training_labels", []), dtype=int)
@@ -936,60 +904,59 @@ class PulseLearner:
                 n_neg = int(np.sum(self.training_labels == 0))
                 n_pos = int(np.sum(self.training_labels == 1))
                 if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
-                    print("Aviso: Base de treinamento legada com desbalanceamento extremo detectada. Reiniciando modelo para modo restritivo de alta precisão.")
+                    pass
+                    self.model = None
                     self.model = None
                     self.training_features = np.empty((0, len(self.feature_names)))
                     self.training_labels = np.empty(0, dtype=int)
                     return False
-
             self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
             model = payload.get("model")
             if model is not None and hasattr(model, "predict"):
                 self.model = model
             return self.model is not None or self.training_features.size > 0
         except Exception as exc:
-            print(f"Aviso: não foi possível restaurar o treinamento: {exc}")
+            logging.error(f"Erro ao carregar modelo: {exc}", exc_info=True)
+            self.last_error = str(exc)
+            self.degraded = True
+            try:
+                import time
+                os.rename(self.persistence_path, self.persistence_path + f".corrupt-{int(time.time())}")
+            except Exception:
+                pass
             return False
 
     def load_from_config(self):
-        if not os.path.exists(self.config_path):
-            return False
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            if not isinstance(config, dict):
+            CONFIG_LOCK.acquire()
+            if not os.path.exists(self.config_path):
                 return False
-            self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
-            payload = config.get("pulse_learner")
-            if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
-                return False
-            model_bytes = base64.b64decode(payload["model_pickle_b64"])
             try:
-                self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-            except Exception:
-                self.model = pickle.loads(model_bytes)
-            return True
-        except Exception as exc:
-            print(f"Aviso: não foi possível restaurar o modelo treinado: {exc}")
-            self.model = None
-            return False
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            if not isinstance(config, dict):
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                if not isinstance(config, dict):
+                    return False
+                self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
+                payload = config.get("pulse_learner")
+                if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
+                    return False
+                # Skip checking feature names if not present to not break backwards compatibility
+                if "feature_names" in payload and not self._features_compatible(payload.get("feature_names")):
+                    return False
+                model_bytes = base64.b64decode(payload["model_pickle_b64"])
+                try:
+                    self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
+                    return True
+                except Exception as exc:
+                    self.model = None
+                    return False
+            except Exception as exc:
+                pass
+                self.model = None
                 return False
-            self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
-            payload = config.get("pulse_learner")
-            if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
-                return False
-            model_bytes = base64.b64decode(payload["model_pickle_b64"])
-            self.model = pickle.loads(model_bytes)
-            return True
-        except Exception as exc:
-            print(f"Aviso: não foi possível restaurar o modelo treinado: {exc}")
-            self.model = None
-            return False
 
+        finally:
+            CONFIG_LOCK.release()
     def export_model_file(self, filepath):
         """Exporta o modelo treinado completo, conjunto de dados e metadados para um arquivo independente."""
         if self.model is None and self.training_features.size == 0:
@@ -1014,11 +981,12 @@ class PulseLearner:
             with open(filepath, "rb") as f:
                 payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
         except Exception:
-            with open(filepath, "rb") as f:
-                payload = pickle.load(f)
+            raise ValueError("Formato de arquivo de treinamento inválido ou inseguro.")
                 
         if not isinstance(payload, dict):
             raise ValueError("Formato de arquivo de treinamento inválido.")
+        if not self._features_compatible(payload.get("feature_names")):
+            raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine.")
 
         # Verificação de versão do arquivo em relação à versão do app
         file_version = str(payload.get("version", "1.0.0"))

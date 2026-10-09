@@ -17,9 +17,15 @@ __pycache__/
 
 # Modelos Locais de Treinamento
 *.pkl
+*.skops
 
 # Binários e Builds PyInstaller
 *.exe
 build/
 dist/
 scratch/
+dev/
+
+# Testes e Cobertura
+.coverage
+test_outputs/

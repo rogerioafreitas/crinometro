@@ -13,6 +13,7 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 
 from utils.icons import make_ui_icon, make_spinner_icon
+from utils.i18n import I18N
 
 class ButtonSpinner:
     """Controlador de animação de carregamento e spinner diretamente dentro de um QPushButton."""
@@ -261,7 +262,7 @@ class AudioListItemWidget(QWidget):
         # Caixinha de marcar (fica azul quando selecionada)
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(is_checked)
-        self.checkbox.setToolTip("Marcar para análise em lote e relatório")
+        self.checkbox.setToolTip(I18N.get(getattr(self, "lang", "pt"), I18N["pt"])["batch_item_check_tt"])
         self.checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         self.checkbox.stateChanged.connect(self._on_check_changed)
         actions_layout.addWidget(self.checkbox)

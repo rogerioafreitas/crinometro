@@ -67,7 +67,8 @@ class ExportController(QObject):
                     cfg, wcsv, cpath, wtxt, tpath, cmode = args
                     self._generate_pdf_report_modular(self._get_checked_files(), cfg, want_csv=wcsv, csv_path=cpath, want_txt=wtxt, txt_path=tpath, csv_mode=cmode)
             else:
-                QMessageBox.warning(self.main_window, "Falha na Análise", "Não foi possível gerar a exportação pois alguns arquivos falharam na análise.")
+                t = I18N[self.lang]
+                QMessageBox.warning(self.main_window, t["analysis_failed_title"], t["export_failed_analysis_msg"])
 
     def _on_batch_failed(self, error_message):
         if self._pending_export_action is not None:
@@ -75,7 +76,8 @@ class ExportController(QObject):
                 self._batch_spinner.stop()
                 self._batch_spinner = None
             self._pending_export_action = None
-            QMessageBox.critical(self.main_window, "Erro", f"A análise falhou antes da exportação: {error_message}")
+            t = I18N[self.lang]
+            QMessageBox.critical(self.main_window, t["error"], t["analysis_failed_before_export"].format(err=error_message))
 
     def _on_batch_cancelled(self):
         if self._pending_export_action is not None:
@@ -88,10 +90,11 @@ class ExportController(QObject):
     def request_txt_export(self):
         checked_files = self._get_checked_files()
         if not checked_files:
+            t = I18N[self.lang]
             QMessageBox.warning(
                 self.main_window,
-                "Nenhum áudio selecionado",
-                "Marque a caixinha de pelo menos um arquivo de áudio na lista para gerar o relatório."
+                t["no_audio_selected_title"],
+                t["no_audio_for_report_msg"]
             )
             return
 
@@ -110,10 +113,11 @@ class ExportController(QObject):
         }
 
         if not selected_cache:
+            t = I18N[self.lang]
             QMessageBox.warning(
                 self.main_window,
-                "Sem dados",
-                "Nenhum dos áudios selecionados possui dados de análise válidos para o relatório."
+                t["no_data_title"],
+                t["no_data_for_report_msg"]
             )
             return
 
@@ -123,37 +127,19 @@ class ExportController(QObject):
         if not file_path:
             return
 
-        with open(file_path, 'w', encoding='utf-8') as f:
-            inst = self.ctx.report_params.get('institution', '').strip()
-            name = self.ctx.report_params.get('researcher_name', '').strip()
-            role = self.ctx.report_params.get('role', '').strip()
-            level = self.ctx.report_params.get('level', '').strip()
-            header_lines = []
-            if inst: header_lines.append(f"Instituição: {inst.upper()}")
-            if name: header_lines.append(f"Pesquisador(a): {name}")
-            if role: header_lines.append(f"Função: {role}")
-            if level: header_lines.append(f"Grau Acadêmico: {level}")
-            header_text = "\n".join(header_lines) + "\n\n" if header_lines else ""
-            params_list = [d['params'] for d in selected_cache.values()]
-            all_same_params = all(p == params_list[0] for p in params_list) if params_list else True
-            texto = (
-                f"RELATÓRIO MULTIPLEXADO DE ANÁLISE BIOACÚSTICA - CRINÓMETRO\n"
-                f"{'='*58}\n"
-                f"{header_text}"
-            )
-            f.write(texto)
-            # Simplificando a geracao original do txt para caber ou chamar de util
-            from utils.report_generator import generate_txt_report
-            generate_txt_report(file_path, selected_cache, self.ctx.report_params)
+        from utils.report_generator import generate_txt_report
+        generate_txt_report(file_path, selected_cache, self.ctx.report_params)
 
-        QMessageBox.information(self.main_window, I18N[self.lang]["success"], f"Relatório gerado com sucesso para {len(selected_cache)} áudio(s) selecionado(s).")
+        t = I18N[self.lang]
+        QMessageBox.information(self.main_window, t["success"], t["report_success_summary"].format(n=len(selected_cache)))
 
 
     # ---------- Modular PDF Export ----------
     def request_modular_report(self):
         checked_files = self._get_checked_files()
         if not checked_files:
-            QMessageBox.warning(self.main_window, "Nenhum áudio", "Marque pelo menos um arquivo na lista para gerar o relatório.")
+            t = I18N[self.lang]
+            QMessageBox.warning(self.main_window, t["no_audio_selected_title"], t["no_audio_for_report_msg"])
             return
 
         from ui.dialogs.export_report_dialog import ExportReportDialog
@@ -172,16 +158,20 @@ class ExportController(QObject):
             self._generate_pdf_report_modular(checked_files, config, want_csv=want_csv, csv_path=csv_path, want_txt=want_txt, txt_path=txt_path, csv_mode=csv_mode)
 
     def _generate_pdf_report_modular(self, checked_files, config, want_csv=False, csv_path=None, want_txt=False, txt_path=None, csv_mode="brazilian"):
-        selected_cache = {fname: self.ctx.analysis_cache[fname] for fname in checked_files if fname in self.ctx.analysis_cache}
+        # Copia o cache e params para isolar a thread de background de mutações concorrentes na UI
+        import copy
+        selected_cache = {fname: dict(self.ctx.analysis_cache[fname]) for fname in checked_files if fname in self.ctx.analysis_cache}
+        params_copy = copy.deepcopy(self.ctx.algo_params)
         if not selected_cache:
-            QMessageBox.warning(self.main_window, "Sem dados", "Nenhum dos áudios selecionados possui dados válidos.")
+            t = I18N[self.lang]
+            QMessageBox.warning(self.main_window, t["no_data_title"], t["no_data_for_report_msg"])
             return
 
         def _task():
             results = []
             if config.output_path:
                 from utils.report_generator import generate_pdf_report
-                generate_pdf_report(config.output_path, config, selected_cache, self.ctx.algo_params)
+                generate_pdf_report(config.output_path, config, selected_cache, params_copy)
                 results.append(config.output_path)
             if want_csv and csv_path:
                 from utils.report_generator import generate_csv_report
@@ -195,20 +185,22 @@ class ExportController(QObject):
 
         def _on_finished(paths):
             paths_str = "\n".join(paths) if paths else ""
-            QMessageBox.information(self.main_window, I18N[self.lang]["success"],
-                                    f"Relatório gerado com sucesso!\n\nSalvo em:\n{paths_str}")
+            t = I18N[self.lang]
+            QMessageBox.information(self.main_window, t["success"], t["report_saved_to"].format(paths=paths_str))
             if self._batch_spinner is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None
 
         def _on_error(err_msg):
-            QMessageBox.critical(self.main_window, I18N[self.lang]["error"], f"Falha ao gerar relatório:\n{err_msg}")
+            t = I18N[self.lang]
+            QMessageBox.critical(self.main_window, t["error"], t["report_gen_failed"].format(err=err_msg))
             if self._batch_spinner is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None
 
         worker = GenericWorker(_task)
         self._report_worker = worker
+        self._retain(worker)
         worker.finished_signal.connect(_on_finished)
         worker.error_signal.connect(_on_error)
 

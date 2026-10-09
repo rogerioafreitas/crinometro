@@ -70,6 +70,9 @@ class ExportConfig:
     text_color: str = "#1E293B"    # rótulos, títulos
     annotation_color: str = "#1E293B"  # anotações (portadora PSD etc.)
 
+    # Idioma de exportação ("pt" ou "en")
+    lang: str = "pt"
+
     # Formato de saída (usado por save_figures)
     fmt: str = "png"    # "png" ou "pdf"
 
@@ -194,7 +197,7 @@ def draw_waveform(
     line_raw, = ax.plot(
         plot_time_dec, plot_data_dec,
         color='#94A3B8', alpha=0.45, linewidth=0.7, zorder=1,
-        label="Sinal Bruto Filtrado",
+        label=("Sinal Bruto Filtrado" if cfg.lang == "pt" else "Filtered Raw Signal"),
     )
     line_raw.set_visible(bool(cfg.show_raw))
     wave_lines['raw'] = line_raw
@@ -222,7 +225,7 @@ def draw_waveform(
         line_env, = ax.plot(
             plot_time_env_dec, plot_env_dec,
             color='#0284C7', alpha=0.95, linewidth=1.6, zorder=3,
-            label="Envoltória de Hilbert Suavizada",
+            label=("Envoltória de Hilbert Suavizada" if cfg.lang == "pt" else "Smoothed Hilbert Envelope"),
         )
         line_env.set_visible(bool(cfg.show_env))
         wave_lines['env'] = line_env
@@ -290,8 +293,10 @@ def draw_psd(
     unit = cfg.spec_unit
     scale = 1000.0 if unit == "kHz" else 1.0
 
-    ax.set_ylabel(cfg.ylabel_psd or "Potência (dB/Hz)", color=cfg.text_color)
-    ax.set_xlabel(cfg.xlabel_psd or f"Frequência ({unit})", color=cfg.text_color)
+    def_ylabel_psd = "Potência (dB/Hz)" if cfg.lang == "pt" else "Power (dB/Hz)"
+    def_xlabel_psd = f"Frequência ({unit})" if cfg.lang == "pt" else f"Frequency ({unit})"
+    ax.set_ylabel(cfg.ylabel_psd or def_ylabel_psd, color=cfg.text_color)
+    ax.set_xlabel(cfg.xlabel_psd or def_xlabel_psd, color=cfg.text_color)
     ax.tick_params(colors=cfg.ax_color)
     for spine in ax.spines.values():
         spine.set_edgecolor(cfg.ax_color)
@@ -376,7 +381,7 @@ def draw_spectrogram(
             mesh = ax.pcolormesh(t_plot, f_spec / scale, S_plot, shading='gouraud', cmap='magma', rasterized=True)
             if not interactive:
                 cbar = ax.figure.colorbar(mesh, ax=ax, pad=0.01)
-                cbar.set_label("Potência (dB)", color=cfg.text_color)
+                cbar.set_label("Potência (dB)" if cfg.lang == "pt" else "Power (dB)", color=cfg.text_color)
                 cbar.ax.yaxis.set_tick_params(color=cfg.ax_color, labelcolor=cfg.text_color)
                 for spine in cbar.ax.spines.values():
                     spine.set_edgecolor(cfg.ax_color)
@@ -398,8 +403,8 @@ def draw_histogram(
     if cfg is None:
         cfg = ExportConfig()
 
-    ax.set_xlabel("Nº de Pulsos por Chilreio", color=cfg.text_color)
-    ax.set_ylabel("Contagem de Chilreios", color=cfg.text_color)
+    ax.set_xlabel("Nº de Pulsos por Chilreio" if cfg.lang == "pt" else "Number of Pulses per Chirp", color=cfg.text_color)
+    ax.set_ylabel("Contagem de Chilreios" if cfg.lang == "pt" else "Chirp Count", color=cfg.text_color)
     ax.tick_params(colors=cfg.ax_color)
     for spine in ax.spines.values():
         spine.set_edgecolor(cfg.ax_color)
@@ -457,7 +462,7 @@ def draw_histogram(
         y_pts = np.array([avg_durations[k] for k in sorted_classes], dtype=float)
         
         ax2.plot(x_pts, y_pts, 'o--', color='#DC2626', linewidth=1.5,
-                 markersize=5, zorder=3, label="Duração (ms)")
+                 markersize=5, zorder=3, label=("Duração (ms)" if cfg.lang == "pt" else "Duration (ms)"))
                  
         max_d = max(y_pts) if len(y_pts) > 0 else 1
         ax2.set_ylim(0, max_d * 1.25)
@@ -469,7 +474,7 @@ def draw_histogram(
                          color='#EA580C', fontsize=8.5, fontweight='bold', zorder=4,
                          path_effects=[outline_dur])
 
-        ax2.set_ylabel("Duração Média (ms)", color=cfg.text_color)
+        ax2.set_ylabel("Duração Média (ms)" if cfg.lang == "pt" else "Mean Duration (ms)", color=cfg.text_color)
         for spine in ax2.spines.values():
             spine.set_edgecolor(cfg.ax_color)
             
@@ -580,6 +585,17 @@ _PANEL_TITLES = {
     "spectrogram": "Espectrograma",
     "histogram":   "Histograma de Chilreios",
 }
+
+_PANEL_TITLES_EN = {
+    "waveform":    "Oscillogram",
+    "psd":         "Power Spectral Density (PSD)",
+    "spectrogram": "Spectrogram",
+    "histogram":   "Chirp Histogram",
+}
+
+def get_panel_title(panel: str, lang: str = "pt") -> str:
+    titles = _PANEL_TITLES_EN if lang == "en" else _PANEL_TITLES
+    return titles.get(panel, panel)
 
 
 def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None) -> List[str]:

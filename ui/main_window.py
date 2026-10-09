@@ -24,7 +24,7 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 
 
-from utils.constants import APP_VERSION, APP_VERSION_LABEL, CONFIG_FILE, DEFAULT_ALGO_PARAMS
+from utils.constants import CONFIG_LOCK, APP_VERSION, APP_VERSION_LABEL, CONFIG_FILE, DEFAULT_ALGO_PARAMS
 from utils.i18n import I18N
 from utils.icons import get_app_icon, make_ui_icon
 from utils.styles import get_modern_stylesheet
@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
 
         side_head = QHBoxLayout()
         side_head.setContentsMargins(4, 0, 4, 0)
-        self.lbl_arquivos = QLabel("Arquivos")
+        self.lbl_arquivos = QLabel(I18N[self.lang]["files"])
         self.lbl_arquivos.setObjectName("sidebarTitle")
         side_head.addWidget(self.lbl_arquivos)
         side_head.addStretch()
@@ -692,7 +692,7 @@ class MainWindow(QMainWindow):
         self.empty_graph_placeholder = QLabel(
             "\n\n".join([
                 "Nenhum gráfico visível no momento.",
-                "Abra o menu 'Gráficos' logo acima para adicionar\no Espectrograma, Histograma, PSD ou Forma de Onda."
+                I18N[self.lang]["placeholder_text"]
             ])
         )
         self.empty_graph_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1256,7 +1256,10 @@ class MainWindow(QMainWindow):
             self.lbl_eyebrow.setText(I18N[l]["file_in_analysis"])
         if hasattr(self, "btn_export_main"):
             self.btn_export_main.setText(I18N[l]["export_menu"])
-        if hasattr(self, "lbl_summary_file") and not self.ctx.active_file:
+        if hasattr(self, "btn_toggle_ml"):
+            is_active = getattr(self.ctx, "use_machine_learning", False)
+            self.btn_toggle_ml.setText(I18N[l]["ml_enabled"] if is_active else I18N[l]["ml_disabled"])
+        if hasattr(self, "lbl_summary_file") and not getattr(self.ctx, "active_filename", None):
             self.lbl_summary_file.setText(I18N[l]["no_file_selected"])
         if hasattr(self, "action_export_pdf_mod"):
             self.action_export_pdf_mod.setText(I18N[l]["export_modular"])
@@ -1264,7 +1267,7 @@ class MainWindow(QMainWindow):
             self.action_export_graphs.setText(I18N[l]["export_graphs"])
         if hasattr(self, "empty_graph_placeholder"):
             self.empty_graph_placeholder.setText(I18N[l]["placeholder_text"])
-        if hasattr(self, "ctx") and self.ctx.active_file:
+        if hasattr(self, "ctx") and getattr(self.ctx, "active_filename", None):
             self.lbl_summary_meta.setText(I18N[l]["audio_loaded"])
             if self.ctx.active_heavy_data:
                 self.btn_reanalisar_main.setText(I18N[l]["reanalyze"].replace("🔄 ", ""))
@@ -1610,7 +1613,7 @@ class MainWindow(QMainWindow):
             if new_params != self.ctx.algo_params:
                 self.ctx.algo_params = new_params
                 if self.ctx.analysis_cache:
-                    reply = QMessageBox.question(self, "Reanalisar?", "Configurações alteradas! Deseja refazer as análises no cache?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    reply = QMessageBox.question(self, I18N[self.lang].get("reanalyze_q_title", "Reanalyze?"), I18N[self.lang].get("settings_changed_reanalyze_q", "Settings changed! Reanalyze cache?"), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     if reply == QMessageBox.StandardButton.Yes:
                         curr = self.list_widget.currentItem()
                         curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
@@ -1622,7 +1625,7 @@ class MainWindow(QMainWindow):
 
     def export_training_model(self):
         """Abre caixa de diálogo para salvar o arquivo com o treinamento ativo."""
-        if not hasattr(self, "pulse_learner") or not self.ctx.pulse_learner:
+        if not getattr(self.ctx, "pulse_learner", None):
             QMessageBox.warning(self, "Sem Modelo", "Não há módulo de aprendizado ativo.")
             return
         if not self.ctx.pulse_learner.is_trained() and len(self.ctx.pulse_learner.training_features) == 0:
@@ -1631,9 +1634,9 @@ class MainWindow(QMainWindow):
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Exportar Arquivo de Treinamento",
+            I18N[self.lang].get("export_training", "Export Training File"),
             "modelo_treinado_crinometro.skops",
-            "Modelos Treinados (*.skops *.pkl);;Todos os Arquivos (*)"
+            I18N[self.lang].get("training_file_filter", "Trained Models (*.skops *.pkl);;All Files (*)")
         )
         if not file_path:
             return
@@ -1656,9 +1659,9 @@ class MainWindow(QMainWindow):
         """Abre caixa de diálogo para carregar um arquivo de treinamento previamente salvo."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Carregar Arquivo de Treinamento",
+            I18N[self.lang].get("import_training", "Load Training File"),
             "",
-            "Modelos Treinados (*.skops *.pkl);;Todos os Arquivos (*)"
+            I18N[self.lang].get("training_file_filter", "Trained Models (*.skops *.pkl);;All Files (*)")
         )
         if not file_path:
             return
@@ -1693,7 +1696,7 @@ class MainWindow(QMainWindow):
             )
 
     def reset_learning(self):
-        """Reseta completamente o modelo de IA e os dados de treinamento."""
+        """Completely reset the AI model and training data."""
         from PyQt6.QtWidgets import QMessageBox
         
         msg_box = QMessageBox(self)
@@ -1757,8 +1760,8 @@ class MainWindow(QMainWindow):
         l = self.lang
         reply = QMessageBox.question(
             self,
-            I18N[l].get("reset_confirm_title", "Resetar Configurações?"),
-            I18N[l].get("reset_confirm_msg", "Deseja resetar para as configurações padrão?"),
+            I18N[l].get("reset_confirm_title", "Reset Settings?"),
+            I18N[l].get("reset_confirm_msg", "Reset to default settings?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -1782,7 +1785,7 @@ class MainWindow(QMainWindow):
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(clean_config, f, indent=4, ensure_ascii=False)
         except Exception as exc:
-            print(f"Erro ao limpar config: {exc}")
+            pass  # print(f"Erro ao limpar config: {exc}")
 
         # 5. Se houver arquivo ativo, reanalisa do zero com os padrões
         curr = self.list_widget.currentItem()
@@ -1799,7 +1802,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             I18N[l]["success"],
-            I18N[l].get("reset_done", "Configurações resetadas com sucesso!")
+            I18N[l].get("reset_done", "Settings reset successfully!")
         )
 
     def open_report_settings(self):
@@ -1844,73 +1847,81 @@ class MainWindow(QMainWindow):
 
 
     def load_settings(self):
-        """Carrega as configurações persistidas, mantendo os valores padrão quando ausentes."""
-        if not os.path.exists(CONFIG_FILE):
-            return
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                if isinstance(data.get("algo_params"), dict):
-                    self.ctx.algo_params.update(data["algo_params"])
-                if isinstance(data.get("report_params"), dict):
-                    self.ctx.report_params.update(data["report_params"])
-                theme = data.get("theme")
-                if theme in {"dark", "light"}:
-                    self.theme_mode = theme
-                corrections = data.get("corrections_by_file")
-                if isinstance(corrections, dict):
-                    self.ctx.corrections_by_file = {}
-                    for name, data_val in corrections.items():
-                        if isinstance(data_val, list):
-                            # Old format: just a list of peak indices
-                            # Or new format if it's a list of dicts
-                            parsed = []
-                            for p in data_val:
-                                if isinstance(p, dict) and "idx" in p:
-                                    parsed.append(p)
-                                else:
-                                    try:
-                                        parsed.append(int(p))
-                                    except (TypeError, ValueError):
-                                        pass
-                            self.ctx.corrections_by_file[str(name)] = parsed
-                if "pulse_learner" in data:
-                    self.ctx.pulse_learner.load_from_config()
-                if "last_audio_dir" in data and isinstance(data["last_audio_dir"], str) and os.path.isdir(data["last_audio_dir"]):
-                    self.last_audio_dir = data["last_audio_dir"]
-        except Exception as e:
-            print(f"Erro ao carregar configurações: {e}")
+            CONFIG_LOCK.acquire()
+            """Carrega as configurações persistidas, mantendo os valores padrão quando ausentes."""
+            if not os.path.exists(CONFIG_FILE):
+                return
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    if isinstance(data.get("algo_params"), dict):
+                        self.ctx.algo_params.update(data["algo_params"])
+                    if isinstance(data.get("report_params"), dict):
+                        self.ctx.report_params.update(data["report_params"])
+                    theme = data.get("theme")
+                    if theme in {"dark", "light"}:
+                        self.theme_mode = theme
+                    corrections = data.get("corrections_by_file")
+                    if isinstance(corrections, dict):
+                        self.ctx.corrections_by_file = {}
+                        for name, data_val in corrections.items():
+                            if isinstance(data_val, list):
+                                # Old format: just a list of peak indices
+                                # Or new format if it's a list of dicts
+                                parsed = []
+                                for p in data_val:
+                                    if isinstance(p, dict) and "idx" in p:
+                                        parsed.append(p)
+                                    else:
+                                        try:
+                                            parsed.append(int(p))
+                                        except (TypeError, ValueError):
+                                            pass
+                                self.ctx.corrections_by_file[str(name)] = parsed
+                    if "pulse_learner" in data:
+                        self.ctx.pulse_learner.load_from_config()
+                    if "last_audio_dir" in data and isinstance(data["last_audio_dir"], str) and os.path.isdir(data["last_audio_dir"]):
+                        self.last_audio_dir = data["last_audio_dir"]
+            except Exception as e:
+                pass  # print(f"Erro ao carregar configurações: {e}")
 
+        finally:
+            CONFIG_LOCK.release()
     def save_settings(self, silent=False):
         try:
-            if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-            else:
-                config = {}
-            if not isinstance(config, dict):
-                config = {}
-            config["algo_params"] = self.ctx.algo_params
-            config["report_params"] = self.ctx.report_params
-            config["theme"] = self.theme_mode
-            config["corrections_by_file"] = self.ctx.corrections_by_file
-            config["last_audio_dir"] = getattr(self, "last_audio_dir", "")
-            if not "pulse_learner" in config:
-                config["pulse_learner"] = None
-            if self.ctx.pulse_learner.model is not None:
-                config["pulse_learner"] = self.ctx.pulse_learner.serialize()
-                self.ctx.pulse_learner.save_persisted_training()
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
-            if not silent:
-                QMessageBox.information(self, I18N[self.lang]["success"], I18N[self.lang]["config_saved"])
-        except Exception as e:
-            if not silent:
-                QMessageBox.critical(self, I18N[self.lang]["error"], f"Failed to save:\n{e}")
+            CONFIG_LOCK.acquire()
+            try:
+                if os.path.exists(CONFIG_FILE):
+                    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                else:
+                    config = {}
+                if not isinstance(config, dict):
+                    config = {}
+                config["algo_params"] = self.ctx.algo_params
+                config["report_params"] = self.ctx.report_params
+                config["theme"] = self.theme_mode
+                config["corrections_by_file"] = self.ctx.corrections_by_file
+                config["last_audio_dir"] = getattr(self, "last_audio_dir", "")
+                if not "pulse_learner" in config:
+                    config["pulse_learner"] = None
+                if self.ctx.pulse_learner.model is not None:
+                    config["pulse_learner"] = self.ctx.pulse_learner.serialize()
+                    self.ctx.pulse_learner.save_persisted_training()
+                with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=4, ensure_ascii=False)
+                if not silent:
+                    QMessageBox.information(self, I18N[self.lang]["success"], I18N[self.lang]["config_saved"])
+            except Exception as e:
+                if not silent:
+                    QMessageBox.critical(self, I18N[self.lang]["error"], f"Failed to save:\n{e}")
 
+        finally:
+            CONFIG_LOCK.release()
     def toggle_machine_learning(self):
-        """Ativa ou desativa a filtragem e classificação por Inteligência Artificial sem forçar reanálise imediata."""
+        """Toggle AI filtering and classification."""
         is_active = not getattr(self.ctx, "use_machine_learning", False)
         if is_active:
             QMessageBox.warning(
@@ -1932,18 +1943,19 @@ class MainWindow(QMainWindow):
         self.btn_toggle_ml.setStyleSheet("")
         self.btn_toggle_ml.style().unpolish(self.btn_toggle_ml)
         self.btn_toggle_ml.style().polish(self.btn_toggle_ml)
+        l = getattr(self, "lang", "pt")
         if is_active:
-            self.btn_toggle_ml.setText("🧠 IA: Ativada")
-            self.btn_toggle_ml.setToolTip("IA Ativada: filtra ruído e discrimina grilos distantes. Clique para desativar.")
+            self.btn_toggle_ml.setText(I18N[l]["ml_enabled"])
+            self.btn_toggle_ml.setToolTip(I18N[l]["ml_enabled_tooltip"])
             if hasattr(self, "lbl_model_status"):
-                status_txt = "🧠 IA: Ativada (Modelo Supervisionado)" if self.ctx.pulse_learner.is_trained() else "🧠 IA: Ativada (GMM não-supervisionado)"
+                status_txt = I18N[l]["ml_enabled_supervised"] if self.ctx.pulse_learner.is_trained() else I18N[l]["ml_enabled_unsupervised"]
                 self.lbl_model_status.setText(status_txt)
                 self.lbl_model_status.setStyleSheet("color: #10B981;")
         else:
-            self.btn_toggle_ml.setText("🧠 IA: Desativada")
-            self.btn_toggle_ml.setToolTip("IA Desativada: análise executada estritamente por processamento de sinal (DSP). Clique para ativar.")
+            self.btn_toggle_ml.setText(I18N[l]["ml_disabled"])
+            self.btn_toggle_ml.setToolTip(I18N[l]["ml_disabled_tooltip"])
             if hasattr(self, "lbl_model_status"):
-                self.lbl_model_status.setText("🧠 IA: Desativada (Modo DSP)")
+                self.lbl_model_status.setText(I18N[l]["ml_disabled_dsp"])
                 self.lbl_model_status.setStyleSheet("color: #94A3B8;")
 
     # ---------- análise ----------
@@ -2017,6 +2029,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
+    
+            sp = getattr(self, "_batch_spinner", None)
+            if sp is not None:
+                sp.stop(restore_text=I18N[self.lang]["analyze_selected"])
+                self._batch_spinner = None
+
             self.btn_analyze_selected.setEnabled(True)
 
         curr = self.list_widget.currentItem()
@@ -2042,6 +2060,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
+    
+            sp = getattr(self, "_batch_spinner", None)
+            if sp is not None:
+                sp.stop(restore_text=I18N[self.lang]["analyze_selected"])
+                self._batch_spinner = None
+
             self.btn_analyze_selected.setEnabled(True)
         QMessageBox.critical(self, I18N[self.lang]["error"], f"Falha na análise em lote:\n{err_msg}")
 
@@ -2051,6 +2075,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "btn_abort_analysis"):
             self.btn_abort_analysis.setVisible(False)
         if hasattr(self, "btn_analyze_selected"):
+    
+            sp = getattr(self, "_batch_spinner", None)
+            if sp is not None:
+                sp.stop(restore_text=I18N[self.lang]["analyze_selected"])
+                self._batch_spinner = None
+
             self.btn_analyze_selected.setEnabled(True)
 
     def _on_pipeline_failed(self, filename, err_msg):
@@ -2118,14 +2148,15 @@ class MainWindow(QMainWindow):
         self.lbl_summary_meta.setText(I18N[self.lang]["audio_empty"])
         self.lbl_total.setText("-")
         self.lbl_metric_sub.setText(f"{I18N[self.lang]['mean']}: -   |   {I18N[self.lang]['variance']}: -")
-        if hasattr(self, 'lbl_elapsed'):
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'lbl_elapsed'):
             self.transport_panel.lbl_elapsed.setText("00:00.00 / 00:00.00")
         if hasattr(self, 'btn_reanalisar_main'):
             self.btn_reanalisar_main.setText(I18N[self.lang]["analyze"])
             self.btn_reanalisar_main.setIcon(make_ui_icon("play", color="#FFFFFF", size=15))
             self.btn_reanalisar_main.setToolTip("Executar análise deste áudio")
-        self.transport_panel.timeline.set_data(0, [])
-        self.transport_panel.timeline.set_position(0)
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'timeline'):
+            self.transport_panel.timeline.set_data(0, [])
+            self.transport_panel.timeline.set_position(0)
 
     # ---------- exportação ----------
     def show_export_menu(self):
@@ -2144,10 +2175,10 @@ class MainWindow(QMainWindow):
         menu.setObjectName("exportMenu")
         act_txt = menu.addAction(make_ui_icon("export", color="#64748B", size=15), I18N[self.lang]["export"])
         act_txt.triggered.connect(self.export_controller.request_txt_export)
-        act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), "📊 Exportar Relatório Modular...")
+        act_pdf_mod = menu.addAction(make_ui_icon("export", color="#0284C7", size=15), I18N[self.lang]["export_modular"])
         act_pdf_mod.triggered.connect(self.export_controller.request_modular_report)
         menu.addSeparator()
-        act_graphs = menu.addAction(make_ui_icon("export", color="#10B981", size=15), "📊 Exportar Gráficos (PNG/PDF)…")
+        act_graphs = menu.addAction(make_ui_icon("export", color="#10B981", size=15), I18N[self.lang]["export_graphs"])
         act_graphs.triggered.connect(self.export_controller.request_graph_export)
 
         def _on_close():
@@ -2210,12 +2241,15 @@ class MainWindow(QMainWindow):
         return f"{minutes:02d}:{secs:05.2f}"
 
     def update_duration(self, duration_ms):
-        self.slider.setRange(0, max(0, duration_ms))
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'slider'):
+            self.transport_panel.slider.setRange(0, max(0, duration_ms))
         duration_s = duration_ms / 1000.0
-        if hasattr(self, 'lbl_elapsed'):
-            self.transport_panel.lbl_elapsed.setText(f"{self._format_playback_time(self.player.position()/1000.0)} / {self._format_playback_time(duration_s)}")
-        markers = self.transport_panel.timeline.markers if hasattr(self, 'timeline') else []
-        self.transport_panel.timeline.set_data(duration_s, markers)
+        if hasattr(self, 'transport_panel'):
+            if hasattr(self.transport_panel, 'lbl_elapsed'):
+                self.transport_panel.lbl_elapsed.setText(f"{self._format_playback_time(self.player.position()/1000.0)} / {self._format_playback_time(duration_s)}")
+            if hasattr(self.transport_panel, 'timeline'):
+                markers = getattr(self.transport_panel.timeline, 'markers', [])
+                self.transport_panel.timeline.set_data(duration_s, markers)
 
     def set_position(self, position_ms, is_final=False):
         """Atualiza a posição de reprodução com throttling seguro contra sobrecarga de seeks no driver de áudio."""
@@ -2229,22 +2263,22 @@ class MainWindow(QMainWindow):
             try:
                 self.player.setPosition(pos_ms)
             except Exception as exc:
-                print(f"Aviso ao posicionar reprodução: {exc}")
+                pass  # print(f"Aviso ao posicionar reprodução: {exc}")
 
     def update_playback_cursor(self, position_ms):
-        if hasattr(self, 'slider') and not self.slider.isSliderDown():
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'slider') and not self.transport_panel.slider.isSliderDown():
             try:
-                self.slider.setValue(int(position_ms))
+                self.transport_panel.slider.setValue(int(position_ms))
             except Exception:
                 pass
         position_sec = float(position_ms) / 1000.0
-        if hasattr(self, 'lbl_elapsed'):
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'lbl_elapsed'):
             try:
                 duration_sec = self.player.duration() / 1000.0
                 self.transport_panel.lbl_elapsed.setText(f"{self._format_playback_time(position_sec)} / {self._format_playback_time(duration_sec)}")
             except Exception:
                 pass
-        if hasattr(self, 'timeline'):
+        if hasattr(self, 'transport_panel') and hasattr(self.transport_panel, 'timeline'):
             try:
                 self.transport_panel.timeline.set_position(position_sec)
             except Exception:

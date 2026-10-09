@@ -26,6 +26,12 @@ app = QApplication.instance() or QApplication(sys.argv)
 
 class TestCharacterization(unittest.TestCase):
     @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, '_original_config_text') and cls._original_config_text is not None:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                f.write(cls._original_config_text)
+
+    @classmethod
     def setUpClass(cls):
         cls.app = app
         cls.sample_wav = os.path.abspath(os.path.join("tests", "fixtures", "sample_chirp.wav"))
@@ -35,6 +41,12 @@ class TestCharacterization(unittest.TestCase):
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cls._original_config_text = f.read()
+        else:
+            cls._original_config_text = "{}"
+        
+        # Ensure tests start with a clean slate
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            f.write("{}")
 
     def setUp(self):
         # Silencia caixas de diálogo durante testes para evitar bloqueio
@@ -55,12 +67,12 @@ class TestCharacterization(unittest.TestCase):
         if hasattr(self, 'window'):
             self.window.pipeline.abort_current_analysis()
             self.window.close()
-        if hasattr(self.__class__, '_original_config_text') and self._original_config_text is not None:
-            try:
-                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                    f.write(self._original_config_text)
-            except Exception:
-                pass
+        # Ensure next test gets a clean slate
+        try:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                f.write("{}")
+        except Exception:
+            pass
         QApplication.processEvents()
 
     def test_00_session_context_redirection_and_emission(self):
@@ -1149,7 +1161,9 @@ class TestCharacterization(unittest.TestCase):
 
         # Comprova persistência das correções no SessionContext
         self.assertIn(fname, self.window.ctx.corrections_by_file)
-        self.assertEqual(self.window.ctx.corrections_by_file[fname], list(self.window.ctx.peaks_user_verified))
+        saved = self.window.ctx.corrections_by_file[fname]
+        saved_ints = [item["idx"] if isinstance(item, dict) else int(item) for item in saved]
+        self.assertEqual(saved_ints, list(self.window.ctx.peaks_user_verified))
 
     def test_29_editor_controller_undo_metadata_restoration(self):
         """FASE 5 Loop 3: Comprova que o Undo restaura integralmente peaks_user_verified E pulse_metadata,

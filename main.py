@@ -76,7 +76,7 @@ def main():
                     window.activateWindow()
                     write_signal(args.shown_file, "shown")
                 except Exception as e:
-                    print(f"Erro ao exibir janela principal: {e}")
+                    pass  # pass  # print(f"Erro ao exibir janela principal: {e}")
             elif wait_ticks[0] > 4800:  # 120s de timeout
                 release_timer.stop()
                 sys.exit(0)
