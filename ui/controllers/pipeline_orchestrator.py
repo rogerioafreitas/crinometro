@@ -224,8 +224,12 @@ class PipelineOrchestrator(QObject):
                         chirps, chirp_peaks_list, media, moda, variancia = CricketAnalyzer.regroup_chirps(
                             effective_peaks, effective_params, rate, env, raw_signal=data_b1
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        import logging
+                        logging.getLogger("crinometro").error(f"Erro no reagrupamento de chilreios ap\u00f3s corre\u00e7\u00e3o: {e}", exc_info=True)
+                        chirps, chirp_peaks_list, media, moda, variancia = [], [], 0.0, 0, 0.0
+                else:
+                    chirps, chirp_peaks_list, media, moda, variancia = [], [], 0.0, 0, 0.0
         else:
             file_peaks_user_verified = list(file_peaks_detected)
 
