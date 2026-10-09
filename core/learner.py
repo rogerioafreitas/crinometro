@@ -882,7 +882,7 @@ class PulseLearner:
 
     def load_persisted_training(self):
         with self._model_lock:
-            # Migração transparente
+            # Migrao transparente
             if not os.path.exists(self.persistence_path):
                 old_path = self.persistence_path.replace(".skops", ".pkl")
                 if os.path.exists(old_path):
@@ -891,42 +891,57 @@ class PulseLearner:
                     return False
                 
             try:
+                from utils.persistence import safe_load
+                # Ler com safe_load, skio.loads? O arquivo  binrio.
                 with open(self.persistence_path, "rb") as f:
                     payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
                 if not isinstance(payload, dict):
                     return False
-                if not self._features_compatible(payload.get("feature_names")):
+                    
+                names = list(payload.get("feature_names") or [])
+                legacy = (names == self.feature_names + ["prior_p_focal"])
+                if not legacy and names != self.feature_names:
+                    self.degraded = True
+                    self.last_error = "Modelo salvo com features incompatveis."
                     return False
+                    
                 features = np.asarray(payload.get("training_features", []), dtype=float)
                 labels = np.asarray(payload.get("training_labels", []), dtype=int)
-                if features.ndim == 2 and len(labels) == len(features):
-                    if features.shape[1] < len(self.feature_names):
-                        pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
-                        self.training_features = np.hstack((features, pad))
-                    elif features.shape[1] == len(self.feature_names):
-                        self.training_features = features
-                    else:
-                        self.training_features = features[:, :len(self.feature_names)]
-                    self.training_labels = labels
-
-                # Salvaguarda contra modelos degenerados (sem exemplos negativos de ruído/distantes)
+                
+                if legacy and features.ndim == 2:
+                    features = features[:, :len(self.feature_names)]
+                    
+                self.training_features = features
+                self.training_labels = labels
+                
+                # Salvaguarda contra modelos degenerados
                 if self.training_labels.size > 0:
                     n_neg = int(np.sum(self.training_labels == 0))
                     n_pos = int(np.sum(self.training_labels == 1))
                     if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
-                        pass
-                        self.model = None
                         self.model = None
                         self.training_features = np.empty((0, len(self.feature_names)))
                         self.training_labels = np.empty(0, dtype=int)
                         return False
+                        
                 self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
-                model = payload.get("model")
-                if model is not None and hasattr(model, "predict"):
-                    self.model = model
+                
+                if legacy:
+                    self.model = None
+                    if np.unique(self.training_labels).size >= 2:
+                        m = self._build_model(n_samples=len(self.training_labels))
+                        m.fit(self.training_features, self.training_labels)
+                        self.model = m
+                else:
+                    model = payload.get("model")
+                    if model is not None and hasattr(model, "predict"):
+                        self.model = model
+                        
                 return self.model is not None or self.training_features.size > 0
-            except Exception as exc:
-                logging.getLogger("crinometro").error(f"Erro ao carregar modelo: {exc}", exc_info=True)
+                
+            except (ValueError, TypeError, EOFError) as exc: # R11: s isolar parsing error
+                import logging
+                logging.getLogger("crinometro").error(f"Erro de parse ao carregar modelo, movendo para quarentena: {exc}", exc_info=True)
                 self.last_error = str(exc)
                 self.degraded = True
                 try:
@@ -934,6 +949,12 @@ class PulseLearner:
                     os.rename(self.persistence_path, self.persistence_path + f".corrupt-{int(time.time())}")
                 except Exception:
                     pass
+                return False
+            except Exception as exc:
+                import logging
+                logging.getLogger("crinometro").error(f"Erro de I/O ao carregar modelo: {exc}", exc_info=True)
+                self.last_error = str(exc)
+                self.degraded = True
                 return False
 
     def load_from_config(self):
@@ -992,16 +1013,26 @@ class PulseLearner:
                 raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
             try:
                 with open(filepath, "rb") as f:
+                    import skops.io as skio
+                    from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+                    import numpy as np
                     payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
             except Exception:
                 raise ValueError("Formato de arquivo de treinamento inválido ou inseguro.")
                 
             if not isinstance(payload, dict):
                 raise ValueError("Formato de arquivo de treinamento inválido.")
-            if not self._features_compatible(payload.get("feature_names")):
-                raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine.")
+                
+            names = list(payload.get("feature_names") or [])
+            legacy = (names == self.feature_names + ["prior_p_focal"])
+            if not legacy and names != self.feature_names:
+                import time, shutil
+                shutil.copy2(filepath, filepath + f".legacy-{int(time.time())}")
+                raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine. (Backup salvo)")
 
             # Verificação de versão do arquivo em relação à versão do app
+            from utils.constants import APP_VERSION
+            from utils.helpers import is_version_newer
             file_version = str(payload.get("version", "1.0.0"))
             if is_version_newer(file_version, APP_VERSION):
                 raise ValueError(
@@ -1015,26 +1046,31 @@ class PulseLearner:
             labels = np.asarray(payload.get("training_labels", []), dtype=int)
             model = payload.get("model")
 
-            # Adaptação para modelos antigos com 7 ou outros números de features
             if features.size > 0 and labels.size > 0:
-                if features.ndim == 2:
-                    if features.shape[1] < len(self.feature_names):
-                        pad = np.zeros((len(features), len(self.feature_names) - features.shape[1]), dtype=float)
-                        self.training_features = np.hstack((features, pad))
-                    else:
-                        self.training_features = features[:, :len(self.feature_names)]
-                else:
-                    self.training_features = features
+                if legacy and features.ndim == 2:
+                    features = features[:, :len(self.feature_names)]
+                    
+                self.training_features = features
                 self.training_labels = labels
-
-            if model is not None and hasattr(model, "predict"):
-                self.model = model
-            elif self.training_features.size > 0 and self.training_labels.size > 0 and np.unique(self.training_labels).size >= 2:
-                self.model = self._build_model()
-                self.model.fit(self.training_features, self.training_labels)
+                
+                if legacy:
+                    self.model = None
+                    if np.unique(self.training_labels).size >= 2:
+                        m = self._build_model(n_samples=len(self.training_labels))
+                        m.fit(self.training_features, self.training_labels)
+                        self.model = m
+                else:
+                    if model is not None and hasattr(model, "predict"):
+                        self.model = model
             else:
-                raise ValueError("O arquivo não contém um classificador válido ou dados suficientes para treino.")
+                self.training_features = np.empty((0, len(self.feature_names)))
+                self.training_labels = np.empty(0, dtype=int)
+                self.model = None
 
+            self.pruning_rules = payload.get("pruning_rules", [])
+            self.degraded = False
+            self.last_error = ""
+            
             self.save_persisted_training()
             self.save_to_config()
             return True
