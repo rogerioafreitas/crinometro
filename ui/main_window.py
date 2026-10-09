@@ -1430,7 +1430,15 @@ class MainWindow(QMainWindow):
         self._batch_spinner = spinner
 
         # Delega inteiramente ao PipelineOrchestrator sem tocar no GenericWorker
-        self.pipeline.run_batch_analysis(checked_files, self.ctx.algo_params)
+        if not self.pipeline.run_batch_analysis(checked_files, self.ctx.algo_params):
+            spinner.stop(make_ui_icon("play", color="#FFFFFF", size=17), "Analisar Selecionados")
+            self._batch_spinner = None
+            self.btn_analyze_selected.setEnabled(True)
+            for fname in checked_files:
+                w = self._get_item_widget_by_name(fname)
+                if w and hasattr(w, "set_loading"):
+                    w.set_loading(False)
+            QMessageBox.warning(self, "Aviso", "Uma análise em lote já está em andamento.")
 
     def remove_audio(self):
         curr_item = self.list_widget.currentItem()

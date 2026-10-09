@@ -20,7 +20,8 @@ class TestExportControllerR3(unittest.TestCase):
         
         ctx = SessionContext()
         pipeline = MagicMock()
-        main_window = MagicMock()
+        from PyQt6.QtWidgets import QWidget
+        main_window = QWidget()
         main_window.lang = 'pt'
         ctrl = ExportController(ctx, pipeline, main_window)
         
@@ -32,19 +33,23 @@ class TestExportControllerR3(unittest.TestCase):
             txt_path = os.path.join(td, "report.txt")
             
             # create mock cache
-            class DummyResult:
-                pulse_peaks = np.array([1000, 2000])
-                chirp_start_indices = [0]
-                pulse_durations = [0.01, 0.01]
-                pulse_intervals = [0.01]
-                chirp_durations = [0.1]
-                chirp_intervals = []
-                avg_pulse_rate = 10.0
-                avg_chirp_rate = 1.0
-                signal_duration = 1.0
-                env = np.ones(5000)
+            dummy_result = {
+                "pulse_peaks": np.array([1000, 2000]),
+                "chirp_start_indices": [0],
+                "pulse_durations": [0.01, 0.01],
+                "pulse_intervals": [0.01],
+                "chirp_durations": [0.1],
+                "chirp_intervals": [],
+                "avg_pulse_rate": 10.0,
+                "avg_chirp_rate": 1.0,
+                "signal_duration": 1.0,
+                "env": np.ones(5000),
+                "Pxx": np.ones((10,10)),
+                "freqs": np.ones(10),
+                "bins": np.ones(10)
+            }
             
-            ctx.analysis_cache = {"fake_file.wav": DummyResult()}
+            ctx.analysis_cache = {"fake_file.wav": dummy_result}
             ctx.files = ["fake_file.wav"]
             ctx.sample_rates = {"fake_file.wav": 16000}
             
