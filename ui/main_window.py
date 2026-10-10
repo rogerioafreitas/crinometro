@@ -1971,9 +1971,13 @@ class MainWindow(QMainWindow):
             self.btn_toggle_ml.setText(I18N[l]["ml_enabled"])
             self.btn_toggle_ml.setToolTip(I18N[l]["ml_enabled_tooltip"])
             if hasattr(self, "lbl_model_status"):
-                status_txt = I18N[l]["ml_enabled_supervised"] if self.ctx.pulse_learner.is_trained() else I18N[l]["ml_enabled_unsupervised"]
+                if getattr(self.ctx.pulse_learner, "degraded", False):
+                    status_txt = "IA indisponível — usando DSP"
+                    self.lbl_model_status.setStyleSheet("color: #EF4444;")
+                else:
+                    status_txt = I18N[l]["ml_enabled_supervised"] if self.ctx.pulse_learner.is_trained() else I18N[l]["ml_enabled_unsupervised"]
+                    self.lbl_model_status.setStyleSheet("color: #10B981;")
                 self.lbl_model_status.setText(status_txt)
-                self.lbl_model_status.setStyleSheet("color: #10B981;")
         else:
             self.btn_toggle_ml.setText(I18N[l]["ml_disabled"])
             self.btn_toggle_ml.setToolTip(I18N[l]["ml_disabled_tooltip"])

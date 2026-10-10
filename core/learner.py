@@ -660,7 +660,10 @@ class PulseLearner:
             try:
                 return self.model.predict(X_used).astype(int)
             except Exception as exc:
-                pass  # print(f"Aviso na classificação com modelo treinado ({exc}); aceitando todos os picos como válidos.")
+                import logging
+                logging.getLogger("crinometro").error(f"Erro no predict: {exc}", exc_info=True)
+                self.degraded = True
+                self.last_error = str(exc)
                 return np.ones(X.shape[0], dtype=int)
 
     def filter_peaks(self, peaks, rate, env_signal, raw_signal=None,
@@ -758,7 +761,10 @@ class PulseLearner:
                 else:
                     pos_probs = self.model.predict(X_used).astype(float)
             except Exception as exc:
-                pass  # print(f"Aviso no predict_proba ({exc}); aceitando todos os picos como válidos.")
+                import logging
+                logging.getLogger("crinometro").error(f"Erro no predict_proba: {exc}", exc_info=True)
+                self.degraded = True
+                self.last_error = str(exc)
                 return peaks, np.asarray([], dtype=int)
 
             # Combinação linear: 65% confiança supervisionada + 35% prior físico GMM
