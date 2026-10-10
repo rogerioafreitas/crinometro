@@ -349,7 +349,7 @@ class LauncherLoadingScreen(QWidget):
             app.quit()
         # Encerramento forçado e determinístico para liberação imediata de locks no executável e DLLs
         import os
-        os._exit(0)
+        pass
 
     def _on_download_error(self, err_msg: str):
         pass  # print(f"[Auto-Updater] Erro no download: {err_msg}")

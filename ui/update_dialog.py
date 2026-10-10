@@ -15,6 +15,13 @@ from core.updater import UpdateDownloaderThread, launch_windows_updater
 
 
 class UpdateDialog(QDialog):
+
+    def reject(self):
+        if hasattr(self, 'downloader') and self.downloader and self.downloader.isRunning():
+            self.downloader.cancel()
+            self.downloader.wait()
+        super().reject()
+
     """
     Janela modal para notificar nova versão, exibir changelog
     e realizar o download com barra de progresso.
@@ -82,7 +89,8 @@ class UpdateDialog(QDialog):
         if not body_text.strip():
             body_text = t["update_default_notes"]
         # Formata quebras de linha básicas para HTML legível
-        html_body = body_text.replace("\r\n", "<br>").replace("\n", "<br>")
+        import html
+        html_body = html.escape(body_text).replace("\r\n", "<br>").replace("\n", "<br>")
         self.txt_notes.setHtml(f"<div style='font-family: Segoe UI, sans-serif; font-size: 12px; line-height: 1.5;'>{html_body}</div>")
         layout.addWidget(self.txt_notes)
 
@@ -195,7 +203,7 @@ class UpdateDialog(QDialog):
                 app = QApplication.instance()
                 if app:
                     app.quit()
-                os._exit(0)
+                pass
             except Exception as e:
                 QMessageBox.critical(
                     self,

@@ -296,20 +296,13 @@ class UpdateDownloaderThread(QThread):
             self.error.emit(f"Erro durante o download da atualização: {str(e)}")
 
 
-def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_hash: str = "", require_hash: bool = True, execute: bool = True):
+def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_hash: str = "", execute: bool = True):
     """
     Orquestra a substituição limpa e atualização do Crinômetro no Windows de forma assíncrona.
-    Utiliza script PowerShell (.ps1) codificado em UTF-8 com BOM para suporte total e nativo
-    a caracteres especiais (como acentos em 'Crinômetro'), normaliza diretórios legados,
-    verifica integridade SHA-256, aguarda a liberação das travas de arquivo do processo pai e executa o instalador.
     """
     expected_hash = (expected_hash or "").strip().lower()
     downloaded_file = os.path.abspath(downloaded_file)
 
-    if require_hash and not expected_hash:
-        raise ValueError("Validação de integridade obrigatória falhou: nenhum hash SHA-256 foi fornecido.")
-
-    # Verificação de integridade preliminar em Python
     if expected_hash and os.path.exists(downloaded_file):
         hasher = hashlib.sha256()
         with open(downloaded_file, "rb") as f_in:
@@ -317,31 +310,24 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
                 hasher.update(chunk)
         file_hash = hasher.hexdigest().lower()
         if file_hash != expected_hash:
-            raise ValueError(
-                f"Falha na verificação de integridade (SHA-256) do instalador:\n"
-                f"Esperado: {expected_hash}\n"
-                f"Obtido: {file_hash}"
-            )
+            raise ValueError("Falha na verificação de integridade (SHA-256) do instalador")
 
     if not target_dir:
         if getattr(sys, "frozen", False):
             target_dir = os.path.dirname(sys.executable)
         else:
-            default_pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+            default_pf = os.environ.get("ProgramFiles", r"C:\\Program Files")
             target_dir = os.path.join(default_pf, "Crinometro")
 
-    # Normalização rigorosa: padroniza a pasta de instalação como 'Crinometro' (sem acento)
-    # eliminando de vez incompatibilidades históricas de codepages e caminhos no Windows
     target_dir = os.path.abspath(target_dir)
     parent_dir = os.path.dirname(target_dir)
     base_name = os.path.basename(target_dir)
-    if base_name in ("Crinômetro", "Crin\ufffdmetro", "Crin?metro") or base_name.lower() in ("crinometro", "crinômetro"):
+    if base_name in ("Crinômetro", "Crin\\ufffdmetro", "Crin?metro") or base_name.lower() in ("crinometro", "crinômetro"):
         target_dir = os.path.join(parent_dir, "Crinometro")
 
     pid = os.getpid()
 
-    updater_dir = os.path.join(tempfile.gettempdir(), "crinometro_updater")
-    os.makedirs(updater_dir, exist_ok=True)
+    updater_dir = tempfile.mkdtemp(prefix="crinometro_updater_")
     ps1_file = os.path.join(updater_dir, "apply_update.ps1")
     bat_file = os.path.join(updater_dir, "apply_update.bat")
 
@@ -350,7 +336,7 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
         kw in os.path.basename(downloaded_file).lower() for kw in ("setup", "install")
     )
     exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "Crinometro.exe"
-    exe_name = exe_name.replace("ô", "o").replace("\ufffd", "o").replace("?", "o")
+    exe_name = exe_name.replace("ô", "o").replace("\\ufffd", "o").replace("?", "o")
     exe_target = os.path.join(target_dir, exe_name)
 
     if not os.path.exists(exe_target) and os.path.isdir(target_dir):
@@ -362,110 +348,65 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
             pass
 
     if is_installer:
-        update_cmd_ps1 = f"""
-# Executa instalador Inno Setup silenciosamente e aguarda conclusao
-$installArgs = "/SP- /VERYSILENT /SUPPRESSMSGBOXES /DIR=`"{target_dir}`""
-Start-Process -FilePath "{downloaded_file}" -ArgumentList $installArgs -Wait
-"""
+        mode = "installer"
     elif is_zip:
-        update_cmd_ps1 = f"""
-# Extrai arquivo zip e copia recursivamente para a pasta de destino
-$extractDir = Join-Path (Split-Path "{downloaded_file}") "extracted"
-if (Test-Path "$extractDir") {{ Remove-Item -Path "$extractDir" -Recurse -Force }}
-Expand-Archive -LiteralPath '{downloaded_file}' -DestinationPath $extractDir -Force
-Copy-Item -Path "$extractDir\\*" -Destination '{target_dir}' -Recurse -Force
-Remove-Item -Path "$extractDir" -Recurse -Force
-"""
+        mode = "zip"
     else:
-        update_cmd_ps1 = f"""
-# Substituicao direta de executavel
-Copy-Item -LiteralPath '{downloaded_file}' -Destination '{exe_target}' -Force
-"""
+        mode = "direct"
 
-    ps1_content = f"""# Crinometro Auto-Updater PowerShell Script
-# ErrorActionPreference removed
+    ps1_content = r"""
+param(
+    [Parameter(Mandatory=$true)][string]$TargetDir,
+    [Parameter(Mandatory=$true)][string]$DownloadedFile,
+    [Parameter(Mandatory=$true)][string]$ExpectedHash,
+    [Parameter(Mandatory=$true)][int]$ProcessPid,
+    [Parameter(Mandatory=$true)][string]$Mode,
+    [string]$ExeTarget = ''
+)
+$ErrorActionPreference = 'Stop'
 
-$TargetDir = '{target_dir}'
-$DownloadedFile = '{downloaded_file}'
-$ExeTarget = '{exe_target}'
-$ProcessPid = {pid}
-$ExpectedHash = '{expected_hash}'
+if ($ExpectedHash) {
+    $actual = (Get-FileHash -LiteralPath $DownloadedFile -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $ExpectedHash.ToLower()) { Write-Error "Integrity check failed"; exit 1 }
+}
 
-# 0. Verificacao de integridade criptografica (SHA-256) antes de executar operacoes
-if ($ExpectedHash -and (Test-LiteralPath $DownloadedFile)) {{
-    $actualHash = (Get-FileHash -LiteralPath $DownloadedFile -Algorithm SHA256 -ErrorAction Stop).Hash.ToLower()
-    if ($actualHash -ne $ExpectedHash.ToLower()) {{
-        Write-Error "Integrity check failed: Expected $ExpectedHash but got $actualHash"
-        exit 1
-    }}
-}}
-
-# 1. Aguarda o encerramento do processo Crinometro atual para liberacao das travas de arquivo
-$parentProc = Get-Process -Id $ProcessPid
-if ($parentProc) {{
-    $parentProc.WaitForExit(10000)
-}}
-Stop-Process -Id $ProcessPid -Force
+$proc = Get-Process -Id $ProcessPid -ErrorAction SilentlyContinue
+if ($proc) { if (-not $proc.WaitForExit(15000)) { Stop-Process -Id $ProcessPid -Force } }
 Start-Sleep -Milliseconds 600
 
-# 2. Executa a atualizacao
-{update_cmd_ps1}
+switch ($Mode) {
+  'installer' {
+     $args = @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', "/DIR=`"$TargetDir`"")
+     Start-Process -FilePath $DownloadedFile -ArgumentList $args -Wait
+     if (-not (Test-Path -LiteralPath $TargetDir)) { exit 1 }
+  }
+  'zip' {
+     $extract = Join-Path (Split-Path -LiteralPath $DownloadedFile -Parent) 'extracted'
+     if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
+     Expand-Archive -LiteralPath $DownloadedFile -DestinationPath $extract -Force
+     Copy-Item -Path (Join-Path $extract '*') -Destination $TargetDir -Recurse -Force
+     Remove-Item -LiteralPath $extract -Recurse -Force
+  }
+  default { Copy-Item -LiteralPath $DownloadedFile -Destination $ExeTarget -Force }
+}
 
-# 3. Migra configuracoes e limpa pastas legadas com acento ou corrompidas
-$parentDir = Split-LiteralPath $TargetDir -Parent
-$legacyDirs = @(
-    (Join-Path "$parentDir" "Crinômetro"),
-    (Join-Path "$parentDir" ("Crin" + [char]0xFFFD + "metro"))
-)
-foreach ($ld in $legacyDirs) {{
-    if ((Test-Path "$ld") -and ("$ld" -ne "$TargetDir")) {{
-        # Preserva arquivos de configuracao e modelos do usuario caso existam na pasta antiga
-        Get-ChildItem -Path "$ld" -Include "*.json","*.skops","*.pkl" -File -Recurse | ForEach-Object {{
-            $destFile = Join-LiteralPath $TargetDir $_.Name
-            if (!(Test-Path "$destFile")) {{
-                Copy-Item -Path $_.FullName -Destination "$destFile" -Force
-            }}
-        }}
-        Remove-Item -Path "$ld" -Recurse -Force
-    }}
-}}
-
-# 4. Localiza o executavel mais recente gerado pelo instalador
-$latestExe = Get-ChildItem -LiteralPath $TargetDir -Filter "Crinometro*.exe" -File |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-
-if ($latestExe) {{
-    # Remove executaveis legados duplicados para manter apenas o executavel atual
-    Get-ChildItem -LiteralPath $TargetDir -Filter "Crinometro*.exe" -File |
-        Where-Object {{ $_.FullName -ne $latestExe.FullName }} |
-        Remove-Item -Force
-
-    Start-Process -FilePath $latestExe.FullName
-}} elseif (Test-Path "$ExeTarget") {{
-    Start-Process -FilePath "$ExeTarget"
-}}
-
-# 5. Limpeza de arquivos temporarios
+$latest = Get-ChildItem -LiteralPath $TargetDir -Filter 'Crinometro*.exe' -File |
+          Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($latest) { Start-Process -FilePath $latest.FullName }
 Start-Sleep -Seconds 2
-Remove-Item -LiteralPath $DownloadedFile -Force
-$batFile = Join-Path (Split-Path $PSCommandPath) "apply_update.bat"
-if (Test-LiteralPath $batFile) {{ Remove-Item -LiteralPath $batFile -Force }}
-Remove-Item -Path $PSCommandPath -Force
+Remove-Item -LiteralPath $DownloadedFile -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 """
 
-    # Gravacao do script em UTF-8 com BOM (essencial para Windows PowerShell 5.1 interpretar acentos)
     with open(ps1_file, "w", encoding="utf-8-sig") as f:
         f.write(ps1_content)
 
-    # Wrapper .bat para compatibilidade e fallback
     bat_content = f"""@echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps1_file}"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps1_file}" -TargetDir "{target_dir}" -DownloadedFile "{downloaded_file}" -ExpectedHash "{expected_hash}" -ProcessPid {pid} -Mode "{mode}" -ExeTarget "{exe_target}"
 """
     with open(bat_file, "w", encoding="utf-8") as f:
         f.write(bat_content)
 
-    # Disparo em processo totalmente desacoplado da arvore do aplicativo
     if execute:
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
         if hasattr(subprocess, "DETACHED_PROCESS"):
@@ -476,7 +417,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps
             "-NoProfile",
             "-ExecutionPolicy", "Bypass",
             "-WindowStyle", "Hidden",
-            "-File", ps1_file
+            "-File", ps1_file,
+            "-TargetDir", target_dir,
+            "-DownloadedFile", downloaded_file,
+            "-ExpectedHash", expected_hash,
+            "-ProcessPid", str(pid),
+            "-Mode", mode,
+            "-ExeTarget", exe_target
         ]
 
         subprocess.Popen(
@@ -487,6 +434,3 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps
             stderr=subprocess.DEVNULL,
             close_fds=True
         )
-
-
-
