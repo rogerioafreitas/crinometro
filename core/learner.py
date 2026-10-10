@@ -303,6 +303,11 @@ class PulseLearner:
         """Etapa 2: Estima o prior contínuo P(focal) através de clusterização bimodal GMM.
 
         Incorpora a salvaguarda para amostras escassas: se N < 10, retorna P(focal) = 1.0.
+        
+        Nota (C5): O modelo de mistura gaussiana (GMM) sempre ajusta exatamente 2 componentes assumindo a presença 
+        de grilos focais e distantes. Se a gravação contiver apenas um grilo (unimodal), o GMM forçará uma 
+        separação artificial dos pulsos em grupos de alta/baixa amplitude. Esse artefato é mitigado apenas 
+        pelo resgate contextual posterior.
         """
         peaks = np.asarray(peaks, dtype=int)
         n = len(peaks)
@@ -359,6 +364,13 @@ class PulseLearner:
     @staticmethod
     def build_training_matrix(peaks_detected, peaks_user_verified, rate, env_signal,
                               raw_signal=None, require_both_classes=True):
+        """
+        Constrói a matriz de features (X) e rótulos (y) comparando picos detectados e verificados.
+        
+        Nota (C5): Todos os picos detectados (DSP) que não são removidos manualmente contam como verdade (1). 
+        Isso introduz risco de realimentação (confirmation bias), pois picos ignorados ou não-revisados 
+        reforçam as inferências prévias da ferramenta.
+        """
         detected = {int(p) for p in np.asarray(peaks_detected, dtype=int)}
         verified = {int(p) for p in np.asarray(peaks_user_verified, dtype=int)}
 
@@ -920,15 +932,7 @@ class PulseLearner:
                 self.training_features = features
                 self.training_labels = labels
                 
-                # Salvaguarda contra modelos degenerados
-                if self.training_labels.size > 0:
-                    n_neg = int(np.sum(self.training_labels == 0))
-                    n_pos = int(np.sum(self.training_labels == 1))
-                    if n_neg < 10 or (n_pos / max(1, n_neg)) > 6.0:
-                        self.model = None
-                        self.training_features = np.empty((0, len(self.feature_names)))
-                        self.training_labels = np.empty(0, dtype=int)
-                        return False
+
                         
                 self.pruning_rules = payload.get("pruning_rules", getattr(self, "pruning_rules", []))
                 
