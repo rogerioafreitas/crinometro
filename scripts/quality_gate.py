@@ -98,14 +98,70 @@ def run_gate():
             if fp.endswith(".py"):
                 all_errors.extend(check_ast_syntax_and_symbols(fp))
 
+
+    # Import e execucao do gate_extra.py
+    import subprocess
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    try:
+        from gate_extra import analyze_all
+        extra_errors = analyze_all()
+        all_errors.extend(extra_errors)
+    except Exception as e:
+        all_errors.append(f"Erro ao importar gate_extra.py: {e}")
+    
+    # check patch_*.py, restore_*.py, remove_prints_*.py na raiz
+    import glob
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    forbidden = []
+    for pat in ['patch_*.py', 'restore_*.py', 'remove_prints_*.py']:
+        forbidden.extend(glob.glob(os.path.join(root_dir, pat)))
+    if forbidden:
+        all_errors.append(f"Arquivos proibidos na raiz: {forbidden}")
+        
+    # compileall
+    res_compile = subprocess.run([sys.executable, "-W", "error::SyntaxWarning", "-m", "compileall", "core", "ui", "utils", "main.py", "crinometro__laucher.py"], cwd=root_dir, capture_output=True)
+    if res_compile.returncode != 0:
+        all_errors.append(f"Erro no compileall: {res_compile.stderr.decode('utf-8', errors='ignore')}")
+
+    # testes
+    env = os.environ.copy()
+    env['QT_QPA_PLATFORM'] = 'offscreen'
+    env['CRINOMETRO_TESTING'] = '1'
+    env['CRINOMETRO_CONFIG_DIR'] = __import__('tempfile').mkdtemp()
+    
+    res_tests = subprocess.run([sys.executable, "-m", "unittest", "discover", "tests"], cwd=root_dir, env=env, capture_output=True, text=True)
+    out_test = res_tests.stderr
+    # parse ran X tests
+    import re
+    match = re.search(r'Ran (\d+) tests', out_test)
+    ran_tests = int(match.group(1)) if match else 0
+    
+    min_test_count = 0
+    try:
+        with open(os.path.join(root_dir, 'tests', '.min_test_count'), 'r') as f:
+            min_test_count = int(f.read().strip())
+    except Exception:
+        pass
+        
+    if ran_tests < min_test_count:
+        all_errors.append(f"Regressao no numero de testes: rodaram {ran_tests}, esperado >= {min_test_count}")
+    else:
+        with open(os.path.join(root_dir, 'tests', '.min_test_count'), 'w') as f:
+            f.write(str(ran_tests))
+            
+    if res_tests.returncode != 0:
+        all_errors.append(f"Erro nos testes: {out_test[-1000:]}")
+        
     if all_errors:
         print("FAIL: Quality Gate encontrou problemas:")
         for err in all_errors:
             print("  -", err)
         return 1
 
-    print("PASS: Quality Gate passou com sucesso (Codificação UTF-8 pura, sem BOM, sem mojibake, sintaxe AST íntegra e detecção estática de referências a nomes globais não resolvidos nos arquivos analisados).")
+    print("PASS: Quality Gate completo passou com sucesso!")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(run_gate())

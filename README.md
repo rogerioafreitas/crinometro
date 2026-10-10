@@ -64,7 +64,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 
 # 3. Instalar dependências
-pip install PyQt6 numpy scipy scikit-learn matplotlib reportlab pillow pyinstaller
+pip install PyQt6 numpy scipy scikit-learn, skops matplotlib reportlab pillow pyinstaller
 
 # 4. Iniciar o programa
 python crinometro__laucher.py
