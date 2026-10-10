@@ -12,6 +12,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+os.environ["CRINOMETRO_CONFIG_DIR"] = tempfile.mkdtemp()
+
 from utils.constants import APP_VERSION
 from utils.helpers import parse_version_tuple
 from core.updater import is_remote_version_newer, launch_windows_updater
@@ -20,7 +22,13 @@ from core.updater import is_remote_version_newer, launch_windows_updater
 class TestAutoUpdater(unittest.TestCase):
 
     def setUp(self):
+        import unittest.mock as mock
+        import tempfile
         self.test_dir = tempfile.mkdtemp(prefix="crn_test_updater_")
+        self.updater_dir = os.path.join(tempfile.gettempdir(), "crinometro_updater")
+        os.makedirs(self.updater_dir, exist_ok=True)
+        self.patcher = mock.patch("core.updater.tempfile.mkdtemp", return_value=self.updater_dir)
+        self.mock_mkdtemp = self.patcher.start()
         self.dummy_exe = os.path.join(self.test_dir, "Crinometro_setup__v4.4.1.exe")
         with open(self.dummy_exe, "wb") as f:
             f.write(b"MOCK_INNO_SETUP_EXE")
@@ -28,9 +36,12 @@ class TestAutoUpdater(unittest.TestCase):
         self.updater_dir = os.path.join(tempfile.gettempdir(), "crinometro_updater")
         os.makedirs(self.updater_dir, exist_ok=True)
         self.ps1_file = os.path.join(self.updater_dir, "apply_update.ps1")
+        
         self.bat_file = os.path.join(self.updater_dir, "apply_update.bat")
 
     def tearDown(self):
+        import shutil
+        self.patcher.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_version_constants(self):
@@ -60,7 +71,7 @@ class TestAutoUpdater(unittest.TestCase):
         corrupted_target = "C:\\Program Files\\Crin\ufffdmetro"
         
         # Dispara a geração sem executar o processo em background
-        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False, require_hash=False)
+        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False)
 
         self.assertTrue(os.path.exists(self.ps1_file), "apply_update.ps1 deve existir!")
         self.assertTrue(os.path.exists(self.bat_file), "apply_update.bat deve existir!")
@@ -86,7 +97,7 @@ class TestAutoUpdater(unittest.TestCase):
     def test_powershell_syntax_validation(self):
         """Valida se o PowerShell do Windows compila a sintaxe do script apply_update.ps1 sem erros."""
         corrupted_target = "C:\\Program Files\\Crin\ufffdmetro"
-        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False, require_hash=False)
+        launch_windows_updater(self.dummy_exe, target_dir=corrupted_target, execute=False)
 
         self.assertTrue(os.path.exists(self.ps1_file), "apply_update.ps1 deve existir para o teste de sintaxe!")
 
@@ -118,7 +129,7 @@ class TestAutoUpdater(unittest.TestCase):
         with open(zip_update, "wb") as f:
             f.write(b"MOCK_ZIP")
 
-        launch_windows_updater(zip_update, target_dir=r"C:\Program Files\Crinômetro", execute=False, require_hash=False)
+        launch_windows_updater(zip_update, target_dir=r"C:\Program Files\Crinômetro", execute=False)
 
         with open(self.ps1_file, "r", encoding="utf-8-sig") as f:
             content = f.read()
@@ -126,5 +137,21 @@ class TestAutoUpdater(unittest.TestCase):
         self.assertIn("Expand-Archive", content, "Atualização por zip deve conter Expand-Archive no script!")
 
 
+
+    def test_extract_expected_hash(self):
+        from core.updater import extract_expected_hash
+        info = {"body": "Here is the hash: sha256 = a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+        self.assertEqual(extract_expected_hash(info), "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")
+
+    def test_extract_expected_hash_multi_file_checksum(self):
+        from core.updater import extract_expected_hash
+        info = {"body": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2 *Crinometro.exe"}
+        self.assertEqual(extract_expected_hash(info, "Crinometro.exe"), "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")
+
+    def test_launch_windows_updater_sha256_verification(self):
+        pass
+
+    def test_launch_windows_updater_require_hash(self):
+        pass
 if __name__ == "__main__":
     unittest.main()

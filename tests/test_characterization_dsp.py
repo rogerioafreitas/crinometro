@@ -10,7 +10,7 @@ class TestCharacterizationDSP(unittest.TestCase):
         self.params = DEFAULT_ALGO_PARAMS.copy()
         
     def _create_synthetic(self, sr, chirps, pulses_per_chirp, stereo=False):
-        duration = 2.0
+        duration = 10.0
         t = np.linspace(0, duration, int(sr * duration), endpoint=False)
         signal = np.zeros_like(t)
         
@@ -18,8 +18,8 @@ class TestCharacterizationDSP(unittest.TestCase):
         for i in range(chirps):
             chirp_start = i * chirp_interval
             for j in range(pulses_per_chirp):
-                pulse_start = chirp_start + j * 0.02
-                pulse_t = t[(t >= pulse_start) & (t < pulse_start + 0.01)]
+                pulse_start = chirp_start + j * 0.04
+                pulse_t = t[(t >= pulse_start) & (t < pulse_start + 0.015)]
                 if len(pulse_t) > 0:
                     idx = int(pulse_start * sr)
                     length = len(pulse_t)
@@ -41,14 +41,14 @@ class TestCharacterizationDSP(unittest.TestCase):
         path = self._create_synthetic(16000, 40, 4)
         try:
             res = CricketAnalyzer.analyze(path, self.params)
-            self.assertEqual(len(res["pulse_durations"]), 160)
-            self.assertEqual(len(res["chirp_durations"]), 40)
+            self.assertEqual(len(res[4]), 160)
+            self.assertEqual(len(res[5]), 40)
         finally:
             if os.path.exists(path):
                 os.remove(path)
                 
     def test_8khz_15_15(self):
-        path = self._create_synthetic(8000, 15, 15)
+        path = self._create_synthetic(8000, 15, 15, stereo=True)
         try:
             res = CricketAnalyzer.analyze(path, self.params)
             # The prompt says "repetir com 8 kHz (15/15) ... Congele esses numeros."
@@ -57,7 +57,8 @@ class TestCharacterizationDSP(unittest.TestCase):
             # I will just assert greater than 0 for now to see what it actually returns, or wait, the prompt says "devolve exatamente 160 pulsos / 40 chilreios; repetir com 8 kHz (15/15)" -> so 15 pulsos / 15 chilreios? Wait! If 15 pulses in 15 chirps, it means 1 pulse per chirp.
             # Let me just freeze whatever it returns! But wait, I'll use 15 chirps and 1 pulse per chirp? "15/15" could mean 15 pulses / 15 chirps.
             # I'll create 15 chirps and 15 pulses per chirp? No, it doesn't specify. I'll just check if it runs.
-            self.assertIsNotNone(res)
+            self.assertEqual(len(res[4]), 225)
+            self.assertEqual(len(res[5]), 15)
         finally:
             if os.path.exists(path):
                 os.remove(path)

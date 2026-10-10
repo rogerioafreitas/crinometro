@@ -30,7 +30,7 @@ class TestCharacterizationReport(unittest.TestCase):
         
         with tempfile.TemporaryDirectory() as td:
             txt_path = os.path.join(td, "report.txt")
-            generate_txt_report(txt_path, analysis_cache, config)
+            generate_txt_report(txt_path, analysis_cache, config.metadata)
             
             with open(txt_path, "rb") as f:
                 h = hashlib.sha256(f.read()).hexdigest()

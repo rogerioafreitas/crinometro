@@ -393,7 +393,8 @@ class EditorController(QObject):
 
                 win.lbl_total.setText("0")
 
-                win.lbl_metric_sub.setText("Moda: —   |   Média: —")
+                l = getattr(win, "lang", "pt")
+                win.lbl_metric_sub.setText(f"{I18N[l]['mean']}: -   |   {I18N[l]['variance']}: -")
                 if 'duration' in heavy:
                     win.transport_panel.timeline.set_data(heavy.get('duration', 0.0), [])
 
