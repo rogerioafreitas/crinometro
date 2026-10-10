@@ -104,11 +104,14 @@ def run_gate():
     import sys
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     try:
-        from gate_extra import analyze_all
-        extra_errors = analyze_all()
+        import gate_extra
+        files = [p for d in gate_extra.ROOTS for p in __import__('glob').glob(f"{d}/**/*.py", recursive=True)]
+        files += ["main.py", "crinometro.py", "crinometro__laucher.py"]
+        files = [f for f in files if os.path.exists(f)]
+        extra_errors = gate_extra.check_imports(files) + gate_extra.check_private_self_calls(files) + gate_extra.check_dataclass_kwargs(files)
         all_errors.extend(extra_errors)
     except Exception as e:
-        all_errors.append(f"Erro ao importar gate_extra.py: {e}")
+        all_errors.append(f"Erro ao executar gate_extra: {e}")
     
     # check patch_*.py, restore_*.py, remove_prints_*.py na raiz
     import glob
