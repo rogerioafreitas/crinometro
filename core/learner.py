@@ -28,6 +28,10 @@ except Exception:
 from utils.constants import CONFIG_LOCK, APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
 from utils.helpers import parse_version_tuple, is_version_newer
 
+class ModelUnavailable(Exception):
+    """O modelo supervisionado falhou na inferência; o chamador deve usar o ramo sem modelo."""
+
+
 class PulseLearner:
     """Faz a ponte entre a correção manual do usuário e a classificação de pulsos.
 
@@ -655,7 +659,36 @@ class PulseLearner:
             if X.ndim == 1:
                 X = X.reshape(1, -1)
             X_used = X
-            return self.model.predict(X_used)
+            try:
+                return self.model.predict(X_used)
+            except Exception as exc:
+                self._mark_model_failure(exc)
+                raise ModelUnavailable(str(exc)) from exc
+
+    def _mark_model_failure(self, exc):
+        import logging
+        logging.getLogger("crinometro").error(f"Erro na inferência do modelo: {exc}", exc_info=True)
+        self.degraded = True
+        self.last_error = str(exc)
+
+    def _supervised_scores(self, peaks, rate, env_signal, raw_signal, priors):
+        """Probabilidade da classe positiva por pico; levanta ModelUnavailable em qualquer falha."""
+        try:
+            features = np.asarray([
+                PulseLearner.extract_features_for_peak(
+                    int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
+                )
+                for i, p in enumerate(peaks)
+            ], dtype=float)
+            if hasattr(self.model, "predict_proba"):
+                probs = self.model.predict_proba(features)
+                classes = list(self.model.classes_)
+                class1_idx = classes.index(1) if 1 in classes else -1
+                return probs[:, class1_idx] if class1_idx >= 0 else np.ones(len(peaks))
+            return self.model.predict(features).astype(float)
+        except Exception as exc:
+            self._mark_model_failure(exc)
+            raise ModelUnavailable(str(exc)) from exc
 
     def filter_peaks(self, peaks, rate, env_signal, raw_signal=None,
                      gap_min_s=0.020, gap_max_s=0.040, focal_sensitivity=0.60):
@@ -687,8 +720,16 @@ class PulseLearner:
                     if violated:
                         pruned_indices.add(i)
 
-            # Se não há modelo supervisionado treinado, o GMM atua como classificador bimodal calibrado
-            if self.model is None:
+            # Pontuação supervisionada: falha vira ModelUnavailable e cai no ramo "sem modelo" (degraded=True)
+            pos_probs = None
+            if self.model is not None:
+                try:
+                    pos_probs = self._supervised_scores(peaks, rate, env_signal, raw_signal, priors)
+                except ModelUnavailable:
+                    pos_probs = None
+
+            # Se não há modelo supervisionado utilizável, o GMM atua como classificador bimodal calibrado
+            if pos_probs is None:
                 gmm_thresh = 0.50 + 0.30 * focal_sensitivity
                 # Picos aceitos: alta probabilidade no GMM e amplitude acima do piso focal
                 kept_mask = (priors >= gmm_thresh) & (amps >= focal_floor)
@@ -715,34 +756,24 @@ class PulseLearner:
                 if pruned_indices:
                     for idx in pruned_indices:
                         kept_mask[idx] = False
+                # Resgate: se nenhum pico sobrou, mantém os priors no percentil 75 ou acima (exceto podados)
+                if not np.any(kept_mask):
+                    cutoff = np.percentile(priors, 75)
+                    rescue_mask = priors >= cutoff
+                    for idx in pruned_indices:
+                        rescue_mask[idx] = False
+                    if np.any(rescue_mask):
+                        import logging
+                        logging.getLogger("crinometro").warning(
+                            f"filter_peaks: resgate ativado (nenhum pico aceito); mantidos {int(rescue_mask.sum())} de {len(peaks)} picos."
+                        )
+                        kept_mask = rescue_mask
 
 
                 return peaks[kept_mask], peaks[~kept_mask]
 
-            # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest)
-            features = np.asarray([
-                PulseLearner.extract_features_for_peak(
-                    int(p), rate, env_signal, raw_signal=raw_signal, prior_p_focal=priors[i]
-                )
-                for i, p in enumerate(peaks)
-            ], dtype=float)
-
-            X_used = features
-
-            try:
-                if hasattr(self.model, "predict_proba"):
-                    probs = self.model.predict_proba(X_used)
-                    classes = list(self.model.classes_)
-                    class1_idx = classes.index(1) if 1 in classes else -1
-                    pos_probs = probs[:, class1_idx] if class1_idx >= 0 else np.ones(len(peaks))
-                else:
-                    pos_probs = self.model.predict(X_used).astype(float)
-            except Exception as exc:
-                import logging
-                logging.getLogger("crinometro").error(f"Erro no predict_proba: {exc}", exc_info=True)
-                self.degraded = True
-                self.last_error = str(exc)
-                return peaks, np.asarray([], dtype=int)
+            # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest);
+            # pos_probs já foi calculado por _supervised_scores acima.
 
             # Combinação linear: 65% confiança supervisionada + 35% prior físico GMM
             combined_score = 0.65 * pos_probs + 0.35 * priors
