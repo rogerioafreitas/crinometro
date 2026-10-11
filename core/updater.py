@@ -296,6 +296,18 @@ class UpdateDownloaderThread(QThread):
             self.error.emit(f"Erro durante o download da atualização: {str(e)}")
 
 
+def normalize_target_dir(target_dir: str) -> str:
+    """Renomeia a pasta-alvo para 'Crinometro' somente se o nome for exatamente 'Crinômetro',
+    contiver '?' ou U+FFFD, e o diretório já existir ou o pai for gravável. Nunca por prefixo."""
+    target_dir = os.path.abspath(target_dir)
+    parent_dir = os.path.dirname(target_dir)
+    base_name = os.path.basename(target_dir)
+    needs_rename = base_name == "Crin\u00f4metro" or "?" in base_name or "\ufffd" in base_name
+    if needs_rename and (os.path.isdir(target_dir) or os.access(parent_dir, os.W_OK)):
+        return os.path.join(parent_dir, "Crinometro")
+    return target_dir
+
+
 def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_hash: str = "", execute: bool = True):
     """
     Orquestra a substituição limpa e atualização do Crinômetro no Windows de forma assíncrona.
@@ -319,11 +331,7 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
             default_pf = os.environ.get("ProgramFiles", r"C:\Program Files")
             target_dir = os.path.join(default_pf, "Crinometro")
 
-    target_dir = os.path.abspath(target_dir)
-    parent_dir = os.path.dirname(target_dir)
-    base_name = os.path.basename(target_dir)
-    if base_name.lower().startswith("crin"):
-        target_dir = os.path.join(parent_dir, "Crinometro")
+    target_dir = normalize_target_dir(target_dir)
 
     pid = os.getpid()
 
