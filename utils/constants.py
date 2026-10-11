@@ -151,6 +151,16 @@ CHANGELOG_FULL = {
         "Reorganização Livre de Gráficos: suporte a arrastar e soltar (drag & drop) para trocar e maximizar gráficos.",
         "Relatório Simplificado: síntese bioacústica compacta para múltiplos áudios."
     ],
+    "4.1.1": [
+        "Correção do bug no aprendizado ativo ('find_peaks' indefinido na mineração de negativos).",
+        "Redesign dos botões de ação e reposicionamento ergonômico do botão de sincronização X (compacto, com legendas em hover).",
+        "Modernização dos gráficos laterais em formato de 'mini janelinhas' com cantos arredondados, enquadramento aprimorado e reordenação instantânea.",
+        "Redimensionamento suave e sem engasgos da lista de arquivos de áudio (elisão dinâmica do nome do arquivo com debounce).",
+        "Reset completo de modelos prévios e inicialização estrita no modo DSP padrão, com treino ultra-rápido (<150ms) focado em correções manuais.",
+        "Otimização da taxa de quadros (FPS) no pan e zoom dos gráficos de amplitude e espectrograma.",
+        "Correção no gerador de relatórios PDF, restaurando o diagnóstico de cadência rítmica e a tabela sequencial completa de chilreios.",
+        "Restauração do valor padrão mínimo de 3 pulsos por chilreio (min_p = 3)."
+    ],
     "4.1.0": [
         "Filtro ICI Gate: expurgo automático de falsos positivos durante o período refratário fisiológico.",
         "Edição Precisa de Pulsos: snapping inteligente de marcadores e exportação de relatórios completos para publicação."
@@ -159,13 +169,83 @@ CHANGELOG_FULL = {
         "Segregação Bioacústica Avançada: separação inteligente de grilos focais vs. coro distante de fundo.",
         "Classificador Supervisionado: aprendizado de máquina em tempo real com árvore de decisão de alta velocidade."
     ],
+    "3.5.1": [
+        "Aprimoramento abrangente da árvore de aprendizado com conjunto de 14 descritores físicos invariantes a ganho.",
+        "Mineração automática de amostras de ruído de fundo (negative background mining) e regularização do ensemble para eliminar desbalanceamentos.",
+        "Filtro probabilístico e contextual de pulsos (Chirp-Aware Contextual Gating), garantindo que pulsos rítmicos nunca fragmentem chilreios.",
+        "Normalização robusta de sinal em banda no pipeline DSP, imune a ruídos e impactos de baixa frequência (<100 Hz)."
+    ],
     "3.5.0": [
         "Novo Launcher Animado: inicialização temática com mascote vetorial.",
         "Normalização Robusta: proteção DSP contra impactos e ruídos de baixa frequência."
     ],
+    "3.4.5": [
+        "Paleta expandida com 10 cores distintas e de alto contraste para chilreios de 2 a 10 pulsos (+ cor extra).",
+        "Correção do estado visual do botão de edição manual, desativando o destaque azul ao acionar reanálise.",
+        "Sincronização de áudio e aceleração a 1.2x na reprodução das animações de inicialização do launcher."
+    ],
+    "3.4.4": [
+        "Abertura instantânea do Launcher com reprodução contínua de loading.mp4 em segundo plano.",
+        "Transição sincronizada para loaded.mp4 assim que os módulos são carregados.",
+        "Exibição fluida e encerramento automático do launcher sem piscamentos ou travamentos."
+    ],
+    "3.4.3": [
+        "Padronização do cursor de clique (hand pointer) em todos os botões e ferramentas da interface.",
+        "Remoção de tarjas e aplicação de transparência total no contêiner 'Selecionar tudo'."
+    ],
+    "3.4.2": [
+        "Correção definitiva da seleção individual e em lote dos arquivos de áudio.",
+        "Correção do comportamento e visibilidade dinâmica do controle 'Selecionar tudo'.",
+        "Análise em lote de selecionados agora processa fielmente apenas os áudios marcados."
+    ],
+    "3.4.1": [
+        "Correção do encerramento inesperado ao alternar entre áudios já analisados e reanalisados.",
+        "Preservação integral do cache de dados e picos detectados na memória.",
+        "Sistema global de captura de erros com pop-up modal detalhado (Crash Reporter) para diagnóstico imediato."
+    ],
     "3.4.0": [
         "Processamento Assíncrono: tarefas pesadas em background com loading spinner animado.",
         "Paleta Cromática de Pulsos: diferenciação visual de chilreios por contagem de pulsos."
+    ],
+    "3.3.0": [
+        "Eliminação de travamentos ao editar pulsos manualmente com resposta imediata em tempo real.",
+        "Execução assíncrona em background para Reanálise, Aprendizado Ativo e Análise em Lote.",
+        "Indicador visual dinâmico com Loading Spinner animado diretamente dentro dos botões acionados."
+    ],
+    "3.2.3": [
+        "Compatibilidade retroativa com modelos anteriores (tolerância automática entre 7 e 12 features).",
+        "Verificação de compatibilidade de versão ao importar arquivos de treinamento (.pkl).",
+        "Notas de Atualização com scroll suave e tipografia refinada sem excesso de destaque no 'atual'.",
+        "Menu hambúrguer com hover azul bem visível e consistente em ambos os temas.",
+        "Botões de ação e ferramentas com hover em tons azulados e ícones de alto contraste no tema claro."
+    ],
+    "3.2.2": [
+        "Ajuste visual de pop-ups removendo containers de fundo destoantes nas legendas.",
+        "Novo design moderno para a barra de rolagem (scroll) com tom azulado e bordas arredondadas.",
+        "Menu hambúrguer aprimorado com cantos arredondados e hover/clique azul vívido mais responsivo."
+    ],
+    "3.2.1": [
+        "Correção e alinhamento visual dos submenus do menu hambúrguer no hover.",
+        "Suporte completo ao tema claro para todas as janelas de diálogo e pop-ups.",
+        "Caixa 'Selecionar tudo' na barra lateral agora é oculta por padrão e surge dinamicamente ao marcar áudios.",
+        "Hiperlink clicável na versão da janela Sobre para exibir o histórico de mudanças."
+    ],
+    "3.2.0": [
+        "Classificador Random Forest expandido para 500 árvores de decisão em paralelo.",
+        "Extração bioacústica ampliada para 12 descritores morfológicos e espectrais.",
+        "Funcionalidade de Exportar e Importar arquivos de treinamento (.pkl).",
+        "Correção na resolução do nome de arquivos no botão Reanalisar e Aprendizado com Correções."
+    ],
+    "3.1.0": [
+        "Taxa de atualização de áudio e timeline acelerada para 10 ms (100 Hz).",
+        "Correção de instabilidades e crashes ao arrastar o cursor de reprodução na timeline.",
+        "Otimização de eventos de reprodução e isolamento de rotinas gráficas."
+    ],
+    "3.0.0": [
+        "Nova interface visual modernizada com temas Claro e Escuro.",
+        "Sistema de seleção individual de áudios e exclusão rápida na barra lateral.",
+        "Análise em lote e relatórios consolidados apenas para áudios selecionados.",
+        "Tooltips e hover interativo nos marcadores de pulsos (X) com contagem de pulsos por chilreio."
     ]
 }
 
