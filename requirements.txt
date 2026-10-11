@@ -1,1 +1,8 @@
-PyQt6\nnumpy\nscipy\nscikit-learn\nmatplotlib\nreportlab\npillow\nskops\n
+PyQt6==6.11.0
+numpy==2.5.3
+scipy==1.18.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+reportlab==5.0.1
+pillow==12.3.0
+skops==0.16.0
