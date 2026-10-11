@@ -13,6 +13,9 @@ import ast
 import symtable
 import builtins
 import re
+import glob
+import subprocess
+import tempfile
 
 MOJIBAKE_PATTERNS = [
     re.compile(r"Ã[¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿]"),
@@ -101,14 +104,25 @@ def run_gate():
 
 
     
-    # check patch_*.py, restore_*.py, remove_prints_*.py na raiz
-    import glob
+    # arquivos proibidos na raiz (patch/fix/lixo)
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     forbidden = []
-    for pat in ['patch_*.py', 'restore_*.py', 'remove_prints_*.py']:
+    for pat in ['fix_*.py', 'patch_*.py', 'restore_*.py', 'apply_*.py', 'remove_prints_*.py',
+                '*.skops', 'crinometro_config.json', 'temp*.txt', 'r2r3.txt', 'install.ps1']:
         forbidden.extend(glob.glob(os.path.join(root_dir, pat)))
     if forbidden:
         all_errors.append(f"Arquivos proibidos na raiz: {forbidden}")
+
+    # verificações extras (gate_extra.py e gate_extra2.py), executadas na raiz do projeto
+    for extra in ('gate_extra.py', 'gate_extra2.py'):
+        extra_path = os.path.join(root_dir, extra)
+        if not os.path.exists(extra_path):
+            all_errors.append(f"{extra} ausente da raiz")
+            continue
+        res_extra = subprocess.run([sys.executable, extra_path], cwd=root_dir,
+                                   capture_output=True, text=True, encoding="utf-8")
+        if res_extra.returncode != 0:
+            all_errors.append(f"{extra} falhou:\n{res_extra.stdout}{res_extra.stderr}")
         
     # compileall
     res_compile = subprocess.run([sys.executable, "-W", "error::SyntaxWarning", "-m", "compileall", "core", "ui", "utils", "main.py", "crinometro__laucher.py"], cwd=root_dir, capture_output=True)
