@@ -27,11 +27,13 @@ NavigationController para orquestração visual sem acoplamento reverso.
 import json
 import os
 import tempfile
+import time
 import weakref
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from utils.constants import CONFIG_FILE
+from utils.constants import CONFIG_FILE, CONFIG_LOCK
+from utils.persistence import atomic_write_json
 from core.analyzer import CricketAnalyzer
 from core.worker import GenericWorker
 
@@ -461,39 +463,37 @@ class EditorController(QObject):
     # ------------------------------------------------------------------
 
     def save_corrections_state(self) -> bool:
-        """Persiste correções de arquivos no arquivo JSON de configurações de forma atômica."""
+        """Persiste correções de arquivos no arquivo JSON de configurações de forma atômica.
+
+        Sob CONFIG_LOCK. Se o arquivo existente estiver ilegível por erro de E/S, não grava (False).
+        Se estiver corrompido (parse), é preservado em '<arquivo>.corrupt-<ts>' antes de gravar;
+        se não for possível preservar, devolve False sem gravar.
+        """
         ctx = self.session_context
-        temp_path = None
         try:
-            config = {}
-            if os.path.exists(self.config_file):
-                try:
-                    with open(self.config_file, "r", encoding="utf-8") as f:
-                        loaded = json.load(f)
-                    if isinstance(loaded, dict):
+            with CONFIG_LOCK:
+                config = {}
+                if os.path.exists(self.config_file):
+                    try:
+                        with open(self.config_file, "r", encoding="utf-8") as f:
+                            loaded = json.load(f)
+                        if not isinstance(loaded, dict):
+                            raise ValueError("A configuração não é um objeto JSON.")
                         config = loaded
-                except Exception:
-                    config = {}
-            config["corrections_by_file"] = ctx.corrections_by_file
-
-            cfg_dir = os.path.dirname(os.path.abspath(self.config_file)) or "."
-            os.makedirs(cfg_dir, exist_ok=True)
-
-            with tempfile.NamedTemporaryFile("w", dir=cfg_dir, delete=False, encoding="utf-8") as tf:
-                temp_path = tf.name
-                json.dump(config, tf, indent=4, ensure_ascii=False)
-                tf.flush()
-                os.fsync(tf.fileno())
-
-            os.replace(temp_path, self.config_file)
-            temp_path = None
-            return True
+                    except OSError as exc:
+                        print(f"Erro ao ler configuração; correções não gravadas: {exc}")
+                        return False
+                    except ValueError:
+                        quarantine = f"{self.config_file}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}"
+                        try:
+                            os.replace(self.config_file, quarantine)
+                        except OSError as exc:
+                            print(f"Não foi possível preservar a configuração corrompida: {exc}")
+                            return False
+                config["corrections_by_file"] = ctx.corrections_by_file
+                atomic_write_json(self.config_file, config)
+                return True
         except (OSError, ValueError, TypeError) as exc:
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
             print(f"Erro ao persistir correções: {exc}")
             return False
 
