@@ -84,10 +84,38 @@ def check_forbidden_root_files(root=ROOT):
     return errs
 
 
+def check_signal_connects_in_init(root=ROOT):
+    """Toda classe QObject cujo __init__ recebe 'pipeline' ou 'ctx' deve ter '.connect(' no __init__."""
+    errs = []
+    files = [p for d in ("core", "ui", "utils")
+             for p in glob.glob(os.path.join(root, d, "**", "*.py"), recursive=True)]
+    for f in files:
+        tree = _parse(f)
+        qobject_like = {"QObject"}
+        classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        for _ in range(3):  # propaga herança local
+            for c in classes:
+                for b in c.bases:
+                    nm = b.id if isinstance(b, ast.Name) else getattr(b, "attr", "")
+                    if nm in qobject_like:
+                        qobject_like.add(c.name)
+        for c in classes:
+            if c.name not in qobject_like or c.name == "QObject":
+                continue
+            for fn in c.body:
+                if isinstance(fn, ast.FunctionDef) and fn.name == "__init__":
+                    argnames = {a.arg for a in fn.args.args + fn.args.kwonlyargs}
+                    if argnames & {"pipeline", "ctx"} and not any(
+                            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                            and n.func.attr == "connect" for n in ast.walk(fn)):
+                        errs.append(f"{f}:{fn.lineno}: {c.name}.__init__ recebe pipeline/ctx mas não faz .connect(")
+    return errs
+
+
 def run(root=ROOT):
     files = glob.glob(os.path.join(root, "tests", "**", "test*.py"), recursive=True)
     return (check_vacuous_tests(files) + check_generic_assert_raises(files)
-            + check_forbidden_root_files(root))
+            + check_forbidden_root_files(root) + check_signal_connects_in_init(root))
 
 
 if __name__ == "__main__":

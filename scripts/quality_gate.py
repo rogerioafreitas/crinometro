@@ -146,8 +146,8 @@ def run_gate():
     try:
         with open(os.path.join(root_dir, 'tests', '.min_test_count'), 'r') as f:
             min_test_count = int(f.read().strip())
-    except Exception:
-        pass
+    except Exception as exc:
+        all_errors.append(f"tests/.min_test_count ausente ou inválido: {exc}")
         
     if ran_tests < min_test_count:
         all_errors.append(f"Regressao no numero de testes: rodaram {ran_tests}, esperado >= {min_test_count}")
