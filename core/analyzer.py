@@ -105,7 +105,6 @@ class CricketAnalyzer:
         raw_scale = float(np.percentile(np.abs(data), 99.9)) if len(data) > 1000 else float(max_abs)
         raw_scale = max(raw_scale, 1e-9)
         data = data / raw_scale
-        np.clip(data, -1.0, 1.0, out=data)
 
         # Suavização por janela de Hann normalizada (elimina ringing e ondulações espúrias dos lóbulos laterais)
         smooth_window = max(9, int(rate * params.get("smooth_window_ms", 15.0) / 1000.0))
@@ -301,6 +300,9 @@ class CricketAnalyzer:
 
         # Task 2.2: Calcula o PSD (Power Spectral Density) do áudio bruto (data) para ver o espectro real
         f_psd, Pxx_db = CricketAnalyzer.compute_psd(data, rate)
+
+        # Clip somente para exibição, como último passo antes do retorno (após espectrograma e PSD)
+        np.clip(data, -1.0, 1.0, out=data)
 
         return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
                 media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, all_distant, carrier_freq,
