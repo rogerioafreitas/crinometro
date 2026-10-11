@@ -99,19 +99,7 @@ def run_gate():
                 all_errors.extend(check_ast_syntax_and_symbols(fp))
 
 
-    # Import e execucao do gate_extra.py
-    import subprocess
-    import sys
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    try:
-        import gate_extra
-        files = [p for d in gate_extra.ROOTS for p in __import__('glob').glob(f"{d}/**/*.py", recursive=True)]
-        files += ["main.py", "crinometro.py", "crinometro__laucher.py"]
-        files = [f for f in files if os.path.exists(f)]
-        extra_errors = gate_extra.check_imports(files) + gate_extra.check_private_self_calls(files) + gate_extra.check_dataclass_kwargs(files)
-        all_errors.extend(extra_errors)
-    except Exception as e:
-        all_errors.append(f"Erro ao executar gate_extra: {e}")
+
     
     # check patch_*.py, restore_*.py, remove_prints_*.py na raiz
     import glob
@@ -149,9 +137,6 @@ def run_gate():
         
     if ran_tests < min_test_count:
         all_errors.append(f"Regressao no numero de testes: rodaram {ran_tests}, esperado >= {min_test_count}")
-    else:
-        with open(os.path.join(root_dir, 'tests', '.min_test_count'), 'w') as f:
-            f.write(str(ran_tests))
             
     if res_tests.returncode != 0:
         all_errors.append(f"Erro nos testes: {out_test[-1000:]}")

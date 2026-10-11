@@ -87,14 +87,19 @@ class MainWindow(QMainWindow):
     # ---------- FASE 5: Aliases de compatibilidade para EditorController ----------
 
     def closeEvent(self, event):
-        if hasattr(self, 'export_ctrl'):
-            self.export_ctrl.shutdown()
-        if hasattr(self, 'pipeline'):
-            if hasattr(self.pipeline, '_batch_worker') and self.pipeline._batch_worker:
-                self.pipeline._batch_worker.abort()
-            if hasattr(self.pipeline, '_reanalyze_worker') and self.pipeline._reanalyze_worker:
-                self.pipeline._reanalyze_worker.abort()
-        event.accept()
+        import logging
+        try:
+            self.save_settings(silent=True)
+        except Exception:
+            logging.getLogger("crinometro").error("save_settings no fechamento falhou", exc_info=True)
+        for name in ("pipeline", "export_controller", "editor_controller"):
+            fn = getattr(getattr(self, name, None), "shutdown", None)
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:
+                    logging.getLogger("crinometro").error("shutdown de %s falhou", name, exc_info=True)
+        super().closeEvent(event)
 
     def __init__(self):
         super().__init__()

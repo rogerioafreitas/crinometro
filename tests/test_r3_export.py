@@ -11,15 +11,28 @@ app = QApplication.instance() or QApplication(sys.argv)
 
 class TestExportControllerR3(unittest.TestCase):
     def test_export_controller_generate_pdf(self):
-        from utils.report_generator import ReportConfig, ReportSectionFlags, generate_pdf_report, generate_txt_report
+        from ui.controllers.export_controller import ExportController
+        from utils.report_generator import ReportConfig, ReportSectionFlags
         from core.session_context import SessionContext
+        from PyQt6.QtCore import QObject, pyqtSignal
+        
+        class FakePipe(QObject):
+            batch_completed = pyqtSignal(int, list)
+            batch_failed = pyqtSignal(str)
+            batch_cancelled = pyqtSignal()
+        pipe = FakePipe()
+        
+        class FakeMainWindow(QObject):
+            lang = 'pt'
+        fake_mw = FakeMainWindow()
         
         ctx = SessionContext()
         flags = ReportSectionFlags(resumo=True, metricas=True, cadencia=False, lista_pulsos=False)
-        config = ReportConfig(metadata={}, section_flags=flags)
+        config = ReportConfig(metadata={}, section_flags=flags, output_path=None)
         
         with tempfile.TemporaryDirectory() as td:
             pdf_path = os.path.join(td, "report.pdf")
+            config.output_path = pdf_path
             txt_path = os.path.join(td, "report.txt")
             
             dummy_result = {
@@ -42,11 +55,33 @@ class TestExportControllerR3(unittest.TestCase):
             ctx.files = ["fake_file.wav"]
             ctx.sample_rates = {"fake_file.wav": 16000}
             
-            generate_pdf_report(pdf_path, config, ctx.analysis_cache)
-            generate_txt_report(txt_path, ctx.analysis_cache, config.metadata)
+            ctrl = ExportController(ctx, pipe, fake_mw)
+            ctrl._generate_pdf_report_modular(["fake_file.wav"], config, want_txt=True, txt_path=txt_path)
+            
+            # Since it starts a worker, we must wait
+            if ctrl._report_worker:
+                ctrl._report_worker.run()
             
             self.assertTrue(os.path.exists(pdf_path))
             self.assertTrue(os.path.exists(txt_path))
+
+
+    def test_export_controller_connects_pipeline_signals(self):
+        from PyQt6.QtCore import QObject, pyqtSignal
+        class FakePipe(QObject):
+            batch_completed = pyqtSignal(int, list)
+            batch_failed = pyqtSignal(str)
+            batch_cancelled = pyqtSignal()
+        pipe = FakePipe()
+        
+        class FakeMainWindow(QObject):
+            lang = 'pt'
+        fake_mw = FakeMainWindow()
+        
+        from ui.controllers.export_controller import ExportController
+        ExportController(None, pipe, fake_mw)
+        for sig in ('batch_completed', 'batch_failed', 'batch_cancelled'):
+            self.assertGreater(pipe.receivers(getattr(pipe, sig)), 0, sig)
 
 if __name__ == '__main__':
     unittest.main()

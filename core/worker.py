@@ -51,9 +51,6 @@ class WorkerRegistry:
     def retain(self, worker):
         self._workers.append(worker)
         worker.finished.connect(lambda: self._remove(worker))
-        worker.finished_signal.connect(lambda _: self._remove(worker))
-        worker.cancelled_signal.connect(lambda: self._remove(worker))
-        worker.error_signal.connect(lambda _: self._remove(worker))
         
     def _remove(self, worker):
         if worker in self._workers:

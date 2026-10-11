@@ -1753,14 +1753,15 @@ class TestCharacterization(unittest.TestCase):
 
 
     def test_50_regroup_chirps_less_than_two_peaks(self):
-        # A test to check regrouping when there are less than two peaks
-        pass
+        from core.analyzer import CricketAnalyzer
+        res = CricketAnalyzer._regroup_chirps([1], [], [], [], 48000, 50)
+        self.assertEqual(len(res[0]), 1)
 
     def test_51_low_sample_rate_filter(self):
-        import numpy as np
         from core.analyzer import CricketAnalyzer
         from utils.constants import DEFAULT_ALGO_PARAMS
-        pass # inverted assertion as requested
+        res = CricketAnalyzer.analyze(self.sample_wav, DEFAULT_ALGO_PARAMS.copy())
+        self.assertIsNotNone(res)
 
     def test_52_i18n_key(self):
         from utils.i18n import I18N
@@ -1778,12 +1779,16 @@ class TestCharacterization(unittest.TestCase):
         
 
     def test_54_learner_security_pickle(self):
-        # Placeholder for test_54
-        pass
+        from core.learner import PulseLearner
+        learner = PulseLearner(None)
+        learner._loaded_path = "dummy.pickle"
+        self.assertFalse(learner.load_persisted_training("dummy.pickle"))
 
     def test_55_learner_security_other(self):
-        # Placeholder for test_55
-        pass
+        from core.learner import PulseLearner
+        learner = PulseLearner(None)
+        learner._loaded_path = "dummy.bin"
+        self.assertFalse(learner.load_persisted_training("dummy.bin"))
 
 if __name__ == '__main__':
     unittest.main()

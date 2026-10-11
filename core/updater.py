@@ -316,13 +316,13 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
         if getattr(sys, "frozen", False):
             target_dir = os.path.dirname(sys.executable)
         else:
-            default_pf = os.environ.get("ProgramFiles", r"C:\\Program Files")
+            default_pf = os.environ.get("ProgramFiles", r"C:\Program Files")
             target_dir = os.path.join(default_pf, "Crinometro")
 
     target_dir = os.path.abspath(target_dir)
     parent_dir = os.path.dirname(target_dir)
     base_name = os.path.basename(target_dir)
-    if base_name in ("Crinômetro", "Crin\\ufffdmetro", "Crin?metro") or base_name.lower() in ("crinometro", "crinômetro"):
+    if base_name.lower().startswith("crin"):
         target_dir = os.path.join(parent_dir, "Crinometro")
 
     pid = os.getpid()
@@ -336,7 +336,6 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
         kw in os.path.basename(downloaded_file).lower() for kw in ("setup", "install")
     )
     exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "Crinometro.exe"
-    exe_name = exe_name.replace("ô", "o").replace("\\ufffd", "o").replace("?", "o")
     exe_target = os.path.join(target_dir, exe_name)
 
     if not os.path.exists(exe_target) and os.path.isdir(target_dir):
@@ -358,7 +357,7 @@ def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_
 param(
     [Parameter(Mandatory=$true)][string]$TargetDir,
     [Parameter(Mandatory=$true)][string]$DownloadedFile,
-    [Parameter(Mandatory=$true)][string]$ExpectedHash,
+    [Parameter(Mandatory=$true)][AllowEmptyString()][string]$ExpectedHash,
     [Parameter(Mandatory=$true)][int]$ProcessPid,
     [Parameter(Mandatory=$true)][string]$Mode,
     [string]$ExeTarget = ''

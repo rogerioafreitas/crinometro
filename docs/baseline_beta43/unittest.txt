@@ -1,0 +1,404 @@
+﻿.venv2\Scripts\python.exe : test_extract_expected_hash (test_auto_updater.TestAutoUpdater.test_extract_expected_hash) 
+... ok
+No linha:1 caractere:257
++ ... ).FullName; .venv2\Scripts\python.exe -m unittest discover tests -v 2 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_extract_ex...ed_hash) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_extract_expected_hash_multi_file_checksum 
+(test_auto_updater.TestAutoUpdater.test_extract_expected_hash_multi_file_checksum) ... ok
+test_launch_windows_updater_require_hash (test_auto_updater.TestAutoUpdater.test_launch_windows_updater_require_hash) 
+... ERROR
+test_launch_windows_updater_sha256_verification 
+(test_auto_updater.TestAutoUpdater.test_launch_windows_updater_sha256_verification) ... ok
+test_path_normalization_corrupted_char (test_auto_updater.TestAutoUpdater.test_path_normalization_corrupted_char)
+Verifica se diret¾rios com acento ou caractere de substituiþÒo sÒo normalizados para 'Crinometro'. ... ok
+test_powershell_non_installer_mode (test_auto_updater.TestAutoUpdater.test_powershell_non_installer_mode)
+Valida que arquivos .zip ou binßrios geram comandos adequados de extraþÒo/c¾pia. ... ok
+test_powershell_syntax_validation (test_auto_updater.TestAutoUpdater.test_powershell_syntax_validation)
+Valida se o PowerShell do Windows compila a sintaxe do script apply_update.ps1 sem erros. ... ok
+test_script_generation_unicode_and_utf8_bom 
+(test_auto_updater.TestAutoUpdater.test_script_generation_unicode_and_utf8_bom)
+Verifica se o gerador grava o script em utf-8-sig sem crash e normaliza o alvo para Crinometro. ... ok
+test_version_comparison (test_auto_updater.TestAutoUpdater.test_version_comparison)
+Verifica a l¾gica de comparaþÒo SemVer do atualizador. ... ok
+test_version_constants (test_auto_updater.TestAutoUpdater.test_version_constants)
+Verifica se a versÒo global foi atualizada para 4.4.1. ... ok
+test_16khz_40_chirps_4_pulses (test_characterization_dsp.TestCharacterizationDSP.test_16khz_40_chirps_4_pulses) ... ok
+test_8khz_15_15 (test_characterization_dsp.TestCharacterizationDSP.test_8khz_15_15) ... ok
+test_report_hashes (test_characterization_report.TestCharacterizationReport.test_report_hashes) ... ok
+test_00_session_context_redirection_and_emission 
+(test_characterization_v450.TestCharacterization.test_00_session_context_redirection_and_emission)
+Verifica se SessionContext armazena o estado e emite state_changed em qualquer atribuiþÒo. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_01_pipeline_and_cache (test_characterization_v450.TestCharacterization.test_01_pipeline_and_cache)
+Pipeline real com WAV versionado: verifica estrutura completa e reutilizaþÒo de cache. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_02_cancelamento_cooperativo (test_characterization_v450.TestCharacterization.test_02_cancelamento_cooperativo)
+Verifica encerramento limpo de worker cooperativo sem deixar estado inconsistente. ... ok
+test_03_navegacao_pan_zoom (test_characterization_v450.TestCharacterization.test_03_navegacao_pan_zoom)
+Verifica o algoritmo real de pan e zoom do Crin¶metro (on_press, on_release, zoom_graph). ... ok
+test_04_sincronizacao_eixos (test_characterization_v450.TestCharacterization.test_04_sincronizacao_eixos)
+Verifica se a alteraþÒo do eixo X propaga aos painÚis sincronizados. ... ok
+test_05_edicao_e_undo_pulsos (test_characterization_v450.TestCharacterization.test_05_edicao_e_undo_pulsos)
+Adicionar/remover/restaurar pulso atualiza marcadores e hist¾rico. ... ok
+test_06_machine_learning_gate (test_characterization_v450.TestCharacterization.test_06_machine_learning_gate)
+Verifica interceptaþÒo de CricketAnalyzer.analyze comprovando o gate de ML. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_07_exportacao_txt_e_pdf (test_characterization_v450.TestCharacterization.test_07_exportacao_txt_e_pdf)
+Verifica producao real de arquivos validos TXT e PDF via report_generator. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_08_audio_transport (test_characterization_v450.TestCharacterization.test_08_audio_transport)
+Verifica play/pause, set_position, cursor e velocidade de reproduþÒo. ... ok
+test_09_realtime_frequency_tolerance 
+(test_characterization_v450.TestCharacterization.test_09_realtime_frequency_tolerance)
+Verifica reavaliaþÒo de tolerÔncia espectral em tempo real, sincronizaþÒo e preservaþÒo de zoom. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+Traceback (most recent call last):
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_qt.py", line 523, in 
+_draw_idle
+    self.draw()
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_agg.py", line 441, in 
+draw
+    super().draw()
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_qt.py", line 492, in draw
+    self.update()
+RuntimeError: wrapped C/C++ object of type FigureCanvasQTAgg has been deleted
+ok
+test_10_force_reanalyze_lifecycle (test_characterization_v450.TestCharacterization.test_10_force_reanalyze_lifecycle)
+Testa o ciclo de vida completo de force_reanalyze: ... M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: 
+PendingDeprecationWarning: The set_constrained_layout function will be deprecated in a future version. Use 
+set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_11_batch_analysis_and_progress 
+(test_characterization_v450.TestCharacterization.test_11_batch_analysis_and_progress)
+Testa anßlise em lote e emissÒo dos sinais de lote de ponta a ponta sem corrida. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_12_batch_preserves_active_file_state 
+(test_characterization_v450.TestCharacterization.test_12_batch_preserves_active_file_state)
+Teste de regressÒo: anßlise em lote com m·ltiplos arquivos preserva estritamente o arquivo ativo. ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_13_plot_renderers_integration_and_engine_aliasing 
+(test_characterization_v450.TestCharacterization.test_13_plot_renderers_integration_and_engine_aliasing)
+FASE 3: Verifica a integraþÒo do PlotRenderers, eliminaþÒo de duplicidade de estado ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_14_plot_renderers_semantic_api 
+(test_characterization_v450.TestCharacterization.test_14_plot_renderers_semantic_api)
+FASE 3: Verifica as operaþ§es semÔnticas p·blicas do PlotRenderers ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+Traceback (most recent call last):
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_qt.py", line 523, in 
+_draw_idle
+    self.draw()
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_agg.py", line 441, in 
+draw
+    super().draw()
+  File "M:\Documentos\Faculdade\Biologia\.venv2\Lib\site-packages\matplotlib\backends\backend_qt.py", line 492, in draw
+    self.update()
+RuntimeError: wrapped C/C++ object of type FigureCanvasQTAgg has been deleted
+ok
+test_15_sync_render_invokes_plot_renderers_engines 
+(test_characterization_v450.TestCharacterization.test_15_sync_render_invokes_plot_renderers_engines)
+FASE 3: Comprova que rotinas de navegaþÒo da MainWindow (_sync_render) ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_16_render_file_switches_complete_active_state 
+(test_characterization_v450.TestCharacterization.test_16_render_file_switches_complete_active_state)
+FASE 3: Comprova que render_file() e activate_cached_file() alternam atomicamente ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_17_run_analysis_render_switches_complete_active_state 
+(test_characterization_v450.TestCharacterization.test_17_run_analysis_render_switches_complete_active_state)
+FASE 3: Comprova que run_analysis(render=True) utiliza atomicamente ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_18_navigation_controller_extracted_and_single_ownership 
+(test_characterization_v450.TestCharacterization.test_18_navigation_controller_extracted_and_single_ownership)
+FASE 4: Comprova instanciaþÒo do NavigationController, sinais semÔnticos ... ok
+test_19_navigation_controller_pan_lifecycle_and_signals 
+(test_characterization_v450.TestCharacterization.test_19_navigation_controller_pan_lifecycle_and_signals)
+FASE 4: Comprova o ciclo completo de pan (inÝcio, movimento com clamping, tÚrmino) ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_20_navigation_controller_zoom_and_bounds_clamping 
+(test_characterization_v450.TestCharacterization.test_20_navigation_controller_zoom_and_bounds_clamping)
+FASE 4: Comprova zoom centrado no cursor, restriþÒo por _clamp_bounds ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_21_navigation_controller_hover_metadata_and_signals 
+(test_characterization_v450.TestCharacterization.test_21_navigation_controller_hover_metadata_and_signals)
+FASE 4: Comprova detecþÒo de hover sobre marcadores de pulsos, formataþÒo ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_22_navigation_controller_background_blitting_and_cursor 
+(test_characterization_v450.TestCharacterization.test_22_navigation_controller_background_blitting_and_cursor)
+FASE 4: Comprova captura de backgrounds para blitting ultra-rßpido, ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_23_navigation_controller_robustness_and_edge_cases 
+(test_characterization_v450.TestCharacterization.test_23_navigation_controller_robustness_and_edge_cases)
+FASE 4: Comprova robustez do NavigationController contra casos degenerados ... ok
+test_24_editor_controller_extracted_and_single_ownership 
+(test_characterization_v450.TestCharacterization.test_24_editor_controller_extracted_and_single_ownership)
+FASE 5: Comprova instanciaþÒo do EditorController, conexÒo com PlotRenderers ... ok
+test_25_editor_controller_toggle_and_snapping 
+(test_characterization_v450.TestCharacterization.test_25_editor_controller_toggle_and_snapping)
+FASE 5: Comprova alternÔncia de picos (adiþÒo e remoþÒo com snapping temporal e metadados) ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_26_editor_controller_undo_lifecycle 
+(test_characterization_v450.TestCharacterization.test_26_editor_controller_undo_lifecycle)
+FASE 5: Comprova a pilha de desfeita (undo), integridade de estados anteriores, ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_27_editor_controller_metrics_recalculation 
+(test_characterization_v450.TestCharacterization.test_27_editor_controller_metrics_recalculation)
+FASE 5: Comprova recßlculo automßtico de chirps e mÚtricas fisiol¾gicas ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_28_editor_controller_learning_integration 
+(test_characterization_v450.TestCharacterization.test_28_editor_controller_learning_integration)
+FASE 5: Comprova a integraþÒo do EditorController com PulseLearner, persistÛncia ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_29_editor_controller_undo_metadata_restoration 
+(test_characterization_v450.TestCharacterization.test_29_editor_controller_undo_metadata_restoration)
+FASE 5 Loop 3: Comprova que o Undo restaura integralmente peaks_user_verified E pulse_metadata, ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_30_render_dashboard_preserves_undo_on_same_file 
+(test_characterization_v450.TestCharacterization.test_30_render_dashboard_preserves_undo_on_same_file)
+FASE 5 Loop 3: Comprova que render_dashboard() preserva o hist¾rico de Undo em re-renderizaþ§es ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_31_editor_controller_atomic_save_corrections 
+(test_characterization_v450.TestCharacterization.test_31_editor_controller_atomic_save_corrections)
+FASE 5 Loop 3: Comprova que save_corrections_state() realiza gravaþÒo at¶mica ... ok
+test_32_learn_from_corrections_preserves_metadata_and_sync 
+(test_characterization_v450.TestCharacterization.test_32_learn_from_corrections_preserves_metadata_and_sync)
+FASE 5 Loop 3: Comprova que learn_from_corrections() preserva metadados enriquecidos ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_33_metrics_cleared_when_less_than_two_peaks 
+(test_characterization_v450.TestCharacterization.test_33_metrics_cleared_when_less_than_two_peaks)
+FASE 5 Loop 4: Comprova que quando restam menos de 2 pulsos verificados (< 2), ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_34_session_context_transactional_batch_update_and_atomic_undo 
+(test_characterization_v450.TestCharacterization.test_34_session_context_transactional_batch_update_and_atomic_undo)
+FASE 5 Loop 4: Comprova que SessionContext.batch_update() impede a emissÒo ... ok
+test_35_audio_transport_panel_integration 
+(test_characterization_v450.TestCharacterization.test_35_audio_transport_panel_integration) ... ok
+test_36_architectural_regression_guards 
+(test_characterization_v450.TestCharacterization.test_36_architectural_regression_guards)
+FASE 7: Comprova que a MainWindow foi despojada de suas antigas delegacoes ... ok
+test_37_panels_signals_undo (test_characterization_v450.TestCharacterization.test_37_panels_signals_undo)
+Comprova que clicar no botao de undo do painel emite o sinal para o controller. ... ok
+test_38_panels_signals_y_limits (test_characterization_v450.TestCharacterization.test_38_panels_signals_y_limits)
+Comprova que aplicar preset/spinners de Y-limits emite sinal. ... ok
+test_39_panels_signals_freq_tolerance 
+(test_characterization_v450.TestCharacterization.test_39_panels_signals_freq_tolerance)
+Comprova que a alteracao de tolerancia de portadora emite sinal. ... ok
+test_40_panels_signals_wave_visibility 
+(test_characterization_v450.TestCharacterization.test_40_panels_signals_wave_visibility)
+Comprova que a visibilidade de waveform no painel emite sinal. ... ok
+test_41_app_version_is_parseable (test_characterization_v450.TestCharacterization.test_41_app_version_is_parseable)
+FASE 8: APP_VERSION deve ser uma string SemVer pura sem sufixos de texto. ... ok
+test_42_export_config_defaults (test_characterization_v450.TestCharacterization.test_42_export_config_defaults)
+FASE 8: ExportConfig deve ter valores padrÒo sensatos para exportaþÒo. ... ok
+test_43_figure_factory_waveform_pure 
+(test_characterization_v450.TestCharacterization.test_43_figure_factory_waveform_pure)
+FASE 8: create_waveform_figure deve retornar Figure isolada sem tocar em widgets Qt. ... ok
+test_44_figure_factory_all_panels (test_characterization_v450.TestCharacterization.test_44_figure_factory_all_panels)
+FASE 8: Todos os 4 create_*_figure devem funcionar com contexto sintÚtico. ... ok
+test_45_figure_factory_empty_context 
+(test_characterization_v450.TestCharacterization.test_45_figure_factory_empty_context)
+FASE 8: create_*_figure com active_heavy_data vazio nÒo deve levantar exceþÒo. ... ok
+test_46_export_png_writes_file (test_characterization_v450.TestCharacterization.test_46_export_png_writes_file)
+FASE 8: export_figures_png deve escrever arquivos no disco e liberar mem¾ria. ... ok
+test_47_export_pdf_multipage_no_leak 
+(test_characterization_v450.TestCharacterization.test_47_export_pdf_multipage_no_leak)
+FASE 8: export_figures_pdf deve criar PDF multipßgina sem vazamento de figuras. ... ok
+test_48_export_dialog_snapshot (test_characterization_v450.TestCharacterization.test_48_export_dialog_snapshot)
+Verifica se _SnapshotCtx captura os dados imutaveis corretamente. ... ok
+test_49_export_worker_cancel (test_characterization_v450.TestCharacterization.test_49_export_worker_cancel)
+Verifica se a flag is_cancelled cancela o worker sem terminar abruptamente. ... ok
+test_50_regroup_chirps_less_than_two_peaks 
+(test_characterization_v450.TestCharacterization.test_50_regroup_chirps_less_than_two_peaks) ... ERROR
+test_51_low_sample_rate_filter (test_characterization_v450.TestCharacterization.test_51_low_sample_rate_filter) ... 
+M:\Documentos\Faculdade\Biologia\ui\main_window.py:1145: PendingDeprecationWarning: The set_constrained_layout 
+function will be deprecated in a future version. Use set_layout_engine('constrained') instead.
+  fig.set_constrained_layout(False)
+ok
+test_52_i18n_key (test_characterization_v450.TestCharacterization.test_52_i18n_key) ... ok
+test_53_learner_security_skops (test_characterization_v450.TestCharacterization.test_53_learner_security_skops) ... ok
+test_54_learner_security_pickle (test_characterization_v450.TestCharacterization.test_54_learner_security_pickle) ... 
+ERROR
+test_55_learner_security_other (test_characterization_v450.TestCharacterization.test_55_learner_security_other) ... 
+ERROR
+test_papel_sempre_branco (test_export_dialog_config.TestBackgroundTheme.test_papel_sempre_branco) ... ok
+test_tema_atual_claro_nao_vira_escuro 
+(test_export_dialog_config.TestBackgroundTheme.test_tema_atual_claro_nao_vira_escuro) ... ok
+test_tema_atual_escuro (test_export_dialog_config.TestBackgroundTheme.test_tema_atual_escuro) ... ok
+test_apply_x_e_propagado (test_export_dialog_config.TestDialogState.test_apply_x_e_propagado) ... ok
+test_botoes_utilitarios_nao_sao_cta (test_export_dialog_config.TestDialogState.test_botoes_utilitarios_nao_sao_cta) 
+... ok
+test_dpi_opcoes (test_export_dialog_config.TestDialogState.test_dpi_opcoes) ... ok
+test_icones_qss_sao_arquivos_reais (test_export_dialog_config.TestDialogState.test_icones_qss_sao_arquivos_reais) ... 
+ok
+test_limpar_nao_zera_subopcoes (test_export_dialog_config.TestDialogState.test_limpar_nao_zera_subopcoes) ... ok
+test_lista_do_combo_tem_estilo_nos_dois_temas 
+(test_export_dialog_config.TestDialogState.test_lista_do_combo_tem_estilo_nos_dois_temas) ... ok
+test_worker_recebe_snapshot_isolado (test_export_dialog_config.TestDialogState.test_worker_recebe_snapshot_isolado) 
+... ok
+test_dropdown_tem_txt_relatorio_e_graficos 
+(test_export_dialog_config.TestMenuRouting.test_dropdown_tem_txt_relatorio_e_graficos) ... ok
+test_10k_hz (test_export_dialog_config.TestScopeMapping.test_10k_hz) ... ok
+test_10k_khz (test_export_dialog_config.TestScopeMapping.test_10k_khz) ... ok
+test_especifico_converte_unidade_da_vista 
+(test_export_dialog_config.TestScopeMapping.test_especifico_converte_unidade_da_vista) ... ok
+test_especifico_sem_vista_nao_quebra (test_export_dialog_config.TestScopeMapping.test_especifico_sem_vista_nao_quebra) 
+... ok
+test_especifico_usa_vista_atual_em_khz 
+(test_export_dialog_config.TestScopeMapping.test_especifico_usa_vista_atual_em_khz) ... ok
+test_focal_sem_portadora_usa_banda_b1 
+(test_export_dialog_config.TestScopeMapping.test_focal_sem_portadora_usa_banda_b1) ... ok
+test_focal_usa_portadora_e_tolerancia 
+(test_export_dialog_config.TestScopeMapping.test_focal_usa_portadora_e_tolerancia) ... ok
+test_total_vai_ate_nyquist (test_export_dialog_config.TestScopeMapping.test_total_vai_ate_nyquist) ... ok
+test_com_recorte (test_export_dialog_config.TestWaveformCrop.test_com_recorte) ... ok
+test_sem_recorte_mostra_gravacao_completa 
+(test_export_dialog_config.TestWaveformCrop.test_sem_recorte_mostra_gravacao_completa) ... ok
+test_all_panels_export (test_figure_factory.TestFigureFactory.test_all_panels_export) ... 
+M:\Documentos\Faculdade\Biologia\ui\figure_factory.py:327: UserWarning: Attempting to set identical low and high ylims 
+makes transformation singular; automatically expanding.
+  ax.set_ylim(np.min(Pxx_db) - y_range * 0.1, np.max(Pxx_db) + y_range * 0.1)
+ok
+test_cancel_removes_files (test_figure_factory.TestFigureFactory.test_cancel_removes_files) ... ok
+test_decimation_preserves_peak (test_figure_factory.TestFigureFactory.test_decimation_preserves_peak) ... ok
+test_export_config_defaults (test_figure_factory.TestFigureFactory.test_export_config_defaults) ... ok
+test_leak_weakref (test_figure_factory.TestFigureFactory.test_leak_weakref) ... ok
+test_png_set_suffix (test_figure_factory.TestFigureFactory.test_png_set_suffix) ... ok
+test_spectrogram_colorbar_auto (test_figure_factory.TestFigureFactory.test_spectrogram_colorbar_auto) ... ok
+test_unique_path (test_figure_factory.TestFigureFactory.test_unique_path) ... ok
+test_01_dictionary_parity (test_i18n_coverage.TestI18nCoverage.test_01_dictionary_parity)
+Comprova paridade exata de 100% das chaves entre PT e EN no I18N. ... ok
+test_02_plain_helper (test_i18n_coverage.TestI18nCoverage.test_02_plain_helper)
+Comprova que plain() extrai o texto limpo sem quebrar em emojis. ... ok
+test_03_main_window_refresh_dynamic_language_switch 
+(test_i18n_coverage.TestI18nCoverage.test_03_main_window_refresh_dynamic_language_switch)
+Comprova alternÔncia instantÔnea de idioma na MainWindow sem exceþ§es. ... ok
+test_04_figure_factory_language_awareness 
+(test_i18n_coverage.TestI18nCoverage.test_04_figure_factory_language_awareness)
+Comprova que o figure_factory respeita os idiomas PT e EN. ... ok
+test_05_export_dialogs_instantiation_pt_and_en 
+(test_i18n_coverage.TestI18nCoverage.test_05_export_dialogs_instantiation_pt_and_en)
+Comprova que ExportReportDialog e ExportGraphDialog instanciam em PT e EN sem NameError. ... ok
+test_handle_exception_testing_bypass (test_imports.TestImports.test_handle_exception_testing_bypass) ... Uncaught 
+exception
+Traceback (most recent call last):
+  File "M:\Documentos\Faculdade\Biologia\tests\test_imports.py", line 25, in test_handle_exception_testing_bypass
+    raise ValueError("Test error")
+ValueError: Test error
+Traceback (most recent call last):
+  File "M:\Documentos\Faculdade\Biologia\tests\test_imports.py", line 25, in test_handle_exception_testing_bypass
+    raise ValueError("Test error")
+ValueError: Test error
+ok
+test_import_main_and_crinometro (test_imports.TestImports.test_import_main_and_crinometro) ... ok
+test_launcher_status_transitions_and_error_handling 
+(test_launcher_integration.TestLauncherUpdateTransitions.test_launcher_status_transitions_and_error_handling)
+Valida que o launcher atualiza seus textos de status e nÒo trava caso ocorra erro. ... Traceback (most recent call 
+last):
+  File "M:\Documentos\Faculdade\Biologia\crinometro__laucher.py", line 326, in _step_install_files
+    launch_windows_updater(file_path)
+  File "C:\Users\roger.DESK_RMAIN\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", 
+line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\roger.DESK_RMAIN\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", 
+line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\roger.DESK_RMAIN\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", 
+line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: Falha de teste
+ok
+test_persistence_skops (test_model_persistence.TestModelPersistence.test_persistence_skops) ... ok
+test_export_report_dialog_config (test_r2_export.TestExportDialogR2.test_export_report_dialog_config) ... ok
+test_export_controller_connects_pipeline_signals 
+(test_r3_export.TestExportControllerR3.test_export_controller_connects_pipeline_signals) ... ok
+test_export_controller_generate_pdf (test_r3_export.TestExportControllerR3.test_export_controller_generate_pdf) ... 

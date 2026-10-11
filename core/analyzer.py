@@ -86,8 +86,6 @@ class CricketAnalyzer:
         b1_min = max(20.0, float(params.get("b1_min", 3200)))
         if b1_max - b1_min < 100.0:
             raise ValueError(f"Taxa de amostragem de {rate} Hz incompatível com a banda configurada ({b1_min:.0f}–{float(params.get('b1_max', 6000)):.0f} Hz; Nyquist = {nyq:.0f} Hz). Ajuste b1_min/b1_max ou use uma gravação com taxa maior.")
-        elif b1_min >= b1_max:
-            b1_min = max(20.0, b1_max - 20.0)
         sos_b1 = butter(4, [b1_min / nyq, b1_max / nyq], btype='band', output='sos')
         data_b1 = sosfiltfilt(sos_b1, data)
         env1 = np.abs(hilbert(data_b1, N=next_fast_len(len(data_b1)))[:len(data_b1)])
@@ -106,8 +104,8 @@ class CricketAnalyzer:
         # Sinal original normalizado de forma segura para exibição visual
         raw_scale = float(np.percentile(np.abs(data), 99.9)) if len(data) > 1000 else float(max_abs)
         raw_scale = max(raw_scale, 1e-9)
-        data_norm = data / raw_scale
-        data = np.clip(data_norm, -1.0, 1.0)
+        data = data / raw_scale
+        np.clip(data, -1.0, 1.0, out=data)
 
         # Suavização por janela de Hann normalizada (elimina ringing e ondulações espúrias dos lóbulos laterais)
         smooth_window = max(9, int(rate * params.get("smooth_window_ms", 15.0) / 1000.0))
@@ -124,7 +122,7 @@ class CricketAnalyzer:
             dom_freqs = cached_spec["dom_freqs"]
         else:
             # Espectrograma de banda larga para exibição visual (cobre todos os sons até 10+ kHz / Nyquist)
-            f_spec, t_spec, Sxx = spectrogram(data_norm, rate, nperseg=1024, noverlap=768)
+            f_spec, t_spec, Sxx = spectrogram(data, rate, nperseg=1024, noverlap=768)
             Sxx_db = (10 * np.log10(Sxx + 1e-10)).astype(np.float32)
             f_spec = f_spec.astype(np.float32)
             t_spec = t_spec.astype(np.float32)
@@ -302,7 +300,7 @@ class CricketAnalyzer:
         all_distant = sorted(list(set(distant_peaks) | set(discarded_peaks_reasons.keys())))
 
         # Task 2.2: Calcula o PSD (Power Spectral Density) do áudio bruto (data) para ver o espectro real
-        f_psd, Pxx_db = CricketAnalyzer.compute_psd(data_norm, rate)
+        f_psd, Pxx_db = CricketAnalyzer.compute_psd(data, rate)
 
         return (rate, data.astype(np.float32), data_b1.astype(np.float32), env1_smooth, peaks, chirps, chirp_peaks_list,
                 media, moda, f_spec, t_spec, Sxx_db, dom_freqs, audio_duration_sec, all_distant, carrier_freq,

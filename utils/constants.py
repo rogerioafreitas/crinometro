@@ -107,13 +107,13 @@ CHANGELOG_SUMMARY = {
 # Histórico técnico completo preservado para exportação em CHANGELOG.md e CHANGELOG.pdf
 CHANGELOG_FULL = {
     "4.5.0": [
-        "Verso 4.5.0 Beta."
+        "Versão 4.5.0 Beta."
     ],
     "4.4.1": [
         "Correção Crítica de Emergência no Auto-Updater: eliminação definitiva do travamento da janela do Launcher na mensagem 'Instalando arquivos...'.",
         "Migração Completa do Atualizador para PowerShell: substituição do lote legada em cmd.exe (.bat) por script PowerShell (.ps1) nativo em UTF-8 com BOM (utf-8-sig), resolvendo de ponta a ponta erros de codificação com o nome 'Crinômetro'.",
         "Tratamento de Exceções e Resiliência na UI: inclusão de bloco try/except robusto no acionamento do instalador pelo launcher, impedindo que falhas silenciosas travem a interface gráfica.",
-        "Normalização e Limpeza Automática: identificação e correção de diretórios corrompidos com caractere \\ufffd criados por versões anteriores e expurgo automático da pasta legada após a instalação.",
+        "Normalização e Limpeza Automática: identificação e correção de diretórios corrompidos com caractere \ufffd criados por versões anteriores e expurgo automático da pasta legada após a instalação.",
         "Encerramento Determinístico com os._exit(0): finalização do processo pai para liberação imediata de todas as travas de arquivo no Windows, garantindo que o Inno Setup substitua o executável sem conflitos."
     ],
     "4.4.0": [

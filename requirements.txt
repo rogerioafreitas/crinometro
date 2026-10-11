@@ -1,1 +1,1 @@
-skops
+PyQt6\nnumpy\nscipy\nscikit-learn\nmatplotlib\nreportlab\npillow\nskops\n

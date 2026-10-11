@@ -149,9 +149,27 @@ class TestAutoUpdater(unittest.TestCase):
         self.assertEqual(extract_expected_hash(info, "Crinometro.exe"), "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")
 
     def test_launch_windows_updater_sha256_verification(self):
-        pass
+        from core.updater import launch_windows_updater
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"x")
+            f_name = f.name
+        try:
+            with self.assertRaises(ValueError):
+                launch_windows_updater(f_name, expected_hash="0"*64, execute=False)
+        finally:
+            os.unlink(f_name)
 
     def test_launch_windows_updater_require_hash(self):
-        pass
+        from core.updater import launch_windows_updater
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"x")
+            f_name = f.name
+        try:
+            with self.assertRaises(ValueError):
+                launch_windows_updater(f_name, expected_hash=None, execute=False, require_hash=True)
+        finally:
+            os.unlink(f_name)
 if __name__ == "__main__":
     unittest.main()

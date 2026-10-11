@@ -492,19 +492,13 @@ class PulseLearner:
             return self.model
 
     def update_from_corrections(self, peaks_detected, peaks_user_verified, rate, env_signal, raw_signal=None):
+        X_new, y_new = self.build_training_matrix(
+            peaks_detected, peaks_user_verified, rate, env_signal,
+            raw_signal=raw_signal, require_both_classes=False,
+        )
+        
         with self._model_lock:
-            X_new, y_new = self.build_training_matrix(
-                peaks_detected, peaks_user_verified, rate, env_signal,
-                raw_signal=raw_signal, require_both_classes=False,
-            )
             if self.training_features.size:
-                if self.training_features.shape[1] != X_new.shape[1]:
-                    # Salvaguarda 3: alinhamento dinâmico de dimensões
-                    if self.training_features.shape[1] < X_new.shape[1]:
-                        pad = np.zeros((len(self.training_features), X_new.shape[1] - self.training_features.shape[1]), dtype=float)
-                        self.training_features = np.hstack((self.training_features, pad))
-                    else:
-                        self.training_features = self.training_features[:, :X_new.shape[1]]
                 X = np.vstack((self.training_features, X_new))
                 y = np.concatenate((self.training_labels, y_new))
             else:
@@ -520,26 +514,30 @@ class PulseLearner:
                 self.training_features = self.training_features[-_MAX_SAMPLES:]
                 self.training_labels = self.training_labels[-_MAX_SAMPLES:]
 
-            if np.unique(self.training_labels).size < 2:
+            X_train = self.training_features.copy()
+            y_train = self.training_labels.copy()
+
+        if np.unique(y_train).size < 2:
+            with self._model_lock:
                 self.save_persisted_training()
-                return False
+            return False
 
-            # Indução de regras de poda contrastivas (Hard Negative Rule Induction)
-            explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
-            valid_pulses = sorted(set(peaks_user_verified))
-            if explicit_negatives and valid_pulses:
-                induced = self.induce_pruning_rules(
-                    valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
-                )
-                if induced:
-                    pass  # print(f"[Active Learning] {len(induced)} regra(s) rígida(s) de poda induzida(s):")
-                    for r in induced:
-                        pass  # print(f"  • {r['label']} {r['op']} {r['threshold']:.2f}")
+        # Inducao de regras
+        explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
+        valid_pulses = sorted(set(peaks_user_verified))
+        if explicit_negatives and valid_pulses:
+            induced = self.induce_pruning_rules(
+                valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
+            )
 
-            self.model = self._build_model(n_samples=len(self.training_labels))
-            self.model.fit(self.training_features, self.training_labels)
+        new_model = self._build_model(n_samples=len(y_train))
+        new_model.fit(X_train, y_train)
+
+        with self._model_lock:
+            self.model = new_model
             self.save_persisted_training()
-            return True
+            
+        return True
 
     def induce_pruning_rules(self, valid_peaks, false_positive_peaks, rate, env_signal, raw_signal=None):
         """Induz regras rígidas de poda contrastiva (Hard Negative Rule Induction).
@@ -656,27 +654,8 @@ class PulseLearner:
                 return np.asarray([], dtype=int)
             if X.ndim == 1:
                 X = X.reshape(1, -1)
-
-            n_expected = getattr(self.model, "n_features_in_", None)
-            if n_expected is not None and n_expected > 0:
-                if X.shape[1] > n_expected:
-                    X_used = X[:, :n_expected]
-                elif X.shape[1] < n_expected:
-                    pad = np.zeros((X.shape[0], n_expected - X.shape[1]), dtype=float)
-                    X_used = np.hstack((X, pad))
-                else:
-                    X_used = X
-            else:
-                X_used = X
-
-            try:
-                return self.model.predict(X_used).astype(int)
-            except Exception as exc:
-                import logging
-                logging.getLogger("crinometro").error(f"Erro no predict: {exc}", exc_info=True)
-                self.degraded = True
-                self.last_error = str(exc)
-                return np.ones(X.shape[0], dtype=int)
+            X_used = X
+            return self.model.predict(X_used)
 
     def filter_peaks(self, peaks, rate, env_signal, raw_signal=None,
                      gap_min_s=0.020, gap_max_s=0.040, focal_sensitivity=0.60):
@@ -737,11 +716,7 @@ class PulseLearner:
                     for idx in pruned_indices:
                         kept_mask[idx] = False
 
-                if not np.any(kept_mask) and len(priors) > 0:
-                    kept_mask = (priors >= np.percentile(priors, 75))
-                    if pruned_indices:
-                        for idx in pruned_indices:
-                            kept_mask[idx] = False
+
                 return peaks[kept_mask], peaks[~kept_mask]
 
             # Com modelo supervisionado treinado (HistGradientBoosting / RandomForest)
@@ -752,17 +727,7 @@ class PulseLearner:
                 for i, p in enumerate(peaks)
             ], dtype=float)
 
-            n_expected = getattr(self.model, "n_features_in_", None)
-            if n_expected is not None and n_expected > 0:
-                if features.shape[1] > n_expected:
-                    X_used = features[:, :n_expected]
-                elif features.shape[1] < n_expected:
-                    pad = np.zeros((features.shape[0], n_expected - features.shape[1]), dtype=float)
-                    X_used = np.hstack((features, pad))
-                else:
-                    X_used = features
-            else:
-                X_used = features
+            X_used = features
 
             try:
                 if hasattr(self.model, "predict_proba"):

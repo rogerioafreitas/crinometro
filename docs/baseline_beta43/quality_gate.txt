@@ -1,0 +1,15 @@
+﻿.venv2\Scripts\python.exe : Traceback (most recent call last):
+No linha:1 caractere:113
++ ... \crin_b43"; .venv2\Scripts\python.exe scripts\quality_gate.py 2>&1 |  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "M:\Documentos\Faculdade\Biologia\scripts\quality_gate.py", line 155, in <module>
+    sys.exit(run_gate())
+             ^^^^^^^^^^
+  File "M:\Documentos\Faculdade\Biologia\scripts\quality_gate.py", line 114, in run_gate
+    res_compile = subprocess.run([sys.executable, "-W", "error::SyntaxWarning", "-m", "compileall", "core", "ui", 
+"utils", "main.py", "crinometro__laucher.py"], cwd=root_dir, capture_output=True)
+                  ^^^^^^^^^^
+NameError: name 'subprocess' is not defined. Did you forget to import 'subprocess'?

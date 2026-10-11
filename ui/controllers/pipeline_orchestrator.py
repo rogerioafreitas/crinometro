@@ -247,17 +247,6 @@ class PipelineOrchestrator(QObject):
 
         # 1. Atualiza sempre o cache da sessão para o arquivo analisado
         new_cache = dict(self.ctx.analysis_cache)
-        if not hasattr(self.ctx, "_heavy_lru"):
-            self.ctx._heavy_lru = []
-        if filename in self.ctx._heavy_lru:
-            self.ctx._heavy_lru.remove(filename)
-        self.ctx._heavy_lru.append(filename)
-        while len(self.ctx._heavy_lru) > 10:
-            oldest = self.ctx._heavy_lru.pop(0)
-            if oldest in new_cache and oldest != self.ctx.active_filename:
-                for key in ["data", "data_b1", "env", "Sxx_db", "f_spec", "t_spec", "Pxx_db"]:
-                    if key in new_cache[oldest]:
-                        new_cache[oldest][key] = None
         new_cache[filename] = heavy_data
         self.ctx.analysis_cache = new_cache
 

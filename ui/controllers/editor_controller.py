@@ -608,6 +608,11 @@ class EditorController(QObject):
     # Coordenação dos Modos de Edição dos Painéis
     # ------------------------------------------------------------------
 
+    def shutdown(self):
+        if hasattr(self, '_learn_worker') and self._learn_worker and self._learn_worker.isRunning():
+            self._learn_worker.abort()
+            self._learn_worker.wait()
+
     def update_pulse_edit_buttons(self, activated_panel) -> None:
         """Quando um painel é ativado para edição de pulsos, desativa os outros."""
         for panel in self.all_panels:
