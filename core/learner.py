@@ -896,7 +896,7 @@ class PulseLearner:
 
     def load_persisted_training(self):
         with self._model_lock:
-            # Migrao transparente
+            # Migração transparente
             if not os.path.exists(self.persistence_path):
                 old_path = self.persistence_path.replace(".skops", ".pkl")
                 if os.path.exists(old_path):
@@ -916,7 +916,7 @@ class PulseLearner:
                 legacy = (names == self.feature_names + ["prior_p_focal"])
                 if not legacy and names != self.feature_names:
                     self.degraded = True
-                    self.last_error = "Modelo salvo com features incompatveis."
+                    self.last_error = "Modelo salvo com features incompatíveis."
                     return False
                     
                 features = np.asarray(payload.get("training_features", []), dtype=float)

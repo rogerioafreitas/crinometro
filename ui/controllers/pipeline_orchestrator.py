@@ -438,7 +438,7 @@ class PipelineOrchestrator(QObject):
         self._retain(worker)
 
         def _on_finished(results):
-            # Adapta os parmetros avanados aps aprendizado na main thread (A4)
+            # Adapta os parâmetros avançados após aprendizado na main thread (A4)
             self._adapt_advanced_params()
             # _apply_analysis_results atualiza active_heavy_data e cache
             self._apply_analysis_results(filename, results)
