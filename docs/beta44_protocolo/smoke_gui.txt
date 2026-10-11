@@ -1,0 +1,7 @@
+﻿1. MainWindow aberta
+2. analise: pulsos=6 chilreios=2
+3. edicao: pulsos verificados 6 -> 5
+4. export r.txt 481 bytes
+4. export r.csv 524 bytes
+4. export r.pdf 3771 bytes
+5. fechada sem excecao

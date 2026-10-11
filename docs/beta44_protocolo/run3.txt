@@ -1,0 +1,28 @@
+﻿### compileall
+exit 0
+### gate_extra
+OK
+### gate_extra2
+M:\Documentos\Faculdade\Biologia\tests\test_characterization_v450.py:1645: TestCharacterization.test_45_figure_factory_empty_context: teste sem nenhuma asser├º├úo
+M:\Documentos\Faculdade\Biologia\tests\test_characterization_v450.py:1760: TestCharacterization.test_51_low_sample_rate_filter: ├║nica verifica├º├úo ├® assertIsNotNone
+M:\Documentos\Faculdade\Biologia\tests\test_characterization_v450.py:1773: assertRaises(Exception) gen├®rico
+### unittest por modulo
+test_auto_updater : Ran 10 tests in 0.479s | FAILED (errors=1) (exit 1)
+test_characterization_dsp : Ran 2 tests in 0.209s | OK (exit 0)
+test_characterization_report : Ran 1 test in 0.017s | OK (exit 0)
+test_characterization_v450 : Ran 56 tests in 35.782s | FAILED (errors=3) (exit 1)
+test_encoding : Ran 2 tests in 0.157s | OK (exit 0)
+test_export_dialog_config : Ran 21 tests in 0.176s | OK (exit 0)
+test_figure_factory : Ran 8 tests in 1.617s | OK (exit 0)
+test_i18n_coverage : Ran 5 tests in 0.201s | OK (exit 0)
+test_imports : Ran 2 tests in 2.238s | OK (exit 0)
+test_launcher_integration : Ran 1 test in 0.025s | OK (exit 0)
+test_model_persistence : Ran 1 test in 0.416s | OK (exit 0)
+test_n17_clip_after_psd : Ran 2 tests in 0.098s | OK (exit 0)
+test_n18_learner_fallback : Ran 3 tests in 0.009s | OK (exit 0)
+test_n21_updater_target_dir : Ran 7 tests in 0.006s | OK (exit 0)
+test_n6_save_corrections : Ran 5 tests in 0.035s | OK (exit 0)
+test_n8_changelog_full : Ran 3 tests in 0.032s | OK (exit 0)
+test_r2_export : Ran 1 test in 2.288s | OK (exit 0)
+test_r3_export :  (exit -1073740791)
+test_report_customizations : Ran 3 tests in 1.173s | OK (exit 0)
