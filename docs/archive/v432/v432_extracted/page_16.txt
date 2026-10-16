@@ -1,0 +1,8 @@
+f) Re-treina o classificador com o dataset atualizado
+g) Serializa modelo + dataset via pickle em modelo_treinado.pkl
+Passo 5 — Adaptação Paramétrica: Opcionalmente, o sistema ajusta automaticamente os parâmetros
+de proeminência e largura do pipeline DSP com base nas estatísticas dos pulsos validados pelo
+pesquisador, reduzindo a necessidade de correções futuras.
+Persistência e Transferência: O modelo treinado é salvo em modelo_treinado.pkl e recarregado
+em sessões subsequentes. Pode ser exportado/importado entre pesquisadores via "Exportar/Carregar
+Treinamento (.pkl)".

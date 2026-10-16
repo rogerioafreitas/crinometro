@@ -1,0 +1,44 @@
+1. ARQUITETURA GERAL E PIPELINE DE DADOS
+(DATAFLOW)
+1.1. Ciclo de Vida do Sinal de Áudio
+O Crinômetro implementa um pipeline sequencial de processamento que transforma uma gravação bruta
+em formato WAV em um conjunto estruturado de métricas bioacústicas e visualizações interativas. O ciclo
+de vida completo é:
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+■ ARQUIVO .WAV (entrada) ■
+■ ■ ■
+■ ▼ ■
+■ wavfile.read() → Mono + Normalização → float32 ■
+■ ■ ■
+■ ▼ ■
+■ Remoção DC (subtração da média) + Highpass 50 Hz (Butterworth 2ª Ord)■
+■ ■ ■
+■ ▼ ■
+■ Filtragem Passa-Faixa IIR Butterworth 4ª Ordem [3200–6000 Hz] ■
+■ ■ ■
+■ ■■■■■■■■■■■■■■■■■■■■■■■■■■■■ ■
+■ ▼ ▼ ■
+■ Hilbert → Envelope STFT Espectrograma ■
+■ ■ (nperseg=1024, overlap=768) ■
+■ ■ ■ ■
+■ ▼ ▼ ■
+■ Suavização Hanning Refinamento Parabólico Sub-bin ■
+■ ■ → dom_freqs (freq dominante contínua) ■
+■ ▼ ■
+■ Detecção de Picos (find_peaks + threshold adaptativo) ■
+■ ■ ■
+■ ▼ ■
+■ Validação Morfológica (duração, amplitude, largura) ■
+■ ■ ■
+■ ▼ ■
+■ Identificação da Frequência Portadora Modal ■
+■ ■ ■
+■ ▼ ■
+■ Filtragem por Tolerância Espectral (±300 Hz da portadora) ■
+■ ■ ■
+■ ■■■■ [IA Ativada?] ■■■ PulseLearner.filter_peaks() ■
+■ ■ (GMM + Classificador + Poda Contrastiva) ■
+■ ▼ ■
+■ Agrupamento em Chilreios (gap_min/gap_max + ICI Gate) ■
+■ ■ ■
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 3 de 18

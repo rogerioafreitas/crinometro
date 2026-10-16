@@ -1,0 +1,29 @@
+Conversão para Decibéis
+A matriz de potência Sxx é convertida para escala logarítmica:
+S
+dB
+(f, t) = 10 · log10(S
+xx
+(f, t) + 10-10)
+O epsilon aditivo (10-10, equivalente a -100 dB) previne o logaritmo de zero em regiões de silêncio
+absoluto. A matriz resultante é convertida para float32 para economia de memória.
+2.4. Refinamento Sub-bin Parabólico de Frequência
+A resolução espectral do espectrograma (~43 Hz) é insuficiente para rastreamento preciso da frequência
+portadora do grilo, cuja variação natural pode ser de apenas ±10-20 Hz. Para superar esta limitação, o
+Crinômetro aplica interpolação parabólica sub-bin a cada coluna temporal do espectrograma.
+Para cada instante t, identifica-se o bin de frequência k com maior potência. Usando os valores de
+potência logarítmica dos bins adjacentes (k-1, k, k+1), calcula-se o offset fracionário p do pico verdadeiro:
+p = 0.5 × (α - γ) / (α - 2β + γ)
+onde α = S
+dB
+[k-1], β = S
+dB
+[k], γ = S
+dB
+[k+1]
+A frequência dominante refinada é então:
+f
+peak
+(t) = f[k] + p × ∆f
+Este método reduz o erro de estimação de frequência de ±∆f/2 (≈21.5 Hz) para aproximadamente ±∆f/10
+(≈4.3 Hz), oferecendo precisão sub-bin sem o custo computacional de zero-padding ou janelas maiores.

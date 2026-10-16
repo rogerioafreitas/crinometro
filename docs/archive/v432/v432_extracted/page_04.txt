@@ -1,0 +1,31 @@
+■ ▼ ■
+■ Filtro de Coerência Rítmica O(N) ■
+■ ■ ■
+■ ▼ ■
+■ Cálculo de Métricas (ICI, IPI, Cadência, Dolbear) ■
+■ ■ ■
+■ ■■■■ Renderização Interativa (Matplotlib + Engines LOD) ■
+■ ■■■■ Exportação (PDF / TXT / Tabelas) ■
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+Figura 1: Diagrama de fluxo do pipeline completo de processamento do Crinômetro.
+1.2. Organização Modular e Desacoplamento
+A arquitetura do Crinômetro separa rigorosamente a camada de interface gráfica (GUI) da camada de
+processamento matemático. Esta decisão atende a três requisitos fundamentais: (a) permitir que
+operações de DSP pesadas executem em threads secundárias sem congelar a interface; (b) facilitar
+testes unitários do core sem dependência do Qt; e (c) possibilitar reutilização do motor analítico em
+contextos não-interativos (scripts de lote, pipelines acadêmicos).
+Módulo Arquivo Responsabilidade
+CricketAnalyzer core/analyzer.py Pipeline DSP completo: filtragem, espectrograma, detecção de pulsos, agrupamento de chilreios, métricas
+PulseLearner core/learner.py ML/Active Learning: extração de features, GMM, classificação supervisionada, poda contrastiva
+HighPerfLineEngine core/engines.py Renderização adaptativa LOD de formas de onda com decimação min-max
+HighPerfSpectrogramEngine core/engines.py Renderização adaptativa de espectrogramas com cache de tiles e stride slicing
+HighPerfFreqEngine core/engines.py Renderização adaptativa de scatter plots de frequência dominante
+GenericWorker core/worker.py Wrapper QThread com cancelamento cooperativo e sinalização typed
+MainWindow ui/main_window.py Orquestrador central: UI, estado, navegação, edição interativa, playback
+PlotPanel ui/panels.py Card de gráfico Matplotlib com tema, drag-drop, toolbar e tooltips
+report_generator utils/report_generator.py Geração de relatórios PDF acadêmicos via ReportLab
+O desacoplamento é mediado pelo padrão de worker assíncrono: a MainWindow instancia um
+GenericWorker(QThread) que executa CricketAnalyzer.analyze() em uma thread secundária.
+Ao concluir, o resultado é emitido via sinal Qt (finished_signal) e recebido pelo slot da MainWindow
+na thread principal, que então atualiza a GUI. Este mecanismo garante que operações de FFT, Hilbert e
+classificação ML nunca bloqueiem o event loop do Qt.

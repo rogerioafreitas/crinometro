@@ -1,0 +1,43 @@
+2. PROCESSAMENTO DIGITAL DE SINAIS (DSP)
+2.1. Pré-Processamento e Condicionamento do Sinal
+Antes da análise bioacústica propriamente dita, o sinal bruto passa por três etapas de condicionamento
+que removem artefatos comuns em gravações de campo:
+Etapa 1: Leitura e Normalização
+O arquivo WAV é lido via scipy.io.wavfile.read(). Se o arquivo for estéreo (2 canais), os canais
+são colapsados para mono pela média aritmética: data = raw.mean(axis=1). A amplitude é
+normalizada ao intervalo [-1.0, +1.0] dividindo pelo valor máximo absoluto do tipo de dado (32768 para
+int16, 2147483648 para int32). O resultado é convertido para float32 para reduzir em 50% o consumo
+de memória em relação a float64.
+Etapa 2: Remoção do Offset DC
+A média aritmética do sinal é subtraída de todas as amostras: data = data - np.mean(data). Isto
+elimina qualquer componente de corrente contínua (DC offset) que possa estar presente devido a
+imperfeições no circuito de gravação ou calibração do microfone. Um offset DC não removido introduziria
+um pico espúrio em 0 Hz no espectro, distorcendo a detecção de frequência portadora.
+Etapa 3: Filtro Passa-Altas Anti-Vento (50 Hz)
+Um filtro Butterworth IIR de 2ª ordem com frequência de corte em 50 Hz é aplicado para atenuar ruídos de
+vento, vibrações mecânicas do suporte do microfone e interferência eletromagnética de rede elétrica (hum
+de 50/60 Hz). A topologia Butterworth foi escolhida por sua resposta em magnitude maximamente plana
+na banda passante, evitando ripple que poderia distorcer a envoltória temporal dos pulsos.
+A implementação utiliza a forma SOS (Second-Order Sections) ao invés da forma de função de
+transferência (b, a) para garantir estabilidade numérica. A função de transferência de um filtro Butterworth
+passa-altas de 2ª ordem é:
+H(s) = s² / (s² + √2·ωc
+·s + ωc
+²) onde ωc
+ = 2π × 50 Hz
+2.2. Filtragem Passa-Faixa (Bandpass Filter)
+A etapa central de isolamento do sinal de estridulação utiliza um filtro Butterworth IIR passa-faixa de 4ª
+ordem (cascata de 2 seções de 2ª ordem) com frequências de corte configuráveis. Os valores padrão —
+f
+low = 3200 Hz e f
+high = 6000 Hz — foram calibrados empiricamente para capturar a faixa de estridulação
+da maioria das espécies de Gryllidae comuns em gravações de campo no Brasil (gêneros Gryllus,
+Anurogryllus, Oecanthus).
+Justificativa da Topologia Butterworth
+A resposta em magnitude do filtro Butterworth de ordem N satisfaz:
+|H(jω)|² = 1 / [1 + (ω/ωc
+)^(2N)]
+Três propriedades tornam esta topologia ideal para bioacústica de insetos: (1) Resposta maximamente
+plana na banda passante — não introduz ripple que distorceria a envoltória temporal dos pulsos. Filtros
+Chebyshev tipo I, por exemplo, apresentam oscilações na banda passante que poderiam gerar falsos
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 5 de 18

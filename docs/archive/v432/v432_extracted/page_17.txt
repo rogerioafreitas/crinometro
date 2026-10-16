@@ -1,0 +1,38 @@
+6. GLOSSÁRIO METODOLÓGICO PARA DEFESA
+ACADÊMICA
+6.1. Seção "Materiais e Métodos" — Modelo de Redação
+A seguir, apresenta-se uma formulação no estilo "Materiais e Métodos" de artigo científico, adequada para
+inclusão direta em dissertações, teses e publicações:
+"Os arquivos de áudio no formato WAV (44.1 kHz, 16 bits) foram processados pelo software
+Crinômetro (v4.3.2). O sinal bruto foi condicionado pela remoção do offset DC seguida de filtragem
+passa-altas Butterworth de 2ª ordem (f
+c
+ = 50 Hz) para eliminação de ruído infrassônico. A banda de
+estridulação foi isolada por um filtro Butterworth passa-faixa IIR de 4ª ordem com frequências de corte
+em 3200 Hz e 6000 Hz, ambos implementados na forma SOS (Second-Order Sections) para
+estabilidade numérica (Oppenheim & Willsky, 2014).
+O envelope de amplitude foi extraído pela Transformada de Hilbert (Hilbert, 1912; Boashash, 1992)
+seguida de suavização por convolução com janela de Hanning de 2 ms. A detecção de pulsos utilizou
+busca de picos com threshold adaptativo baseado no 25º percentil da distribuição do envelope
+multiplicado por fator 2.5, validação morfológica (duração entre 3 e 50 ms), e rejeição de banda
+estreita (±300 Hz da frequência portadora modal).
+O espectrograma foi computado por STFT (Short-Time Fourier Transform) com janela de Hann de
+1024 amostras e sobreposição de 75%, resultando em resolução espectral de ~43 Hz e resolução
+temporal de ~5.8 ms. A frequência portadora foi refinada por interpolação parabólica sub-bin de Smith
+(1987) aplicada quadro a quadro.
+A segregação acústica de indivíduos focais vs. coro distante empregou um Modelo de Mistura de
+Gaussianas (GMM) bimodal (Dempster et al., 1977) no espaço log-amplitude × centroide espectral,
+complementado por um classificador HistGradientBoosting (Ke et al., 2017) treinado
+incrementalmente por aprendizado ativo com correções do pesquisador. O vetor de 20 características
+por pulso incluiu métricas temporais (duração, tempo de ataque 10-90%, fator de crista), espectrais
+(centroide, roll-off 85%, HNR) e contextuais (energia multiescala, prior focal do GMM).
+O diagnóstico rítmico (aceleração/desaceleração) baseou-se em regressão linear dos ICIs ao longo
+do tempo, com significância estatística avaliada pela estatística t de Student (α = 0.05) e limiar de
+relevância clínica de |β■| > 0.15 ms/s. A estimativa de temperatura foi calculada pela Lei de Dolbear
+simplificada (T°C = (Rmin − 40)/4 + 10; Dolbear, 1897)."
+6.2. Tabela Sintética: Conceito → Implementação → Localização
+Conceito Físico / Biológico Implementação Matemática Arquivo / Método
+Estridulação por fricção tegminal Sinal oscilatório quase-periódico na banda 3–8 kHz Entrada WAV bruta
+Frequência portadora do canto Moda do histograma espectral (50 Hz bins) com refinamento sub-bin analyzer.py → analyze()
+Pulso individual (tooth strike) Segmento do envelope acima do threshold com duração validada analyzer.py → find_peaks()
+Chilreio (chirp = trem de pulsos) Grupo sequencial com IPI ∈ [gap_min, gap_max] analyzer.py → regroup_chirps()

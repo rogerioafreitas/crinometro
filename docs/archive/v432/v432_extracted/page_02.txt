@@ -1,0 +1,25 @@
+SUMÁRIO
+1. Arquitetura Geral e Pipeline de Dados (Dataflow)
+2. Processamento Digital de Sinais (DSP): Teoria, Cálculo e Implementação
+2.1. Pré-Processamento e Condicionamento do Sinal
+2.2. Filtragem Passa-Faixa (Bandpass Filter)
+2.3. Transformada de Fourier e Espectrograma (STFT)
+2.4. Refinamento Sub-bin Parabólico de Frequência
+2.5. Densidade Espectral de Potência (PSD)
+3. Detecção e Segmentação Bioacústica
+3.1. Extração de Envelope Temporal
+3.2. Algoritmo de Segmentação e Thresholding
+3.3. Agrupamento Hierárquico de Chilreios
+3.4. Tratamento de Ruídos e Falsos Positivos
+4. Cálculo de Métricas Biométricas e Modelagem Fisiológica
+4.1. Métricas Temporais de Estridulação
+4.2. Diagnóstico Rítmico (Aceleração vs. Desaceleração)
+4.3. Correlação Termo-Acústica (Lei de Dolbear)
+5. Módulo de IA e Aprendizado Ativo
+5.1. Vetor de Características (Feature Engineering)
+5.2. Separação Não-Supervisionada (GMM Bimodal)
+5.3. Classificador Supervisionado (HistGradientBoosting)
+5.4. Mineração de Negativos Difíceis (Hard Negative Mining)
+5.5. Filtro de Coerência Rítmica
+5.6. Ciclo de Feedback do Aprendizado Ativo
+6. Glossário Metodológico para Defesa Acadêmica

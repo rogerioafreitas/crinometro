@@ -1,0 +1,21 @@
+(ICIs ficando maiores → chirps menos frequentes → desacelerando)
+• Estável: |β■| ≤ 0.15 ms/s OU p-valor ≥ 0.05
+(Sem tendência significativa)
+A significância estatística é testada via coeficiente de correlação de Pearson convertido em estatística t
+de Student:
+t = r × √[(n-2) / (1 - r²)] → p = 2 × [1 - CDF_t(|t|, df=n-2)]
+Filtragem de pausas fisiológicas: ICIs maiores que 3× a mediana são excluídos da regressão, pois
+representam interrupções do comportamento de estridulação (o grilo parou de cantar brevemente) e não
+variações rítmicas genuínas.
+4.3. Correlação Termo-Acústica (Lei de Dolbear)
+A Lei de Dolbear (1897) descreve uma relação empírica aproximadamente linear entre a taxa de
+estridulação de grilos e a temperatura ambiente. A formulação implementada no Crinômetro é baseada na
+versão simplificada para grilo-de-campo (Gryllus):
+T(°C) = (Rmin - 40) / 4 + 10
+onde Rmin é a cadência de chilreios por minuto. Esta fórmula é derivada da Lei de Dolbear original para
+Oecanthus fultoni (T°F = 40 + n/4, onde n = número de chirps em 13 segundos), adaptada e convertida
+para Celsius.
+Limitações importantes: A estimativa de temperatura é apresentada como valor informativo e indicativo,
+não como medição precisa. A relação é espécie-específica — grilos de espécies diferentes (e.g., Gryllus
+vs. Oecanthus) têm coeficientes distintos. Além disso, fatores como estresse, competição intraespecífica
+e estado nutricional podem modular a taxa independentemente da temperatura.

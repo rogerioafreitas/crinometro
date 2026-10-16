@@ -1,0 +1,14 @@
+Conceito Físico / Biológico Implementação Matemática Arquivo / Método
+Envelope de amplitudeMódulo do sinal analítico via Transformada de Hilbert scipy.signal.hilbert()
+EspectrogramaSTFT com janela Hann 1024, overlap 75%, potência em dB scipy.signal.spectrogram()
+Filtragem de banda Butterworth IIR 4ª ordem, forma SOS scipy.signal.butter() + sosfilt()
+Separação focal/coroGMM bimodal + HistGradientBoosting supervisionadolearner.py → PulseLearner
+Coerência rítmica Rejeição de pulsos com |IPI - mediana| > 30%analyzer.py → regroup_chirps()
+Taxa de estridulação N_chirps / T_total × 60 (chirps/min) analyze() métricas
+Diagnóstico rítmico Regressão linear ICI(t), teste t de Student report_generator.py
+Estimativa de temperatura Lei de Dolbear: T°C = (R_min - 40)/4 + 10 analyze() métricas
+Aprendizado ativo Pool-based AL com feedback humano incremental learner.py → update_from_corrections()
+Poda contrastiva Regras induzidas por separação perfeita de features learner.py → induce_pruning_rules()
+Fim da Documentação Técnica.
+Documento gerado automaticamente em 18/09/2026 às 07:04 pelo Crinômetro — Documentador Científico.
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 18 de 18

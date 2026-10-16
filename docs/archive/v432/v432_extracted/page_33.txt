@@ -1,0 +1,43 @@
+contrastivas.
+Algoritmo: Para cada uma das 20 features, compara-se a distribuição dos positivos validados vs.
+negativos explícitos. Se uma feature f
+i
+ separa perfeitamente os dois grupos (i.e., nenhum overlap), uma
+regra é criada:
+Se f_i < threshold_com_margem_30% → Rejeitar pulso
+A margem de segurança de 30% previne rejeição de positivos borderline. Estas regras são aplicadas
+antes do classificador ML, funcionando como um filtro rápido O(1) por pulso.
+5.5. Filtro de Coerência Rítmica O(N)
+Após o agrupamento em chilreios, aplica-se um filtro de coerência rítmica que remove pulsos intrusos —
+aqueles que quebram o padrão de intervalos regulares esperado em uma estridulação de grilo.
+Algoritmo:
+1. Para cada chirp, calcular todos os IPIs internos
+2. Calcular a mediana dos IPIs: IPImed
+3. Para cada pulso no chirp:
+Se |IPIi
+ - IPImed| > tolerância × IPImed (tolerância=0.30):
+→ Remover o pulso (ritmicamente incoerente)
+4. Re-validar contagem mínima de pulsos
+Justificativa biológica: A estridulação dos Gryllidae é produzida por um gerador central de padrões
+(CPG — Central Pattern Generator) neuromotor que produz intervalos altamente regulares. A
+variabilidade natural do IPI em uma sequência legítima raramente excede ±30% da mediana. Pulsos que
+violam esta regularidade são quase certamente originários de um segundo indivíduo (overlapping) ou de
+artefato ambiental.
+5.6. Ciclo de Feedback do Aprendizado Ativo
+O aprendizado ativo do Crinômetro segue o paradigma de pool-based active learning com feedback
+humano incremental:
+Passo 1 — Detecção Inicial: O pipeline DSP detecta todos os pulsos candidatos usando apenas
+heurísticas paramétricas (threshold, morfologia, banda espectral).
+Passo 2 — Classificação Automática (se modelo existir): O PulseLearner aplica o GMM e/ou
+classificador supervisionado para filtrar e classificar os pulsos.
+Passo 3 — Revisão Humana: O pesquisador inspeciona visualmente os marcadores de pulso no
+espectrograma e oscilograma. Pulsos incorretamente incluídos são removidos (clique direito); pulsos não
+detectados são adicionados manualmente (clique esquerdo).
+Passo 4 — Salvamento de Correções: Ao clicar em "Salvar Correções", o sistema:
+a) Extrai features de todos os pulsos validados → labels positivas (1)
+b) Extrai features de todos os pulsos removidos → labels negativas (0)
+c) Minera negativos adicionais: pulsos do envelope em regiões de silêncio, picos de baixa amplitude
+distantes dos pulsos validados
+d) Induz regras de poda contrastivas (Hard Negatives)
+e) Acumula exemplos no dataset histórico (até 5000 amostras)
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 15 de 18

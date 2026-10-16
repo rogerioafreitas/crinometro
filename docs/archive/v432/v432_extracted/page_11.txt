@@ -1,0 +1,33 @@
+4. CÁLCULO DE MÉTRICAS BIOMÉTRICAS E MODELAGEM
+FISIOLÓGICA
+4.1. Métricas Temporais de Estridulação
+As métricas bioacústicas calculadas pelo Crinômetro são formalmente definidas a seguir. Todas as
+equações são aplicadas sobre os chilreios validados pelo pipeline completo.
+Métrica Símbolo Fórmula Unidade
+Total de Chilreios N_c Contagem de chirps validados —
+Total de Pulsos N_p Σ |chirp_i| para todos os chirps —
+Taxa de Chilreios R_c N_c / T_total chirps/s
+Cadência R_min R_c × 60 chirps/min
+ICI Médio µ_ICI (1/n)Σ(onset[i+1] - offset[i]) ms
+ICI Desvio Padrão σ_ICI std(ICIs) ms
+IPI Médio µ_IPI (1/m)Σ(onset[j+1] - offset[j]) intra-chirp ms
+IPI Desvio Padrão σ_IPI std(IPIs) ms
+Duração Média do Pulso µ_d_p (1/N_p)Σ(offset[k] - onset[k]) ms
+Duração Média do Chilreio µ_d_c (1/N_c)Σ(offset_last - onset_first) ms
+Pulsos por Chilreio (Moda) Mo_ppc mode({|chirp_i|}) —
+Frequência Portadora f_carrier moda do histograma espectral (50 Hz bins) Hz
+O Intervalo Inter-Chilreio (ICI) é medido do offset do último pulso de um chilreio ao onset do primeiro
+pulso do chilreio seguinte. O Intervalo Inter-Pulso (IPI) é medido analogamente dentro de um mesmo
+chilreio. Esta definição (offset-to-onset) ao invés de (onset-to-onset) é mais apropriada bioacusticamente
+pois mede o período de silêncio real entre eventos, e não o período do ciclo que inclui a duração do
+evento anterior.
+4.2. Diagnóstico Rítmico (Aceleração vs. Desaceleração)
+O diagnóstico rítmico avalia se o grilo está acelerando, desacelerando ou mantendo cadência estável ao
+longo da gravação. O modelo empregado é uma regressão linear simples dos ICIs ao longo do tempo:
+ICI(t) = β■ + β■·t + ε
+onde β■ (slope) é a taxa de variação do ICI em ms/s. O ajuste é realizado via
+numpy.polyfit(timestamps, icis_ms, deg=1).
+Critérios de Diagnóstico:
+• Aceleração: β■ < -0.15 ms/s E p-valor < 0.05
+(ICIs ficando menores → chirps mais frequentes → acelerando)
+• Desaceleração: β■ > +0.15 ms/s E p-valor < 0.05

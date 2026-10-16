@@ -1,0 +1,9 @@
+CRINÔMETRO
+Documentação Técnica, Teórica e Metodológica
+Análise de Processamento Digital de Sinais (DSP), Bioacústica Computacional,
+Aprendizado de Máquina e Métricas Fisiológicas da Estridulação de Gryllidae
+Versão do Software: v4.3.2
+Data de Geração: 18/09/2026 às 07:04
+Objetivo: Servir como base formal para defesa acadêmica e redação científica,
+documentando exaustivamente cada cálculo, decisão algorítmica e transformação
+de dados implementada no programa.

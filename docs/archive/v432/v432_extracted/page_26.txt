@@ -1,0 +1,40 @@
+3. DETECÇÃO E SEGMENTAÇÃO BIOACÚSTICA
+3.1. Extração de Envelope Temporal
+O envelope de amplitude é a curva que delineia os picos instantâneos do sinal filtrado, eliminando as
+oscilações rápidas da frequência portadora e preservando apenas a modulação de amplitude (AM) que
+define a estrutura temporal dos pulsos. O Crinômetro utiliza a Transformada de Hilbert para esta
+finalidade.
+Fundamento Matemático
+Dado um sinal real x(t), a Transformada de Hilbert produz o sinal analítico:
+x
+a
+(t) = x(t) + j·H{x(t)}
+onde H{·} é o operador de Hilbert (rotação de fase de -90° para frequências positivas e +90° para
+negativas). O envelope instantâneo é o módulo do sinal analítico:
+A(t) = |x
+a
+(t)| = √[x(t)² + H{x(t)}²]
+Implementação e Suavização
+analytic = scipy.signal.hilbert(data_filtered)
+envelope = np.abs(analytic).astype(np.float32)
+O envelope bruto apresenta ripple residual da portadora. Para eliminar estas flutuações, aplica-se uma
+suavização por janela de Hanning via convolução:
+win = np.hanning(smooth_samples)
+win /= win.sum()
+envelope_smooth = np.convolve(envelope, win, mode='same')
+O tamanho da janela de suavização (padrão: 2 ms, configurável pelo pesquisador) controla o trade-off
+entre resolução temporal e supressão de ripple. Janelas maiores produzem envelopes mais suaves mas
+podem fundir pulsos adjacentes muito próximos; janelas menores preservam detalhes mas podem gerar
+detecções espúrias.
+Normalização Robusta
+O envelope é normalizado pelo percentil 99.85 da distribuição de amplitude (ao invés do máximo
+absoluto). Esta abordagem é robusta a cliques, estalos e artefatos transientes que poderiam comprimir
+toda a faixa dinâmica se o máximo absoluto fosse utilizado. A constante 99.85 foi calibrada empiricamente
+para rejeitar os 0.15% mais extremos das amostras sem afetar os pulsos legítimos de estridulação.
+3.2. Algoritmo de Detecção de Pulsos e Thresholding
+A detecção de pulsos opera sobre o envelope suavizado e normalizado. O processo envolve três fases:
+(1) estimação do limiar adaptativo, (2) detecção de picos, e (3) validação morfológica.
+Fase 1: Limiar Adaptativo
+O limiar de detecção é calculado adaptativamente a partir da distribuição estatística do envelope:
+threshold = max(amp_min × noise_floor, P25 × 2.5)
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 8 de 18

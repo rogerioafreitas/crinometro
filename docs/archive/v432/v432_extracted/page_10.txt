@@ -1,0 +1,26 @@
+intrusões de pulsos distantes (coro de fundo) que coincidem temporalmente mas apresentam amplitude
+discrepante.
+Camada 3 — Detecção de Colisão: Se dois pulsos estão separados por menos de 0.8 × gap_min, é
+provável que sejam pulsos sobrepostos de dois indivíduos diferentes. O sistema retém o pulso de maior
+amplitude e descarta o mais fraco.
+Camada 4 — Portão ICI (Inter-Chirp Interval Gate): Após o agrupamento inicial, aplica-se um filtro de
+período refratário fisiológico. Para cada par de chilreios consecutivos, se o intervalo inter-chilreio (ICI) for
+inferior a 70% da mediana dos ICIs (ICIgate = 0.70 × ICImediana), os dois chilreios são fundidos em um
+único (o intervalo era curto demais para ser uma pausa fisiológica real).
+Camada 5 — Validação de Contagem Mínima: Chilreios com menos de min_p pulsos (padrão: 3) são
+descartados, pois não constituem uma sequência rítmica suficiente para classificação bioacústica
+confiável.
+3.5. Tratamento de Ruídos e Falsos Positivos
+O sistema emprega múltiplas estratégias hierárquicas para discriminar sinal de ruído:
+• Filtragem passa-faixa: Remove ruído fora da banda de estridulação
+• Threshold adaptativo: Se ajusta ao nível de ruído específico da gravação
+• Validação morfológica: Rejeita pulsos com duração ou largura fora do esperado
+• Tolerância espectral: Rejeita pulsos com frequência fora da portadora ±300 Hz
+• Coerência de amplitude: Remove intrusos com amplitude incompatível
+• ICI Gate: Rejeita detecções no período refratário fisiológico
+• Classificador ML (opcional): Discriminação supervisionada baseada em 20 features acústicas
+Diferenciação de pausa fisiológica vs. ruído transitório: Uma pausa fisiológica genuína (o grilo
+interrompeu temporariamente a estridulação) é caracterizada por: (a) ICI significativamente maior que a
+mediana (> 3×), (b) ausência de pulsos espúrios durante a pausa, e (c) retomada da cadência com IPI
+consistente. O sistema identifica estas pausas e as exclui dos cálculos de taxa e cadência para evitar
+distorção das métricas.

@@ -1,0 +1,51 @@
+O módulo GMM (Gaussian Mixture Model) modela a distribuição das features de pulso como uma mistura
+de duas gaussianas representando dois clusters:
+• Cluster Focal: Pulsos do grilo mais próximo (alta amplitude, centroide espectral consistente, alto HNR)
+• Cluster Coro/Ruído: Pulsos distantes, ecos, ruído ambiental (baixa amplitude, centroide disperso, baixo
+HNR)
+O GMM é ajustado em um espaço bidimensional de [log(amplitude), centroide_espectral] padronizado
+(Z-score). A designação focal/coro é feita automaticamente: o cluster com maior média de amplitude + 0.5
+× centroide é marcado como focal.
+P(focal | x) = π
+focal
+ · N(x | µ
+focal
+, Σ
+focal
+) / Σ
+k
+π
+k
+ · N(x | µ
+k
+, Σ
+k
+)
+O GaussianMixture do scikit-learn é instanciado com n_components=2,
+covariance_type='full', n_init=5. O uso de covariância 'full' permite clusters elipsoidais de
+orientação arbitrária, capturando correlações entre amplitude e frequência.
+5.3. Classificador Supervisionado (HistGradientBoosting)
+Quando o pesquisador fornece correções manuais, o sistema treina um classificador supervisionado que
+substitui (ou complementa) a classificação GMM.
+Classificador Primário: HistGradientBoostingClassifier
+• max_iter: 200 iterações de boosting
+• max_depth: 3-4 (árvores rasas para evitar overfitting com poucos exemplos)
+• learning_rate: 0.1
+• l2_regularization: 2.0 (quando < 30 amostras) — regularização forte
+• class_weight: 'balanced' — compensa desbalanceamento entre classes
+• min_samples_leaf: 5 — evita folhas com pouquíssimas amostras
+O HistGradientBoosting foi escolhido por duas vantagens: (1) construção de histogramas de features é
+O(n) em vez de O(n·log·n) como GBDT clássico, permitindo treinamento rápido durante a interação do
+pesquisador; (2) suporta nativamente valores faltantes (NaN) sem necessidade de imputação.
+Classificador de Fallback: RandomForestClassifier
+Se o HistGradientBoosting não estiver disponível (versões antigas do sklearn), o sistema utiliza um
+Random Forest com 500 estimadores, max_depth=10, n_jobs=-1 (paralelismo total).
+Score Híbrido
+A decisão final combina a probabilidade do classificador supervisionado com o prior do GMM:
+Score = 0.65 × P(válido | classificador) + 0.35 × P(focal | GMM)
+Um pulso é aceito se Score ≥ focal_sensitivity (padrão: 0.60). O peso maior no classificador (65%) reflete
+a maior confiabilidade das labels humanas em relação ao clustering não-supervisionado.
+5.4. Mineração de Negativos Difíceis (Hard Negative Mining)
+Quando o pesquisador remove manualmente pulsos falsos positivos (clicando em marcadores espúrios),
+o sistema analisa os vetores de features desses negativos explícitos e induz regras de poda
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 14 de 18

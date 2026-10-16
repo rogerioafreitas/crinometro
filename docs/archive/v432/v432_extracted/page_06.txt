@@ -1,0 +1,36 @@
+picos no envelope. (2) Atenuação monotônica na banda de rejeição — garante supressão progressiva
+de frequências fora da faixa de interesse sem side-lobes. (3) Fase suavemente variável — embora não
+seja linear, a fase do Butterworth é mais suave que a do Chebyshev, preservando melhor a forma
+temporal dos pulsos de estridulação.
+A 4ª ordem (atenuação de 80 dB/década = 24 dB/oitava por polo) fornece uma rejeição suficiente para
+separar o canto do grilo focal de fontes de banda larga (tráfego, vento, outros artrópodes) sem o custo
+computacional de ordens superiores. Ordens acima de 6 tendem a causar instabilidade numérica na
+forma (b, a), embora a implementação SOS mitigue este risco.
+Implementação
+sos = scipy.signal.butter(4, [f_low/(sr/2), f_high/(sr/2)], btype='band',
+output='sos')
+data_filtered = scipy.signal.sosfilt(sos, data).astype(np.float32)
+A normalização das frequências de corte pelo Nyquist (sr/2) é necessária porque a função butter()
+espera frequências normalizadas no intervalo (0, 1). Valores fora de (0.001, 0.999) são clampeados para
+evitar instabilidade.
+2.3. Transformada de Fourier de Curto Tempo (STFT) e Espectrograma
+O espectrograma do Crinômetro é calculado via STFT usando a função
+scipy.signal.spectrogram() com os seguintes parâmetros:
+Parâmetro Valor Padrão Significado Físico
+nperseg 1024 amostras Tamanho da janela de análise (≈23.2 ms a 44.1 kHz)
+window Hann (cosseno elevado) Função de janelamento para redução de vazamento espectral
+noverlap 768 amostras (75%) Sobreposição entre janelas consecutivas
+hop_size 256 amostras (= 1024 - 768) Deslocamento temporal entre quadros (≈5.8 ms)
+scaling 'spectrum' Retorna potência por bin de frequência (não por Hz)
+Resoluções Resultantes
+O Princípio da Incerteza de Heisenberg-Gabor estabelece que a resolução temporal (∆t) e a resolução
+espectral (∆f) de qualquer análise tempo-frequência são mutuamente exclusivas:
+∆t × ∆f ≥ 1 / (4π)
+Para os parâmetros escolhidos (sr = 44100 Hz, nperseg = 1024):
+• Resolução em frequência: ∆f = sr / nperseg = 44100 / 1024 ≈ 43.07 Hz
+• Resolução temporal: ∆t = hop_size / sr = 256 / 44100 ≈ 5.8 ms
+Esta parametrização privilegia a resolução temporal em detrimento da espectral. A escolha é
+fundamentada na natureza do sinal de estridulação: cada pulso individual de um grilo dura tipicamente
+entre 3 e 30 ms, exigindo resolução temporal sub-milissegundos para segmentação precisa. A resolução
+espectral de ~43 Hz é suficiente para distinguir a frequência portadora (tipicamente entre 3 e 8 kHz) e
+seus harmônicos mais proeminentes.

@@ -11,10 +11,18 @@ a = Analysis(
     ['../../crinometro__laucher.py'],
     pathex=['../..'],
     binaries=[],
-    datas=[('M:/Documentos/Faculdade/Biologia/grilinho.ico', '.')],
+    datas=[
+        ('M:/Documentos/Faculdade/Biologia/grilinho.ico', '.'),
+        ('M:/Documentos/Faculdade/Biologia/assets', 'assets')
+    ],
     hiddenimports=[
         'reportlab', 'reportlab.platypus', 'reportlab.lib', 'reportlab.pdfgen',
-        'scipy.special', 'scipy.integrate', 'scipy.signal', 'sklearn', 'matplotlib'
+        'scipy.special', 'scipy.integrate', 'scipy.signal', 'scipy.stats', 'scipy.optimize',
+        'sklearn', 'sklearn.ensemble', 'sklearn.ensemble._hist_gradient_boosting',
+        'sklearn.ensemble._hist_gradient_boosting.gradient_boosting',
+        'sklearn.mixture', 'sklearn.tree', 'skops', 'skops.io',
+        'matplotlib', 'matplotlib.backends.backend_qtagg', 'matplotlib.backends.backend_agg',
+        'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets'
     ],
     hookspath=[],
     hooksconfig={},

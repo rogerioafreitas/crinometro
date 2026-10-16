@@ -1,0 +1,39 @@
+onde amp_min é o limiar mínimo configurável (padrão: 0.08), noise_floor é a mediana do envelope nas
+regiões de silêncio, e P25 é o 25º percentil da distribuição do envelope. O fator multiplicativo de 2.5 foi
+determinado empiricamente para maximizar a taxa de detecção verdadeira (recall) mantendo a taxa de
+falsos positivos abaixo de 5% em gravações com SNR ≥ 10 dB.
+Fase 2: Detecção de Picos
+A detecção utiliza scipy.signal.find_peaks() com os seguintes critérios:
+• height: threshold calculado na Fase 1
+• prominence: proeminência mínima configurável (garante que o pico se destaque significativamente de
+seus vizinhos)
+• width: largura do pico a 50% da altura entre width_min e width_max (em amostras), equivalente à
+duração do pulso entre dur_min e dur_max (em ms)
+• distance: distância mínima entre picos consecutivos (= gap_min × sr, prevenindo dupla detecção)
+Fase 3: Validação Morfológica
+Cada pulso candidato é submetido a validação de duração:
+• Duração calculada: d = largura do pico a 50% da altura (FWHM) via peak_widths()
+• Critério: dur_min (3 ms) ≤ d ≤ dur_max (50 ms)
+• Pulsos fora deste intervalo são rejeitados como artefatos (muito curtos = cliques; muito longos =
+sobreposição de múltiplos pulsos)
+3.3. Identificação da Frequência Portadora e Filtragem Espectral
+Após a detecção de pulsos candidatos, o sistema identifica a frequência portadora modal — a
+frequência de estridulação dominante que caracteriza o indivíduo focal.
+Algoritmo: Para cada pulso validado, extrai-se a frequência dominante do espectrograma no instante do
+pico (usando o refinamento sub-bin parabólico da Seção 2.4). Constrói-se um histograma ponderado
+dessas frequências com largura de bin de 50 Hz, e a moda do histograma é designada como a frequência
+portadora fcarrier.
+Pulsos cuja frequência dominante difere da portadora em mais de ±freq_tolerance (padrão: 300 Hz) são
+rejeitados como provenientes de outras fontes acústicas (outros grilos, cigarras, ruído ambiental). Esta é a
+Filtragem de Rejeição de Banda Estreita introduzida na v4.3.0.
+3.4. Agrupamento Hierárquico em Chilreios (Chirps)
+Os pulsos validados e filtrados espectralmente são agrupados em chilreios (chirps) — sequências
+rítmicas de pulsos produzidas por um único ciclo de fechamento tegminal. O agrupamento segue um
+algoritmo sequencial com múltiplas camadas de validação:
+Camada 1 — Agrupamento Temporal: Pulsos consecutivos são agrupados no mesmo chilreio se o
+intervalo inter-pulso (IPI) estiver dentro do intervalo [gap_min, gap_max] (padrão: [20 ms, 40 ms]). Um IPI
+menor que gap_min sugere colisão de dois pulsos sobrepostos; um IPI maior que gap_max indica o fim
+do chilreio.
+Camada 2 — Coerência de Amplitude: Dentro de cada chilreio candidato, a amplitude dos pulsos é
+verificada: a razão entre o pulso mais fraco e a mediana não deve exceder um fator de 1.65×. Isto rejeita
+Crinômetro — Documentação Técnica e Científica v4.3.2 Página 9 de 18
