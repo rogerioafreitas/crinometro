@@ -1562,8 +1562,8 @@ class TestCharacterization(unittest.TestCase):
         self.assertNotEqual(tup, (0, 0, 0),
             f"parse_version_tuple('{APP_VERSION}') devolveu (0,0,0) — sufixo de texto "
             "impediu o parse. Mantenha APP_VERSION numérico e use APP_VERSION_LABEL para exibição.")
-        self.assertIn("beta", APP_VERSION_LABEL,
-            "APP_VERSION_LABEL deve conter 'beta' enquanto estamos na branch de desenvolvimento.")
+        self.assertEqual(APP_VERSION_LABEL, "4.5.0",
+            "APP_VERSION_LABEL deve ser '4.5.0' sem o sufixo 'beta'.")
 
     def test_42_export_config_defaults(self):
         """FASE 8: ExportConfig deve ter valores padrão sensatos para exportação."""

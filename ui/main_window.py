@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         self.action_load.triggered.connect(self.action_load_wav)
         self.file_menu.addAction(self.action_load)
         
-        self.export_submenu = self.file_menu.addMenu(I18N[self.lang]["export"])
+        self.export_submenu = self.file_menu.addMenu(I18N[self.lang]["export_submenu"])
         self.export_submenu.setIcon(make_ui_icon("export", color="#FFFFFF", size=16))
         
         self.action_export = QAction(I18N[self.lang]["export"], self)
@@ -381,7 +381,7 @@ class MainWindow(QMainWindow):
         l = self.lang
         self.file_menu.setTitle(I18N[l]["file"])
         if hasattr(self, "export_submenu"):
-            self.export_submenu.setTitle(I18N[l]["export"].split(" ")[0])
+            self.export_submenu.setTitle(I18N[l]["export_submenu"])
         self.action_load.setText(I18N[l]["load"])
         self.action_export.setText(I18N[l]["export"])
         if hasattr(self, "action_export_pdf_full"):

@@ -3,7 +3,7 @@ Crinômetro - Constantes Globais e Parâmetros de Configuração.
 """
 
 APP_VERSION = "4.5.0"          # versão numérica pura — usada por parse_version_tuple, updater e learner
-APP_VERSION_LABEL = "4.5.0 beta"  # rótulo de exibição — usado pela UI, título de janela e relatórios
+APP_VERSION_LABEL = "4.5.0"       # rótulo de exibição — usado pela UI, título de janela e relatórios
 import os, shutil
 
 def _user_config_dir():
@@ -107,7 +107,7 @@ CHANGELOG_SUMMARY = {
 # Histórico técnico completo preservado para exportação em CHANGELOG.md e CHANGELOG.pdf
 CHANGELOG_FULL = {
     "4.5.0": [
-        "Versão 4.5.0 Beta."
+        "Versão 4.5.0."
     ],
     "4.4.1": [
         "Correção Crítica de Emergência no Auto-Updater: eliminação definitiva do travamento da janela do Launcher na mensagem 'Instalando arquivos...'.",
