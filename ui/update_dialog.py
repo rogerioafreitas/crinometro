@@ -15,13 +15,6 @@ from core.updater import UpdateDownloaderThread, launch_windows_updater
 
 
 class UpdateDialog(QDialog):
-
-    def reject(self):
-        if hasattr(self, 'downloader') and self.downloader and self.downloader.isRunning():
-            self.downloader.cancel()
-            self.downloader.wait()
-        super().reject()
-
     """
     Janela modal para notificar nova versão, exibir changelog
     e realizar o download com barra de progresso.
@@ -151,7 +144,7 @@ class UpdateDialog(QDialog):
 
         # Inicia download assíncrono
         self.btn_update.setEnabled(False)
-        self.btn_cancel.setEnabled(False)
+        self.btn_cancel.setEnabled(True)
         self.prog_bar.setVisible(True)
         self.prog_bar.setValue(0)
         self.lbl_status.setVisible(True)
@@ -160,6 +153,7 @@ class UpdateDialog(QDialog):
         self.downloader = UpdateDownloaderThread(
             self.download_url,
             expected_hash=self.expected_hash,
+            require_hash=bool(self.expected_hash),
             parent=self
         )
         self.downloader.progress.connect(self._on_download_progress)
@@ -223,6 +217,32 @@ class UpdateDialog(QDialog):
             t["update_failed_title"],
             t["update_failed_download_msg"].format(err=err_msg)
         )
+
+    def _cleanup_downloader(self):
+        downloader = getattr(self, "downloader", None)
+        if downloader is not None and downloader.isRunning():
+            downloader.cancel()
+            try:
+                downloader.progress.disconnect()
+            except Exception:
+                pass
+            try:
+                downloader.finished.disconnect()
+            except Exception:
+                pass
+            try:
+                downloader.error.disconnect()
+            except Exception:
+                pass
+            downloader.wait(1500)
+
+    def reject(self):
+        self._cleanup_downloader()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._cleanup_downloader()
+        super().closeEvent(event)
 
     def apply_styles(self):
         dark = True

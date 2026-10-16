@@ -52,6 +52,17 @@ class AlgoSettingsDialog(QDialog):
 
         layout.addLayout(form)
 
+        if "min_p" in self.inputs and "max_p" in self.inputs:
+            def _on_min_p_changed(val):
+                if self.inputs["max_p"].value() < val:
+                    self.inputs["max_p"].setValue(val)
+            def _on_max_p_changed(val):
+                if self.inputs["min_p"].value() > val:
+                    self.inputs["min_p"].setValue(val)
+
+            self.inputs["min_p"].valueChanged.connect(_on_min_p_changed)
+            self.inputs["max_p"].valueChanged.connect(_on_max_p_changed)
+
         self.advanced_button = QPushButton(I18N[lang]["adv_settings_btn"])
         self.advanced_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.advanced_button.clicked.connect(self.open_advanced)
@@ -92,10 +103,18 @@ class AlgoSettingsDialog(QDialog):
         if self.parent() and hasattr(self.parent(), "reset_to_defaults"):
             self.parent().reset_to_defaults()
 
+    def accept(self):
+        if "min_p" in self.inputs and "max_p" in self.inputs:
+            if self.inputs["min_p"].value() > self.inputs["max_p"].value():
+                self.inputs["max_p"].setValue(self.inputs["min_p"].value())
+        super().accept()
+
     def get_params(self):
         p = self._advanced_params.copy()
         for key, widget in self.inputs.items():
             p[key] = widget.value()
+        if p.get("min_p", 1) > p.get("max_p", 1):
+            p["max_p"] = p["min_p"]
         return p
 
     def open_advanced(self):
@@ -175,6 +194,18 @@ class AdvancedAlgoSettingsDialog(QDialog):
             self.inputs[key] = widget
             form.addRow(label, widget)
         layout.addLayout(form)
+
+        if "b1_min" in self.inputs and "b1_max" in self.inputs:
+            def _on_b1_min_changed(val):
+                if self.inputs["b1_max"].value() < val + 100.0:
+                    self.inputs["b1_max"].setValue(val + 100.0)
+            def _on_b1_max_changed(val):
+                if self.inputs["b1_min"].value() > val - 100.0:
+                    self.inputs["b1_min"].setValue(max(100.0, val - 100.0))
+
+            self.inputs["b1_min"].valueChanged.connect(_on_b1_min_changed)
+            self.inputs["b1_max"].valueChanged.connect(_on_b1_max_changed)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -212,8 +243,18 @@ class AdvancedAlgoSettingsDialog(QDialog):
                 QPushButton:hover { background-color: #1D4ED8; }
             """)
 
+    def accept(self):
+        if "b1_min" in self.inputs and "b1_max" in self.inputs:
+            if self.inputs["b1_max"].value() < self.inputs["b1_min"].value() + 100.0:
+                self.inputs["b1_max"].setValue(self.inputs["b1_min"].value() + 100.0)
+        super().accept()
+
     def get_params(self):
-        return {key: widget.value() for key, widget in self.inputs.items()}
+        p = {key: widget.value() for key, widget in self.inputs.items()}
+        if "b1_min" in p and "b1_max" in p:
+            if p["b1_max"] < p["b1_min"] + 100.0:
+                p["b1_max"] = p["b1_min"] + 100.0
+        return p
 
 
 class GeneralSettingsDialog(QDialog):
@@ -531,6 +572,31 @@ class AboutDialog(QDialog):
         dlg = ChangelogDialog(self)
         dlg.exec()
 
+    def _cleanup_checker(self):
+        checker = getattr(self, "checker", None)
+        if checker is not None and checker.isRunning():
+            try:
+                checker.update_available.disconnect()
+            except Exception:
+                pass
+            try:
+                checker.no_update.disconnect()
+            except Exception:
+                pass
+            try:
+                checker.error.disconnect()
+            except Exception:
+                pass
+            checker.wait(1500)
+
+    def reject(self):
+        self._cleanup_checker()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._cleanup_checker()
+        super().closeEvent(event)
+
     def apply_styles(self):
         dark = True
         if self.parent() and hasattr(self.parent(), "theme_mode"):
@@ -576,7 +642,7 @@ class AIParamsDialog(QDialog):
         status_lbl.setWordWrap(True)
         status_lbl.setObjectName("lbl_status")
         
-        learner = getattr(self.main_window, "pulse_learner", None)
+        learner = getattr(getattr(self.main_window, "ctx", None), "pulse_learner", None) or getattr(self.main_window, "pulse_learner", None)
         has_model = learner and learner.is_trained()
         
         if has_model:

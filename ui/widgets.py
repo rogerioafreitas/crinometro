@@ -133,8 +133,20 @@ class LoadingScreen(QWidget):
     @staticmethod
     def _asset_path(filename):
         # PyInstaller --onefile extrai --add-data para _MEIPASS.
-        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base, filename)
+        if hasattr(sys, "_MEIPASS"):
+            return os.path.join(sys._MEIPASS, filename)
+        ui_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(ui_dir)
+        candidate_assets = os.path.join(root_dir, "assets", filename)
+        if os.path.exists(candidate_assets):
+            return candidate_assets
+        candidate_root = os.path.join(root_dir, filename)
+        if os.path.exists(candidate_root):
+            return candidate_root
+        candidate_ui = os.path.join(ui_dir, filename)
+        if os.path.exists(candidate_ui):
+            return candidate_ui
+        return candidate_assets
 
     def _center_on_screen(self):
         screen = QApplication.primaryScreen()

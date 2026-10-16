@@ -1,8 +1,7 @@
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-from PyQt6.QtWidgets import QMessageBox, QFileDialog, QMenu
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox, QFileDialog
 import os
 import datetime
-import time
 
 from utils.i18n import I18N
 from core.worker import GenericWorker
@@ -21,7 +20,6 @@ class ExportController(QObject):
         self.ctx = ctx
         self.pipeline = pipeline
         self.main_window = main_window
-        self.lang = main_window.lang
         
         self._pending_export_action = None
         self._batch_spinner = None
@@ -30,9 +28,23 @@ class ExportController(QObject):
         from core.worker import WorkerRegistry
         self._workers = WorkerRegistry()
 
-        self.pipeline.batch_completed.connect(self._on_batch_completed)
-        self.pipeline.batch_failed.connect(self._on_batch_failed)
-        self.pipeline.batch_cancelled.connect(self._on_batch_cancelled)
+        if self.pipeline is not None:
+            self.pipeline.batch_completed.connect(self._on_batch_completed)
+            self.pipeline.batch_failed.connect(self._on_batch_failed)
+            self.pipeline.batch_cancelled.connect(self._on_batch_cancelled)
+
+    @property
+    def lang(self):
+        return getattr(self.main_window, "lang", "pt")
+
+    def _msg_parent(self):
+        from PyQt6.QtWidgets import QWidget, QApplication
+        if os.environ.get("CRINOMETRO_TESTING") == "1":
+            return None
+        app = QApplication.instance()
+        if app is not None and app.platformName() == "offscreen":
+            return None
+        return self.main_window if isinstance(self.main_window, QWidget) else None
         
     def _retain(self, worker):
         self._workers.retain(worker)
@@ -77,7 +89,9 @@ class ExportController(QObject):
                     self._generate_pdf_report_modular(self._get_checked_files(), cfg, want_csv=wcsv, csv_path=cpath, want_txt=wtxt, txt_path=tpath, csv_mode=cmode)
             else:
                 t = I18N[self.lang]
-                QMessageBox.warning(self.main_window, t["analysis_failed_title"], t["export_failed_analysis_msg"])
+                parent = self._msg_parent()
+                if parent is not None:
+                    QMessageBox.warning(parent, t["analysis_failed_title"], t["export_failed_analysis_msg"])
 
     def _on_batch_failed(self, error_message):
         if self._pending_export_action is not None:
@@ -86,7 +100,9 @@ class ExportController(QObject):
                 self._batch_spinner = None
             self._pending_export_action = None
             t = I18N[self.lang]
-            QMessageBox.critical(self.main_window, t["error"], t["analysis_failed_before_export"].format(err=error_message))
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.critical(parent, t["error"], t["analysis_failed_before_export"].format(err=error_message))
 
     def _on_batch_cancelled(self):
         if self._pending_export_action is not None:
@@ -100,11 +116,13 @@ class ExportController(QObject):
         checked_files = self._get_checked_files()
         if not checked_files:
             t = I18N[self.lang]
-            QMessageBox.warning(
-                self.main_window,
-                t["no_audio_selected_title"],
-                t["no_audio_for_report_msg"]
-            )
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.warning(
+                    parent,
+                    t["no_audio_selected_title"],
+                    t["no_audio_for_report_msg"]
+                )
             return
 
         unprocessed = [f for f in checked_files if f not in self.ctx.analysis_cache and f in self.ctx.loaded_files]
@@ -123,11 +141,13 @@ class ExportController(QObject):
 
         if not selected_cache:
             t = I18N[self.lang]
-            QMessageBox.warning(
-                self.main_window,
-                t["no_data_title"],
-                t["no_data_for_report_msg"]
-            )
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.warning(
+                    parent,
+                    t["no_data_title"],
+                    t["no_data_for_report_msg"]
+                )
             return
 
         now = datetime.datetime.now()
@@ -136,11 +156,16 @@ class ExportController(QObject):
         if not file_path:
             return
 
-        from utils.report_generator import generate_txt_report
-        generate_txt_report(file_path, selected_cache, self.ctx.report_params)
+        try:
+            from utils.report_generator import generate_txt_report
+            generate_txt_report(file_path, selected_cache, self.ctx.report_params)
+        except Exception as e:
+            t = I18N[self.lang]
+            QMessageBox.critical(self._msg_parent(), t["error"], t["report_gen_failed"].format(err=str(e)))
+            return
 
         t = I18N[self.lang]
-        QMessageBox.information(self.main_window, t["success"], t["report_success_summary"].format(n=len(selected_cache)))
+        QMessageBox.information(self._msg_parent(), t["success"], t["report_success_summary"].format(n=len(selected_cache)))
 
 
     # ---------- Modular PDF Export ----------
@@ -148,7 +173,9 @@ class ExportController(QObject):
         checked_files = self._get_checked_files()
         if not checked_files:
             t = I18N[self.lang]
-            QMessageBox.warning(self.main_window, t["no_audio_selected_title"], t["no_audio_for_report_msg"])
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.warning(parent, t["no_audio_selected_title"], t["no_audio_for_report_msg"])
             return
 
         from ui.dialogs.export_report_dialog import ExportReportDialog
@@ -169,11 +196,29 @@ class ExportController(QObject):
     def _generate_pdf_report_modular(self, checked_files, config, want_csv=False, csv_path=None, want_txt=False, txt_path=None, csv_mode="brazilian"):
         # Copia o cache e params para isolar a thread de background de mutações concorrentes na UI
         import copy
-        selected_cache = {fname: dict(self.ctx.analysis_cache[fname]) for fname in checked_files if fname in self.ctx.analysis_cache}
+        def _snapshot_entry(entry):
+            snap = dict(entry)
+            for k in ("params", "discarded_peaks_reasons", "pulse_metadata"):
+                if isinstance(snap.get(k), dict):
+                    snap[k] = dict(snap[k])
+            for k in ("chirps", "peaks", "peaks_detected", "peaks_user_verified", "distant_peaks"):
+                if isinstance(snap.get(k), list):
+                    snap[k] = list(snap[k])
+            if isinstance(snap.get("chirp_peaks_list"), list):
+                snap["chirp_peaks_list"] = [list(c) for c in snap["chirp_peaks_list"]]
+            return snap
+
+        selected_cache = {
+            fname: _snapshot_entry(self.ctx.analysis_cache[fname])
+            for fname in checked_files
+            if fname in self.ctx.analysis_cache
+        }
         params_copy = copy.deepcopy(self.ctx.algo_params)
         if not selected_cache:
             t = I18N[self.lang]
-            QMessageBox.warning(self.main_window, t["no_data_title"], t["no_data_for_report_msg"])
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.warning(parent, t["no_data_title"], t["no_data_for_report_msg"])
             return
 
         def _task():
@@ -195,14 +240,18 @@ class ExportController(QObject):
         def _on_finished(paths):
             paths_str = "\n".join(paths) if paths else ""
             t = I18N[self.lang]
-            QMessageBox.information(self.main_window, t["success"], t["report_saved_to"].format(paths=paths_str))
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.information(parent, t["success"], t["report_saved_to"].format(paths=paths_str))
             if self._batch_spinner is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None
 
         def _on_error(err_msg):
             t = I18N[self.lang]
-            QMessageBox.critical(self.main_window, t["error"], t["report_gen_failed"].format(err=err_msg))
+            parent = self._msg_parent()
+            if parent is not None:
+                QMessageBox.critical(parent, t["error"], t["report_gen_failed"].format(err=err_msg))
             if self._batch_spinner is not None:
                 self._batch_spinner.stop()
                 self._batch_spinner = None

@@ -60,7 +60,8 @@ class SessionContext(QObject):
         try:
             yield self
         except Exception:
-            # Não limpar _pending_state_changes, para que finally emita as mudanças parciais
+            if self._batch_depth == 1:
+                self._pending_state_changes.clear()
             raise
         finally:
             self._batch_depth -= 1

@@ -1648,12 +1648,15 @@ class TestCharacterization(unittest.TestCase):
             create_waveform_figure, create_psd_figure,
             create_spectrogram_figure, create_histogram_figure, ExportConfig,
         )
+        from matplotlib.figure import Figure
         ctx = type("Ctx", (), {"active_heavy_data": None})()
         cfg = ExportConfig()
         for factory in [create_waveform_figure, create_psd_figure,
                         create_spectrogram_figure, create_histogram_figure]:
             with self.subTest(factory=factory.__name__):
                 fig, _ = factory(ctx, cfg)
+                self.assertIsNotNone(fig)
+                self.assertIsInstance(fig, Figure)
                 fig.clf()
                 del fig
 
@@ -1762,6 +1765,7 @@ class TestCharacterization(unittest.TestCase):
         from utils.constants import DEFAULT_ALGO_PARAMS
         res = CricketAnalyzer.analyze(self.sample_wav, DEFAULT_ALGO_PARAMS.copy())
         self.assertIsNotNone(res)
+        self.assertGreater(len(res), 0)
 
     def test_52_i18n_key(self):
         from utils.i18n import I18N
@@ -1770,10 +1774,6 @@ class TestCharacterization(unittest.TestCase):
     def test_53_learner_security_skops(self):
         from core.learner import PulseLearner
         l = PulseLearner()
-        with self.assertRaises(Exception) as cm:
-            l.import_model_file("dummy.skops")
-        # Or maybe it just returns False/raises something. Let's just catch Exception or check return.
-        # Actually it probably catches internal errors and returns False
         with self.assertRaises(FileNotFoundError):
             l.import_model_file("dummy.skops")
         

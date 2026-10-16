@@ -135,7 +135,7 @@ def run_gate():
     env['CRINOMETRO_TESTING'] = '1'
     env['CRINOMETRO_CONFIG_DIR'] = __import__('tempfile').mkdtemp()
     
-    res_tests = subprocess.run([sys.executable, "-m", "unittest", "discover", "tests"], cwd=root_dir, env=env, capture_output=True, text=True)
+    res_tests = subprocess.run([sys.executable, "-m", "unittest", "discover", "tests"], cwd=root_dir, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     out_test = res_tests.stderr
     # parse ran X tests
     import re

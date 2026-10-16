@@ -1,21 +1,16 @@
-import logging
 """
 Crinômetro - Módulo de Machine Learning e Active Learning (PulseLearner).
 """
 import os
-import sys
 import json
 import time
-import pickle
+import functools
+import logging
 import skops.io as skio
 import base64
 import warnings
-import random
-import re
-import copy
 import numpy as np
-import scipy.integrate
-from scipy.signal import hilbert, peak_widths, find_peaks
+from scipy.signal import peak_widths, find_peaks
 
 try:
     from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
@@ -25,8 +20,8 @@ except Exception:
     RandomForestClassifier = None
     GaussianMixture = None
 
-from utils.constants import CONFIG_LOCK, APP_VERSION, CONFIG_FILE, DEFAULT_ALGO_PARAMS
-from utils.helpers import parse_version_tuple, is_version_newer
+from utils.constants import CONFIG_LOCK, APP_VERSION, CONFIG_FILE
+from utils.helpers import is_version_newer
 
 class ModelUnavailable(Exception):
     """O modelo supervisionado falhou na inferência; o chamador deve usar o ramo sem modelo."""
@@ -41,8 +36,8 @@ class PulseLearner:
     """
 
     def __init__(self, config_path=CONFIG_FILE):
-        self.config_path = config_path
-        config_dir = os.path.dirname(os.path.abspath(config_path))
+        self.config_path = config_path or CONFIG_FILE
+        config_dir = os.path.dirname(os.path.abspath(self.config_path))
         self.persistence_path = os.path.join(config_dir, "modelo_treinado.skops")
         self.model = None
         self.degraded = False
@@ -118,6 +113,11 @@ class PulseLearner:
                 )
             else:
                 raise RuntimeError("scikit-learn não está instalado; use pip install scikit-learn para habilitar o aprendizado ativo.")
+
+    @staticmethod
+    @functools.lru_cache(maxsize=32)
+    def _get_hanning_window(seg_len: int):
+        return np.hanning(seg_len)
 
     @staticmethod
     def extract_features_for_peak(peak_idx, rate, env_signal, raw_signal=None, prior_p_focal=1.0):
@@ -219,10 +219,7 @@ class PulseLearner:
             raw_seg = raw_signal[s_spec:e_spec]
             seg_len = len(raw_seg)
             if seg_len >= 8:
-                # Utiliza cache rudimentar global (simples e muito rápido)
-                if not hasattr(PulseLearner, "_hanning_cache") or PulseLearner._hanning_cache.get("len") != seg_len:
-                    PulseLearner._hanning_cache = {"len": seg_len, "win": np.hanning(seg_len)}
-                h_win = PulseLearner._hanning_cache["win"]
+                h_win = PulseLearner._get_hanning_window(seg_len)
                 
                 fft_mag = np.abs(np.fft.rfft(raw_seg * h_win))
                 freqs = np.fft.rfftfreq(seg_len, 1.0 / rate)
@@ -337,9 +334,7 @@ class PulseLearner:
                 seg = raw_signal[s:e]
                 seg_len = len(seg)
                 if seg_len >= 8:
-                    if not hasattr(PulseLearner, "_hanning_cache") or PulseLearner._hanning_cache.get("len") != seg_len:
-                        PulseLearner._hanning_cache = {"len": seg_len, "win": np.hanning(seg_len)}
-                    h_win = PulseLearner._hanning_cache["win"]
+                    h_win = PulseLearner._get_hanning_window(seg_len)
                     
                     fft_mag = np.abs(np.fft.rfft(seg * h_win))
                     freqs = np.fft.rfftfreq(seg_len, 1.0 / rate)
@@ -530,7 +525,7 @@ class PulseLearner:
         explicit_negatives = sorted(set(peaks_detected) - set(peaks_user_verified))
         valid_pulses = sorted(set(peaks_user_verified))
         if explicit_negatives and valid_pulses:
-            induced = self.induce_pruning_rules(
+            self.induce_pruning_rules(
                 valid_pulses, explicit_negatives, rate, env_signal, raw_signal=raw_signal
             )
 
@@ -840,11 +835,13 @@ class PulseLearner:
             }
 
     def save_to_config(self):
-        try:
-            CONFIG_LOCK.acquire()
+        with self._model_lock:
             if self.model is None:
                 return False
-            try:
+            serialized = self.serialize()
+            rules = list(getattr(self, "pruning_rules", []))
+        try:
+            with CONFIG_LOCK:
                 try:
                     with open(self.config_path, "r", encoding="utf-8") as f:
                         config = json.load(f)
@@ -852,18 +849,15 @@ class PulseLearner:
                     config = {}
                 if not isinstance(config, dict):
                     config = {}
-                config["pulse_learner"] = self.serialize()
-                config["pruning_rules"] = getattr(self, "pruning_rules", [])
+                config["pulse_learner"] = serialized
+                config["pruning_rules"] = rules
                 from utils.persistence import atomic_write_json
                 atomic_write_json(self.config_path, config)
                 return True
-            except Exception as exc:
-                import logging
-                logging.getLogger("crinometro").error(f"Erro ao persistir modelo de aprendizado: {exc}", exc_info=True)
-                return False
+        except Exception as exc:
+            logging.getLogger("crinometro").error(f"Erro ao persistir modelo de aprendizado: {exc}", exc_info=True)
+            return False
 
-        finally:
-            CONFIG_LOCK.release()
     def save_persisted_training(self):
         with self._model_lock:
             payload = {
@@ -883,31 +877,40 @@ class PulseLearner:
                 # Remove o .pkl antigo se existir
                 old_path = self.persistence_path.replace(".skops", ".pkl")
                 if old_path != self.persistence_path and os.path.exists(old_path):
-                    try: os.remove(old_path)
-                    except: pass
+                    try:
+                        os.remove(old_path)
+                    except OSError:
+                        pass
                 
                 return True
-            except (OSError, Exception) as exc:
-                pass  # print(f"Erro ao persistir treinamento: {exc}")
+            except (OSError, Exception):
                 return False
 
     def _features_compatible(self, payload_names):
         return list(payload_names or []) == list(self.feature_names)
 
-    def load_persisted_training(self):
+    def load_persisted_training(self, filepath=None):
         with self._model_lock:
-            # Migração transparente
-            if not os.path.exists(self.persistence_path):
-                old_path = self.persistence_path.replace(".skops", ".pkl")
-                if os.path.exists(old_path):
-                    self.persistence_path = old_path
-                else:
+            target_path = filepath if filepath is not None else self.persistence_path
+            if filepath is not None:
+                if not str(target_path).endswith(".skops"):
                     return False
+                if not os.path.exists(target_path):
+                    return False
+            # Migração transparente
+            if not os.path.exists(target_path):
+                old_path = target_path.replace(".skops", ".pkl")
+                if os.path.exists(old_path):
+                    import logging
+                    logging.getLogger("crinometro").warning(
+                        f"Arquivo legado .pkl detectado em {old_path}; ignorando arquivo legado não-skops."
+                    )
+                return False
                 
             try:
                 from utils.persistence import safe_load
                 # Ler com safe_load, skio.loads? O arquivo  binrio.
-                with open(self.persistence_path, "rb") as f:
+                with open(target_path, "rb") as f:
                     payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
                 if not isinstance(payload, dict):
                     return False
@@ -952,7 +955,7 @@ class PulseLearner:
                 self.degraded = True
                 try:
                     import time
-                    os.rename(self.persistence_path, self.persistence_path + f".corrupt-{int(time.time())}")
+                    os.rename(target_path, target_path + f".corrupt-{int(time.time())}")
                 except Exception:
                     pass
                 return False
@@ -964,37 +967,41 @@ class PulseLearner:
                 return False
 
     def load_from_config(self):
-        with self._model_lock:
-            try:
-                CONFIG_LOCK.acquire()
+        config = None
+        try:
+            with CONFIG_LOCK:
                 if not os.path.exists(self.config_path):
                     return False
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+        except Exception:
+            with self._model_lock:
+                self.model = None
+            return False
+
+        if not isinstance(config, dict):
+            return False
+
+        with self._model_lock:
+            try:
+                self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
+                payload = config.get("pulse_learner")
+                if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
+                    return False
+                # Skip checking feature names if not present to not break backwards compatibility
+                if "feature_names" in payload and not self._features_compatible(payload.get("feature_names")):
+                    return False
+                model_bytes = base64.b64decode(payload["model_pickle_b64"])
                 try:
-                    with open(self.config_path, "r", encoding="utf-8") as f:
-                        config = json.load(f)
-                    if not isinstance(config, dict):
-                        return False
-                    self.pruning_rules = config.get("pruning_rules", getattr(self, "pruning_rules", []))
-                    payload = config.get("pulse_learner")
-                    if not isinstance(payload, dict) or not payload.get("model_pickle_b64"):
-                        return False
-                    # Skip checking feature names if not present to not break backwards compatibility
-                    if "feature_names" in payload and not self._features_compatible(payload.get("feature_names")):
-                        return False
-                    model_bytes = base64.b64decode(payload["model_pickle_b64"])
-                    try:
-                        self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
-                        return True
-                    except Exception as exc:
-                        self.model = None
-                        return False
-                except Exception as exc:
-                    pass
+                    self.model = skio.loads(model_bytes, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
+                    return True
+                except Exception:
                     self.model = None
                     return False
+            except Exception:
+                self.model = None
+                return False
 
-            finally:
-                CONFIG_LOCK.release()
     def export_model_file(self, filepath):
         """Exporta o modelo treinado completo, conjunto de dados e metadados para um arquivo independente."""
         with self._model_lock:
@@ -1005,6 +1012,7 @@ class PulseLearner:
                 "training_features": self.training_features,
                 "training_labels": self.training_labels,
                 "feature_names": self.feature_names,
+                "pruning_rules": getattr(self, "pruning_rules", []),
                 "version": APP_VERSION,
                 "timestamp": time.time(),
             }
@@ -1019,9 +1027,6 @@ class PulseLearner:
                 raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
             try:
                 with open(filepath, "rb") as f:
-                    import skops.io as skio
-                    from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-                    import numpy as np
                     payload = skio.load(f, trusted=[HistGradientBoostingClassifier, RandomForestClassifier, np.ndarray, np.dtype, "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor", "sklearn.tree._tree.Tree"])
             except Exception:
                 raise ValueError("Formato de arquivo de treinamento inválido ou inseguro.")
@@ -1032,13 +1037,11 @@ class PulseLearner:
             names = list(payload.get("feature_names") or [])
             legacy = (names == self.feature_names + ["prior_p_focal"])
             if not legacy and names != self.feature_names:
-                import time, shutil
+                import shutil
                 shutil.copy2(filepath, filepath + f".legacy-{int(time.time())}")
                 raise ValueError("Modelo incompatível com o conjunto atual de features; re-treine. (Backup salvo)")
 
             # Verificação de versão do arquivo em relação à versão do app
-            from utils.constants import APP_VERSION
-            from utils.helpers import is_version_newer
             file_version = str(payload.get("version", "1.0.0"))
             if is_version_newer(file_version, APP_VERSION):
                 raise ValueError(
@@ -1076,10 +1079,10 @@ class PulseLearner:
             self.pruning_rules = payload.get("pruning_rules", [])
             self.degraded = False
             self.last_error = ""
-            
-            self.save_persisted_training()
-            self.save_to_config()
-            return True
+
+        self.save_persisted_training()
+        self.save_to_config()
+        return True
 
     def reset(self):
         """Zera completamente o modelo, dados de treino e arquivos persistidos."""
@@ -1092,9 +1095,9 @@ class PulseLearner:
                 try:
                     os.remove(self.persistence_path)
                 except OSError as e:
-                    import logging
                     logging.getLogger("crinometro").error(f"Erro ao remover {self.persistence_path}: {e}", exc_info=True)
-            try:
+        try:
+            with CONFIG_LOCK:
                 if os.path.exists(self.config_path):
                     with open(self.config_path, "r", encoding="utf-8") as f:
                         config = json.load(f)
@@ -1103,8 +1106,7 @@ class PulseLearner:
                         config["pruning_rules"] = []
                         from utils.persistence import atomic_write_json
                         atomic_write_json(self.config_path, config)
-            except Exception as e:
-                import logging
-                logging.getLogger("crinometro").error(f"Erro no reset do pulse_learner config: {e}", exc_info=True)
+        except Exception as e:
+            logging.getLogger("crinometro").error(f"Erro no reset do pulse_learner config: {e}", exc_info=True)
 
 

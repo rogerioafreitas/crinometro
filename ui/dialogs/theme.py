@@ -276,8 +276,6 @@ QPushButton#primaryButton:hover {{
     background-color: {accent_hover};
 }}
 
-QTabWidget {{ background: transparent; }}
-
 QTabWidget {{
     background: transparent;
 }}

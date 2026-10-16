@@ -214,8 +214,8 @@ def _build_metadata_rows(report_params, selected_cache, body_style, bold_style):
     
     Retorna (rows, col_widths) para a tabela de metadados do cabeçalho.
     Campos vazios são omitidos completamente.
-    Cód. Espécime nunca aparece no cabeçalho (fica apenas na tabela por áÁudio).
-    Se nenhum campo estiver preenchido, retorna apenas data e quantidade de áÁÁudios.
+    Cód. Espécime nunca aparece no cabeçalho (fica apenas na tabela por áudio).
+    Se nenhum campo estiver preenchido, retorna apenas data e quantidade de áudios.
     """
     now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
 
@@ -243,8 +243,6 @@ def _build_metadata_rows(report_params, selected_cache, body_style, bold_style):
 
     if species:
         fields['Espécie'] = species
-    if name:
-        fields['Pesquisador(a)'] = name
     if not _is_empty_or_uninformed(inst):
         fields['Instituição'] = inst.upper()
     if not _is_empty_or_uninformed(name):
@@ -255,7 +253,7 @@ def _build_metadata_rows(report_params, selected_cache, body_style, bold_style):
         fields['Equipamento'] = equip
 
     # Estes dois sempre aparecem
-    fields['ÁÁÁudios Analisados'] = f"{len(selected_cache)} arquivo(s)"
+    fields['Áudios Analisados'] = f"{len(selected_cache)} arquivo(s)"
     fields['Data da Análise'] = now_str
 
     # Monta pares de colunas (esquerda=label, direita=valor) em 2 colunas
@@ -278,7 +276,7 @@ def _build_metadata_rows(report_params, selected_cache, body_style, bold_style):
 
 
 def generate_csv_report(output_filepath, selected_cache, report_params=None, csv_mode="brazilian"):
-    """Exporta os dados tabelados de todos os aÁÁudios selecionados em formato CSV.
+    """Exporta os dados tabelados de todos os áudios selecionados em formato CSV.
     
     Possui dois modos:
     - 'brazilian': Otimizado para Excel pt-BR (delimitador ';', decimais com ',', headers em PT, utf-8-sig).
@@ -476,40 +474,6 @@ def generate_txt_report(output_filepath, selected_cache, report_params=None):
         
     return output_filepath
 
-
-class NumberedCanvas(canvas.Canvas):
-        """Canvas com rodapé automático contendo numeração dinâmica de páginas (Página X de Y)."""
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._saved_page_states = []
-
-        def showPage(self):
-            self._saved_page_states.append(dict(self.__dict__))
-            self._startPage()
-
-        def save(self):
-            num_pages = len(self._saved_page_states)
-            for state in self._saved_page_states:
-                self.__dict__.update(state)
-                self.draw_page_decorations(num_pages)
-                super().showPage()
-            super().save()
-
-        def draw_page_decorations(self, total_pages):
-            self.saveState()
-            self.setFont("Helvetica", 8)
-            self.setFillColor(colors.HexColor("#64748B"))
-            
-            # Linha fina de rodapé
-            self.setStrokeColor(colors.HexColor("#E2E8F0"))
-            self.setLineWidth(0.6)
-            self.line(36, 38, 559, 38)
-
-            # Texto do rodapé
-            now_str = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-            self.drawString(36, 26, f"Crinômetro v{APP_VERSION_LABEL} • Bioacústica Computacional • Emitido em {now_str}")
-            self.drawRightString(559, 26, f"Página {self._pageNumber} de {total_pages}")
-            self.restoreState()
 
 def generate_pdf_report(output_filepath, config: ReportConfig, selected_cache, algo_params=None):
     report_params = config.metadata

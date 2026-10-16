@@ -243,12 +243,14 @@ class ExportReportDialog(QDialog):
             "file_meta":       file_meta
         }
 
-        # Persiste na sessão
-        if hasattr(self.session_context, 'report_params'):
-            self.session_context.report_params['institution']     = meta['institution']
-            self.session_context.report_params['researcher_name'] = meta['researcher_name']
+        # Persiste na sessão acionando o setter de report_params
+        if hasattr(self.session_context, 'report_params') and isinstance(self.session_context.report_params, dict):
+            updated_params = dict(self.session_context.report_params)
+            updated_params['institution']     = meta['institution']
+            updated_params['researcher_name'] = meta['researcher_name']
             if self.table_files.rowCount() > 0:
-                self.session_context.report_params['species'] = self.table_files.item(0, 1).text().strip()
+                updated_params['species'] = self.table_files.item(0, 1).text().strip()
+            self.session_context.report_params = updated_params
 
         return meta
 

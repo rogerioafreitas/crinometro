@@ -1,4 +1,5 @@
 from utils.i18n import I18N
+from utils.constants import DEFAULT_ALGO_PARAMS
 """
 ui/controllers/plot_renderers.py
 ---------------------------------
@@ -222,9 +223,9 @@ class PlotRenderers:
         win.lbl_summary_file.setText(filename)
 
         p_txt = (
-            f"[Pulsos: {p['min_p']}-{p['max_p']} | "
-            f"Amp: {p['amp_min']:.2f}-{p['amp_max']:.2f} | "
-            f"Freq: {int(p['b1_min'])}-{int(p['b1_max'])} Hz]"
+            f"[Pulsos: {p.get('min_p', DEFAULT_ALGO_PARAMS['min_p'])}-{p.get('max_p', DEFAULT_ALGO_PARAMS['max_p'])} | "
+            f"Amp: {float(p.get('amp_min', DEFAULT_ALGO_PARAMS['amp_min'])):.2f}-{float(p.get('amp_max', DEFAULT_ALGO_PARAMS['amp_max'])):.2f} | "
+            f"Freq: {int(p.get('b1_min', DEFAULT_ALGO_PARAMS['b1_min']))}-{int(p.get('b1_max', DEFAULT_ALGO_PARAMS['b1_max']))} Hz]"
         )
         meta_str = f"Duração: {d['duration']:.2f}s   |   Parâmetros: {p_txt}"
         win.lbl_summary_meta.setText(meta_str)
@@ -264,25 +265,6 @@ class PlotRenderers:
         if self.panel_freq and hasattr(self.panel_freq, "set_carrier_info"):
             self.panel_freq.set_carrier_info(carrier_freq, tol_val)
 
-        # Paleta canônica por quantidade de pulsos (2 a 10 + extra para outros escopos).
-        # A mesma cor é usada no histograma, nos X da onda, frequência e espectrograma.
-        pulse_colors = {
-            2: '#2563EB',   # Azul Royal
-            3: '#8B5CF6',   # Roxo / Violeta
-            4: '#F97316',   # Laranja
-            5: '#10B981',   # Verde Esmeralda
-            6: '#EC4899',   # Rosa Magenta
-            7: '#06B6D4',   # Ciano Turquesa
-            8: '#EAB308',   # Amarelo Dourado
-            9: '#6366F1',   # Índigo
-            10: '#14B8A6',  # Teal Menta
-        }
-        extra_pulse_color = '#F43F5E'  # Vermelho Rubi
-
-        picos_por_contagem = {}
-        for cp in chirp_peaks_list:
-            qnt = len(cp)
-            picos_por_contagem.setdefault(qnt, []).extend(cp)
         time_sec = np.arange(len(data)) / rate
 
         # ── WAVE ──────────────────────────────────────────────────────────
@@ -295,11 +277,15 @@ class PlotRenderers:
         show_raw = getattr(self.panel_wave, "show_raw", True)
         show_env = getattr(self.panel_wave, "show_env", True)
         show_lod = getattr(self.panel_wave, "show_lod", False)
-        show_peaks = getattr(self.panel_wave, "show_peaks", True)
 
-        # Obtem callback de atualizacao de background
+        # Obtém callback coalescente de atualização de background
         nav = self.nav_controller
-        bg_cb = nav.capture_backgrounds if nav is not None and hasattr(nav, "capture_backgrounds") else None
+        if nav is not None and hasattr(nav, "schedule_capture_backgrounds"):
+            bg_cb = nav.schedule_capture_backgrounds
+        elif nav is not None and hasattr(nav, "capture_backgrounds"):
+            bg_cb = nav.capture_backgrounds
+        else:
+            bg_cb = None
 
         # Instancia o line engine interativo
         self.line_engine = HighPerfLineEngine(
@@ -337,7 +323,6 @@ class PlotRenderers:
         f_psd = self.session_context.active_heavy_data.get("f_psd", [])
         Pxx_db = self.session_context.active_heavy_data.get("Pxx_db", [])
         unit = getattr(self.panel_spec, "spec_unit", "kHz")
-        scale = 1000.0 if unit == "kHz" else 1.0
 
         carrier_freq_hz = self.session_context.active_heavy_data.get("carrier_freq", 0.0)
         rate_psd = self.session_context.active_heavy_data.get("rate", 44100)
@@ -361,7 +346,6 @@ class PlotRenderers:
         ax4 = self.panel_spec.ax
         ax4.clear()
         unit = getattr(self.panel_spec, "spec_unit", "kHz")
-        scale = 1000.0 if unit == "kHz" else 1.0
         ymin = (
             self.panel_spec.spin_spec_ymin.value()
             if hasattr(self.panel_spec, "spin_spec_ymin") else 0.0
@@ -659,7 +643,6 @@ class PlotRenderers:
         distant_pks = self.session_context.active_heavy_data.get('distant_peaks', [])
 
         ax1 = getattr(self.panel_wave, 'ax', None)
-        ax3 = getattr(self.panel_freq, 'ax', None)
         ax4 = getattr(self.panel_spec, 'ax', None)
 
         if ax1 and env is not None:
@@ -691,26 +674,6 @@ class PlotRenderers:
                     if p in pulse_meta and "freq" in pulse_meta[p]:
                         f[i] = pulse_meta[p]["freq"]
                 return pks_t, f
-
-            if ax3:
-                for qnt, pks in sorted(picos_por_contagem.items()):
-                    pks_t, freqs_at_pks = get_freqs_for_peaks(pks)
-                    lines = ax3.plot(
-                        pks_t, freqs_at_pks, 'x',
-                        color=pulse_colors.get(int(qnt), '#5F9ED1'),
-                        markersize=6, markeredgewidth=1.4, zorder=7,
-                    )
-                    self._wave_user_markers.extend(lines)
-                if distant_pks:
-                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
-                    if valid_d:
-                        d_times, d_freqs = get_freqs_for_peaks(valid_d)
-                        lines = ax3.plot(
-                            d_times, d_freqs, 'x',
-                            color='#64748B', markersize=5, markeredgewidth=1.1,
-                            alpha=0.55, zorder=5,
-                        )
-                        self._wave_user_markers.extend(lines)
 
             if ax4:
                 unit = getattr(self.panel_spec, "spec_unit", "kHz")
@@ -784,13 +747,6 @@ class PlotRenderers:
                             if p in pulse_meta and "freq" in pulse_meta[p]:
                                 freqs_at_pks[i] = pulse_meta[p]["freq"]
 
-                        if ax3:
-                            lines = ax3.plot(
-                                pks_t, freqs_at_pks, marker=marker, linestyle='none',
-                                color=color, markersize=8, markeredgewidth=1.2, zorder=4,
-                            )
-                            self._wave_user_markers.extend(lines)
-
                         if ax4:
                             unit = getattr(self.panel_spec, "spec_unit", "kHz")
                             scale = 1000.0 if unit == "kHz" else 1.0
@@ -810,14 +766,20 @@ class PlotRenderers:
                 except Exception:
                     pass
 
-        # Atualiza dados de hover (responsabilidade da MainWindow enquanto não for FASE 4)
-        win = self.main_window
+        for panel in (self.panel_wave, self.panel_spec):
+            if panel is not None and hasattr(panel, "canvas"):
+                try:
+                    panel.canvas.draw_idle()
+                except Exception:
+                    pass
 
-        for panel in self.all_panels:
-            try:
-                panel.canvas.draw_idle()
-            except Exception:
-                pass
+        nav = self.nav_controller
+        if nav is not None:
+            nav.bg_cache_valid = False
+            if hasattr(nav, "schedule_capture_backgrounds"):
+                nav.schedule_capture_backgrounds(60)
+            elif hasattr(nav, "capture_backgrounds"):
+                nav.capture_backgrounds()
 
     # ------------------------------------------------------------------
     # apply_spectrogram_y_limits — migrado de MainWindow (fidelidade)
@@ -840,57 +802,7 @@ class PlotRenderers:
             self.spectro_engine.render_high_detail()
 
         if unit_changed and self.session_context.active_heavy_data:
-            scale = 1000.0 if unit == "kHz" else 1.0
-            rate = float(self.session_context.active_heavy_data.get("rate", 1.0))
-            t_spec = self.session_context.active_heavy_data.get("t_spec")
-            dom_freqs = self.session_context.active_heavy_data.get("dom_freqs")
-            chirp_peaks_list = self.session_context.active_heavy_data.get("chirp_peaks_list", [])
-            distant_pks = self.session_context.active_heavy_data.get("distant_peaks", [])
-            env = self.session_context.active_heavy_data.get("env")
-            marker_colors = {
-                1: '#F59E0B', 2: '#EC4899', 3: '#8B5CF6', 4: '#3B82F6',
-                5: '#10B981', 6: '#F97316', 7: '#06B6D4', 8: '#84CC16',
-                9: '#EAB308', 10: '#A855F7', 11: '#14B8A6', 12: '#6366F1',
-            }
-
-            win = self.main_window
-            cursor_lines = getattr(self.nav_controller, "cursor_lines", []) if win is not None else []
-            alignment_lines = getattr(self.nav_controller, "_click_alignment_lines", []) if win is not None else []
-            lines_to_keep = set(cursor_lines + alignment_lines)
-            lines_to_remove = [line for line in ax4.lines if line not in lines_to_keep]
-            for line in lines_to_remove:
-                try:
-                    line.remove()
-                except Exception:
-                    pass
-
-            picos_por_contagem = {}
-            for cp in chirp_peaks_list:
-                qnt = len(cp)
-                picos_por_contagem.setdefault(qnt, []).extend(cp)
-
-            if (
-                t_spec is not None and len(t_spec) > 0
-                and dom_freqs is not None and len(dom_freqs) > 0
-            ):
-                for qnt, pks in sorted(picos_por_contagem.items()):
-                    pks_t = np.array(pks) / rate
-                    freqs_at_pks = np.interp(pks_t, t_spec, dom_freqs) / scale
-                    ax4.plot(
-                        pks_t, freqs_at_pks, 'x',
-                        color=marker_colors.get(int(qnt), '#5F9ED1'),
-                        markersize=7, markeredgewidth=1.5, zorder=7,
-                    )
-                if distant_pks:
-                    valid_d = [dp for dp in distant_pks if env is not None and 0 <= dp < len(env)]
-                    if valid_d:
-                        d_times = np.array(valid_d) / rate
-                        d_freqs = np.interp(d_times, t_spec, dom_freqs) / scale
-                        ax4.plot(
-                            d_times, d_freqs, 'x',
-                            color='#9CA3AF', markersize=4.5, markeredgewidth=1.0,
-                            alpha=0.6, zorder=6,
-                        )
+            self._refresh_user_peak_markers()
 
         self.panel_spec.canvas.draw_idle()
 
@@ -923,8 +835,3 @@ class PlotRenderers:
         if nav is not None and hasattr(nav, "capture_backgrounds"):
             nav.bg_cache_valid = False
             nav.capture_backgrounds()
-        else:
-            win = self.main_window
-            if nav is not None and hasattr(nav, "capture_backgrounds"):
-                nav.bg_cache_valid = False
-                nav.capture_backgrounds()

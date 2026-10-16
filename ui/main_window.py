@@ -1573,25 +1573,39 @@ class MainWindow(QMainWindow):
         """Reinicia atomicamente as variáveis de edição e picos para o arquivo especificado, prevenindo contaminação."""
         self.ctx.active_filename = filename
         stored = self.ctx.corrections_by_file.get(filename)
-        if stored is not None:
-            self.ctx.peaks_user_verified = list(stored)
-        else:
-            self.ctx.peaks_user_verified = []
-
         cached = self.ctx.analysis_cache.get(filename)
+        if stored is not None:
+            extracted = []
+            extracted_meta = {}
+            for item in stored:
+                if isinstance(item, dict):
+                    extracted.append(item["idx"])
+                    extracted_meta[item["idx"]] = item
+                else:
+                    extracted.append(int(item))
+            self.ctx.peaks_user_verified = extracted
+            self.ctx.pulse_metadata = extracted_meta
+        else:
+            if cached is not None:
+                self.ctx.peaks_user_verified = list(cached.get("peaks_user_verified", cached.get("peaks_detected", [])))
+                self.ctx.pulse_metadata = dict(cached.get("pulse_metadata", {}))
+            else:
+                self.ctx.peaks_user_verified = []
+                self.ctx.pulse_metadata = {}
+
         if cached is not None:
             self.ctx.peaks_detected = list(cached.get("peaks_detected", []))
             self.ctx.active_heavy_data = cached
         else:
             self.ctx.peaks_detected = []
-            self.ctx.active_heavy_data = None
+            self.ctx.active_heavy_data = {}
             self.ctx._adaptive_overrides = {}
 
         if self.plot_renderers.line_engine:
             self.plot_renderers.line_engine.debounce_timer.stop()
         if self.plot_renderers.spectro_engine:
             self.plot_renderers.spectro_engine.debounce_timer.stop()
-        if getattr(self, "freq_engine", None):
+        if getattr(self.plot_renderers, "freq_engine", None):
             self.plot_renderers.freq_engine.debounce_timer.stop()
 
     def _get_item_widget_by_name(self, filename):
@@ -1635,16 +1649,19 @@ class MainWindow(QMainWindow):
             new_params = dialog.get_params()
             if new_params != self.ctx.algo_params:
                 self.ctx.algo_params = new_params
+                self.save_settings(silent=True)
                 if self.ctx.analysis_cache:
                     reply = QMessageBox.question(self, I18N[self.lang].get("reanalyze_q_title", "Reanalyze?"), I18N[self.lang].get("settings_changed_reanalyze_q", "Settings changed! Reanalyze cache?"), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     if reply == QMessageBox.StandardButton.Yes:
                         curr = self.list_widget.currentItem()
-                        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+                        curr_name = self._get_item_filename(curr) if curr else getattr(self.ctx, 'active_filename', None)
                         for fname in list(self.ctx.analysis_cache.keys()):
                             if fname != curr_name:
                                 self.ctx.analysis_cache.pop(fname, None)
                         if curr_name and curr_name in self.ctx.loaded_files:
                             self.pipeline.force_reanalyze(curr_name)
+            else:
+                self.save_settings(silent=True)
 
     def export_training_model(self):
         """Abre caixa de diálogo para salvar o arquivo com o treinamento ativo."""
@@ -1698,7 +1715,7 @@ class MainWindow(QMainWindow):
 
             # Se houver arquivo carregado, pergunta se deseja reanalisar agora
             curr = self.list_widget.currentItem()
-            curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+            curr_name = self._get_item_filename(curr) if curr else getattr(self.ctx, 'active_filename', None)
             if curr_name and curr_name in self.ctx.loaded_files:
                 reply = QMessageBox.question(
                     self,
@@ -1753,7 +1770,7 @@ class MainWindow(QMainWindow):
         
         if msg_box.clickedButton() == btn_reset:
             try:
-                if hasattr(self, 'pulse_learner') and self.ctx.pulse_learner:
+                if getattr(self.ctx, 'pulse_learner', None) is not None:
                     self.ctx.pulse_learner.reset()
                 
                 # Desativa a IA após o reset para forçar o usuário a trabalhar com DSP puro
@@ -1770,7 +1787,7 @@ class MainWindow(QMainWindow):
                 
                 # Se houver áudio carregado, força reanálise para aplicar o DSP limpo
                 curr = self.list_widget.currentItem()
-                curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+                curr_name = self._get_item_filename(curr) if curr else getattr(self.ctx, 'active_filename', None)
                 if curr_name and curr_name in self.ctx.loaded_files:
                     self.pipeline.force_reanalyze(curr_name)
             except Exception as e:
@@ -1806,14 +1823,15 @@ class MainWindow(QMainWindow):
                 "pulse_learner": None
             }
             from utils.persistence import atomic_write_json
-            atomic_write_json(CONFIG_FILE, clean_config)
+            with CONFIG_LOCK:
+                atomic_write_json(CONFIG_FILE, clean_config)
         except Exception as exc:
             import logging
             logging.getLogger("crinometro").error(f"Erro ao limpar config: {exc}", exc_info=True)
 
         # 5. Se houver arquivo ativo, reanalisa do zero com os padrões
         curr = self.list_widget.currentItem()
-        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        curr_name = self._get_item_filename(curr) if curr else getattr(self.ctx, 'active_filename', None)
         if curr_name and curr_name in self.ctx.loaded_files:
             self.ctx.analysis_cache.clear()
             self.pipeline.force_reanalyze(curr_name)
@@ -1836,12 +1854,15 @@ class MainWindow(QMainWindow):
             if self.ctx.report_params["lang"] != self.lang:
                 self.lang = self.ctx.report_params["lang"]
                 self.refresh_ui_texts()
+            self.save_settings(silent=True)
 
     def open_about(self):
         AboutDialog(self).exec()
 
     def check_for_updates(self, silent=False):
         """Verifica se há novas atualizações disponíveis no GitHub."""
+        if getattr(self, "_checker_thread", None) is not None and self._checker_thread.isRunning():
+            return
         self._checker_thread = UpdateCheckerThread(self)
 
         def _on_available(info):
@@ -2070,7 +2091,7 @@ class MainWindow(QMainWindow):
             self.btn_analyze_selected.setEnabled(True)
 
         curr = self.list_widget.currentItem()
-        curr_name = self._get_item_filename(curr) if curr else getattr(self, 'active_filename', None)
+        curr_name = self._get_item_filename(curr) if curr else getattr(self.ctx, 'active_filename', None)
         if curr_name in self.ctx.analysis_cache and hasattr(self, "btn_reanalisar_main"):
             self.btn_reanalisar_main.setText(I18N[self.lang]["reanalyze"].replace("🔄 ", ""))
             self.btn_reanalisar_main.setIcon(make_ui_icon("reload", color="#FFFFFF", size=17))
@@ -2162,6 +2183,47 @@ class MainWindow(QMainWindow):
             self.panel_spec.set_carrier_info(cf, new_tol)
         if hasattr(self, "panel_freq"):
             self.panel_freq.set_carrier_info(cf, new_tol)
+
+        pr = getattr(self, "plot_renderers", None)
+        already_rendered = (
+            pr is not None
+            and pr.line_engine is not None
+            and getattr(pr, "_last_rendered_filename", None) == self.ctx.active_filename
+        )
+
+        if already_rendered:
+            chirps = d.get("chirps", [])
+            chirp_peaks_list = d.get("chirp_peaks_list", [])
+            rate = float(d.get("rate", 1.0) or 1.0)
+
+            self.lbl_total.setText(str(len(chirps)))
+            self.lbl_metric_sub.setText(
+                f'{I18N[self.lang]["mean"]}: {d.get("media", 0.0):.2f}   |   '
+                f'{I18N[self.lang]["variance"]}: {d.get("variancia", 0.0):.2f}'
+            )
+
+            if hasattr(self, "transport_panel") and hasattr(self.transport_panel, "timeline"):
+                markers = []
+                for idx, cp in enumerate(chirp_peaks_list):
+                    if not cp:
+                        continue
+                    t = float(cp[0] / rate)
+                    markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
+                self.transport_panel.timeline.set_data(d.get("duration", 0.0), markers)
+
+            if hasattr(self, "panel_spec") and hasattr(self.panel_spec, "spin_spec_ymin"):
+                pr.apply_spectrogram_y_limits(
+                    self.panel_spec.spin_spec_ymin.value(),
+                    self.panel_spec.spin_spec_ymax.value(),
+                    getattr(self.panel_spec, "spec_unit", "kHz"),
+                )
+
+            pr.refresh_histogram()
+            pr.refresh_markers()
+
+            if hasattr(self, "nav_controller") and self.nav_controller is not None:
+                self.nav_controller.update_hover_data()
+            return
 
         cur_xlim = self.panel_wave.ax.get_xlim() if hasattr(self, "panel_wave") else None
 

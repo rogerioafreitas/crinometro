@@ -22,7 +22,16 @@ from ui.dialogs.theme import get_dialog_theme
 
 class _SnapshotCtx:
     def __init__(self, active_heavy_data, algo_params, active_filename):
-        self.active_heavy_data = dict(active_heavy_data) if active_heavy_data else {}
+        snap = dict(active_heavy_data) if active_heavy_data else {}
+        for k in ("params", "discarded_peaks_reasons", "pulse_metadata"):
+            if isinstance(snap.get(k), dict):
+                snap[k] = dict(snap[k])
+        for k in ("chirps", "peaks", "peaks_detected", "peaks_user_verified", "distant_peaks"):
+            if isinstance(snap.get(k), list):
+                snap[k] = list(snap[k])
+        if isinstance(snap.get("chirp_peaks_list"), list):
+            snap["chirp_peaks_list"] = [list(c) for c in snap["chirp_peaks_list"]]
+        self.active_heavy_data = snap
         self.algo_params = dict(algo_params) if algo_params else {}
         self.active_filename = active_filename
 
@@ -46,10 +55,11 @@ class _ExportWorker(QThread):
 
     def run(self):
         try:
+            progress_cb = lambda cur, tot: self.progress_update.emit(cur, tot)
             if self.config.fmt == "png":
-                export_figures_png(self.ctx, self.path, self.config, should_cancel=self._should_cancel)
+                export_figures_png(self.ctx, self.path, self.config, should_cancel=self._should_cancel, progress_callback=progress_cb)
             elif self.config.fmt == "pdf":
-                export_figures_pdf(self.ctx, self.path, self.config, should_cancel=self._should_cancel)
+                export_figures_pdf(self.ctx, self.path, self.config, should_cancel=self._should_cancel, progress_callback=progress_cb)
             else:
                 raise ValueError(f"Formato desconhecido: {self.config.fmt}")
 

@@ -109,6 +109,8 @@ class PipelineOrchestrator(QObject):
         if new_tol is None:
             new_tol = float(self.ctx.algo_params.get("freq_tolerance_hz", 700.0))
 
+        self.ctx.algo_params["freq_tolerance_hz"] = new_tol
+
         valid_peaks_stage2 = d.get("valid_peaks_stage2", d.get("peaks_detected", []))
         carrier_freq = float(d.get("carrier_freq", 5000.0))
         rate = float(d.get("rate", 44100))
@@ -122,31 +124,82 @@ class PipelineOrchestrator(QObject):
         use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
 
+        det_set = set(int(x) for x in (self.ctx.peaks_detected or []))
+        ver_set = set(int(x) for x in (self.ctx.peaks_user_verified or []))
+        cur_added = ver_set - det_set
+        cur_removed = det_set - ver_set
+
+        if "_manual_added" not in d or "_manual_removed" not in d:
+            d["_manual_added"] = sorted(cur_added)
+            d["_manual_removed"] = sorted(cur_removed)
+        else:
+            d["_manual_added"] = sorted((set(d["_manual_added"]) | cur_added) - cur_removed)
+            d["_manual_removed"] = sorted((set(d["_manual_removed"]) | cur_removed) - cur_added)
+
+        user_added = d["_manual_added"]
+        user_removed = d["_manual_removed"]
+        base_reasons = d.get("discarded_peaks_reasons", {})
+
         peaks, chirps, chirp_peaks_list, media, moda, variancia, all_distant, discarded_reasons = (
             CricketAnalyzer.reevaluate_carrier_tolerance(
                 valid_peaks_stage2, carrier_freq, new_tol,
                 rate, t_spec, dom_freqs, env, effective_params,
                 data_b1=data_b1, pulse_learner=learner,
-                base_discarded_reasons=d.get("discarded_peaks_reasons", {}),
-                user_added_peaks=d.get("user_added_peaks", []),
-                user_removed_peaks=d.get("user_removed_peaks", [])
+                base_discarded_reasons=base_reasons,
+                user_added_peaks=user_added,
+                user_removed_peaks=user_removed
             )
         )
 
-        d["peaks"] = list(peaks)
-        d["peaks_detected"] = list(peaks)
+        if user_added or user_removed:
+            pure_peaks, _, _, _, _, _, _, _ = CricketAnalyzer.reevaluate_carrier_tolerance(
+                valid_peaks_stage2, carrier_freq, new_tol,
+                rate, t_spec, dom_freqs, env, effective_params,
+                data_b1=data_b1, pulse_learner=learner,
+                base_discarded_reasons=base_reasons,
+                user_added_peaks=None,
+                user_removed_peaks=None
+            )
+            pure_detected = [int(x) for x in pure_peaks]
+            if user_removed:
+                valid_set = set(int(x) for x in peaks)
+                for pk in user_removed:
+                    if int(pk) not in valid_set:
+                        discarded_reasons[int(pk)] = "Removido manualmente pelo usuário"
+                all_distant = sorted((set(int(x) for x in all_distant) | set(int(x) for x in user_removed)) - valid_set)
+        else:
+            pure_detected = [int(x) for x in peaks]
+
+        verified_list = [int(x) for x in peaks]
+        d["peaks"] = list(verified_list)
+        d["peaks_detected"] = list(pure_detected)
+        d["peaks_user_verified"] = list(verified_list)
+        self.ctx.peaks_detected = list(pure_detected)
+        self.ctx.peaks_user_verified = list(verified_list)
         d["chirps"] = chirps
         d["chirp_peaks_list"] = chirp_peaks_list
+        d["chirp_peaks"] = list(chirp_peaks_list)
         d["media"] = media
         d["moda"] = moda
         d["variancia"] = variancia
         d["distant_peaks"] = list(all_distant)
         d["discarded_peaks_reasons"] = discarded_reasons
-        if "params" in d:
+        if "params" in d and isinstance(d["params"], dict):
             d["params"]["freq_tolerance_hz"] = new_tol
 
+        active_fn = self.ctx.active_filename
+        if active_fn:
+            if active_fn in self.ctx.analysis_cache:
+                self.ctx.analysis_cache[active_fn] = d
+            if active_fn in (self.ctx.corrections_by_file or {}):
+                meta = self.ctx.pulse_metadata or {}
+                combined = [meta[p] if p in meta else int(p) for p in verified_list]
+                corrections = dict(self.ctx.corrections_by_file or {})
+                corrections[active_fn] = combined
+                self.ctx.corrections_by_file = corrections
+
         # Emite notificação de que os cálculos de tolerância foram concluídos
-        self.realtime_tolerance_updated.emit(self.ctx.active_filename or "")
+        self.realtime_tolerance_updated.emit(active_fn or "")
 
     # ------------------------------------------------------------------ #
     # 3. Aplicação Integral de Resultados (_apply_analysis_results)      #
@@ -311,6 +364,7 @@ class PipelineOrchestrator(QObject):
         effective_params = {**params, **self.ctx._adaptive_overrides}
         use_ml = self.ctx.use_machine_learning
         learner = self.ctx.pulse_learner if use_ml else None
+        loaded_files_snap = dict(self.ctx.loaded_files or {})
 
         self.batch_started.emit(len(checked_files))
 
@@ -321,10 +375,10 @@ class PipelineOrchestrator(QObject):
             for i, fname in enumerate(checked_files):
                 if worker and worker.abort_requested:
                     break
-                if fname not in self.ctx.loaded_files or not os.path.exists(self.ctx.loaded_files[fname]):
+                fpath = loaded_files_snap.get(fname)
+                if not fpath or not os.path.exists(fpath):
                     continue
                 try:
-                    fpath = self.ctx.loaded_files[fname]
                     res = CricketAnalyzer.analyze(fpath, effective_params, pulse_learner=learner, should_abort=lambda: worker.abort_requested)
                     if worker and not worker.abort_requested:
                         worker.result_ready_signal.emit(fname, res)
@@ -386,45 +440,56 @@ class PipelineOrchestrator(QObject):
         is_first_time = (filename not in self.ctx.analysis_cache)
         self.analysis_started.emit(filename, is_first_time)
 
+        # Captura de snapshots na thread principal para isolamento da worker thread
+        use_ml_snap = self.ctx.use_machine_learning
+        learner_snap = self.ctx.pulse_learner if use_ml_snap else None
+        active_heavy_snap = dict(self.ctx.active_heavy_data) if (self.ctx.active_heavy_data and self.ctx.active_filename == filename) else {}
+        corrections_by_file_snap = dict(self.ctx.corrections_by_file or {})
+        peaks_detected_snap = list(self.ctx.peaks_detected or [])
+        peaks_user_verified_snap = list(self.ctx.peaks_user_verified or [])
+        algo_params_snap = dict(self.ctx.algo_params or {})
+        adaptive_overrides_snap = dict(self.ctx._adaptive_overrides or {})
+        file_path_snap = self.ctx.loaded_files[filename]
+
         def _task():
             # 1. Se o usuário fez correções, atualiza o modelo ML
-            use_ml = self.ctx.use_machine_learning
-            if (self.ctx.active_heavy_data and self.ctx.active_filename == filename and
-                filename in self.ctx.corrections_by_file and self.ctx.peaks_user_verified and use_ml):
+            if (active_heavy_snap and filename in corrections_by_file_snap and
+                peaks_user_verified_snap and use_ml_snap and learner_snap):
                 
                 # Snapshot imediato e isolado
                 import numpy as np
-                rate = float(self.ctx.active_heavy_data.get("rate", 1.0))
-                env_orig = self.ctx.active_heavy_data.get("env", np.array([]))
+                rate = float(active_heavy_snap.get("rate", 1.0))
+                env_orig = active_heavy_snap.get("env", np.array([]))
                 env = np.copy(env_orig) if env_orig is not None else np.array([])
                 
-                data_b1_orig = self.ctx.active_heavy_data.get("data_b1", np.array([]))
+                data_b1_orig = active_heavy_snap.get("data_b1", np.array([]))
                 data_b1 = np.copy(data_b1_orig) if data_b1_orig is not None else np.array([])
                 
-                peaks_det = list(self.ctx.peaks_detected)
-                peaks_verif = list(self.ctx.peaks_user_verified)
+                peaks_det = list(peaks_detected_snap)
+                peaks_verif = list(peaks_user_verified_snap)
                 
                 if env.size > 0:
                     try:
-                        self.ctx.pulse_learner.update_from_corrections(
+                        learner_snap.update_from_corrections(
                             peaks_det, peaks_verif, rate, env, raw_signal=data_b1
                         )
-                        self.ctx.pulse_learner.save_to_config()
-                    except Exception:
-                        pass
+                        learner_snap.save_to_config()
+                    except Exception as exc:
+                        import logging
+                        logging.getLogger("crinometro").warning(f"Erro ao atualizar modelo ML antes da reanálise: {exc}")
 
-            effective_params = {**self.ctx.algo_params, **self.ctx._adaptive_overrides}
-            file_path = self.ctx.loaded_files[filename]
-            learner = self.ctx.pulse_learner if use_ml else None
+            effective_params = {**algo_params_snap, **adaptive_overrides_snap}
+            file_path = file_path_snap
+            learner = learner_snap
 
             cached_spec = None
-            if self.ctx.active_heavy_data and self.ctx.active_filename == filename:
-                if all(self.ctx.active_heavy_data.get(k) is not None for k in ("f_spec", "t_spec", "Sxx_db", "dom_freqs")):
+            if active_heavy_snap:
+                if all(active_heavy_snap.get(k) is not None for k in ("f_spec", "t_spec", "Sxx_db", "dom_freqs")):
                     cached_spec = {
-                        "f_spec": self.ctx.active_heavy_data.get("f_spec"),
-                        "t_spec": self.ctx.active_heavy_data.get("t_spec"),
-                        "Sxx_db": self.ctx.active_heavy_data.get("Sxx_db"),
-                        "dom_freqs": self.ctx.active_heavy_data.get("dom_freqs"),
+                        "f_spec": active_heavy_snap.get("f_spec"),
+                        "t_spec": active_heavy_snap.get("t_spec"),
+                        "Sxx_db": active_heavy_snap.get("Sxx_db"),
+                        "dom_freqs": active_heavy_snap.get("dom_freqs"),
                     }
 
             res = CricketAnalyzer.analyze(

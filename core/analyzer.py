@@ -1,9 +1,6 @@
 """
 Crinômetro - Motor Bioacústico DSP (Processamento de Sinal e Agrupamento Rítmico).
 """
-import os
-import re
-import time
 import warnings
 import numpy as np
 import statistics
@@ -203,7 +200,7 @@ class CricketAnalyzer:
         # ----------------------------------------------------------------------
         carrier_freq = 5000.0
         if len(valid_peaks_stage2) >= 2:
-            prelim_chirps, prelim_chirp_peaks_list, _, _, _ = CricketAnalyzer.regroup_chirps(
+            _, prelim_chirp_peaks_list, _, _, _ = CricketAnalyzer.regroup_chirps(
                 valid_peaks_stage2, params, rate, env1_smooth, raw_signal=data_b1
             )
             chirp_freqs = []
@@ -251,16 +248,17 @@ class CricketAnalyzer:
                 if abs(diff) <= freq_tol:
                     valid_peaks_stage3.append(p)
                 else:
-                    freq_outliers.append(p)
-                    discarded_peaks_reasons[int(p)] = (
-                        f"Frequência fora da tolerância da portadora "
-                        f"({f_p:.0f} Hz; desvio de {diff:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
-                    )
+                    freq_outliers.append((p, f_p, diff))
 
         # Se o filtro reteve picos consistentes, descarta os pulsos fora da tolerância
         if len(valid_peaks_stage3) >= 1:
             candidate_peaks = np.asarray(valid_peaks_stage3, dtype=int)
-            distant_peaks = list(freq_outliers)
+            distant_peaks = [item[0] for item in freq_outliers]
+            for p, f_p, diff in freq_outliers:
+                discarded_peaks_reasons[int(p)] = (
+                    f"Frequência fora da tolerância da portadora "
+                    f"({f_p:.0f} Hz; desvio de {diff:+.0f} Hz da portadora {carrier_freq:.0f} Hz; limite ±{freq_tol:.0f} Hz)"
+                )
         else:
             candidate_peaks = np.asarray(valid_peaks_stage2, dtype=int)
             distant_peaks = []
@@ -296,7 +294,7 @@ class CricketAnalyzer:
             if p_int not in valid_in_chirps and p_int not in discarded_peaks_reasons:
                 discarded_peaks_reasons[p_int] = f"Pulso isolado / sequência incompleta (< {min_p} pulsos por chilreio)"
 
-        all_distant = sorted(list(set(distant_peaks) | set(discarded_peaks_reasons.keys())))
+        all_distant = sorted(list((set(distant_peaks) | set(discarded_peaks_reasons.keys())) - valid_in_chirps))
 
         # Task 2.2: Calcula o PSD (Power Spectral Density) do áudio bruto (data) para ver o espectro real
         f_psd, Pxx_db = CricketAnalyzer.compute_psd(data, rate)
@@ -389,8 +387,18 @@ class CricketAnalyzer:
             if p_int not in valid_in_chirps and p_int not in discarded_reasons:
                 discarded_reasons[p_int] = f"Pulso isolado / sequência incompleta (< {min_p} pulsos por chilreio)"
 
-        all_distant = sorted(list(discarded_reasons.keys()))
+        all_distant = sorted(list(set(discarded_reasons.keys()) - valid_in_chirps))
         return (peaks, chirps, chirp_peaks_list, media, moda, variancia, all_distant, discarded_reasons)
+
+    @staticmethod
+    def _regroup_chirps(peaks, *args, **kwargs):
+        """Método estático de compatibilidade para reagrupamento de chilreios."""
+        if len(peaks) < 2:
+            return [[p] for p in peaks], [], 0.0, 0, 0.0
+        params = args[0] if len(args) > 0 and isinstance(args[0], dict) else {}
+        rate = args[3] if len(args) > 3 else 48000
+        env = args[1] if len(args) > 1 else []
+        return CricketAnalyzer.regroup_chirps(peaks, params, rate, env)
 
     @staticmethod
     def regroup_chirps(peaks, params, rate, env, raw_signal=None):

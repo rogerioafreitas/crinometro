@@ -190,7 +190,8 @@ def draw_waveform(
             plot_data_dec = np.append(plot_data_dec, [rem_data.min(), rem_data.max()])
             plot_time_dec = np.append(plot_time_dec, [rem_time[0], rem_time[-1]])
     else:
-        dec_raw = 1 if interactive else max(1, len(plot_data) // 200000)
+        max_pts = 50000 if interactive else 200000
+        dec_raw = max(1, len(plot_data) // max_pts)
         plot_data_dec = plot_data[::dec_raw]
         plot_time_dec = plot_time[::dec_raw]
 
@@ -598,7 +599,7 @@ def get_panel_title(panel: str, lang: str = "pt") -> str:
     return titles.get(panel, panel)
 
 
-def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None) -> List[str]:
+def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None, progress_callback=None) -> List[str]:
     """
     Exporta cada painel selecionado em cfg.panels como arquivo PNG separado.
 
@@ -609,13 +610,18 @@ def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
         cfg = ExportConfig(fmt="png")
 
     import os
-    base, _ = os.path.splitext(path)
+    if os.path.isdir(path):
+        raw_name = getattr(ctx, "active_filename", None) or "grafico"
+        stem = os.path.splitext(os.path.basename(raw_name))[0]
+        base = os.path.join(path, stem)
+    else:
+        base, _ = os.path.splitext(path)
     written = []
 
-
     suf = png_set_suffix(base, cfg.panels)
+    total_panels = len(cfg.panels)
     
-    for panel in cfg.panels:
+    for idx, panel in enumerate(cfg.panels):
         if should_cancel and should_cancel():
             for w in written:
                 try: os.remove(w)
@@ -632,6 +638,11 @@ def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
             fig.savefig(out, dpi=cfg.dpi, bbox_inches="tight",
                         facecolor=fig.get_facecolor())
             written.append(out)
+            if progress_callback is not None:
+                try:
+                    progress_callback(idx + 1, total_panels)
+                except Exception:
+                    pass
         finally:
             fig.clf()
             del fig
@@ -639,7 +650,7 @@ def export_figures_png(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
     return written
 
 
-def export_figures_pdf(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None) -> str:
+def export_figures_pdf(ctx, path: str, cfg: Optional[ExportConfig] = None, should_cancel=None, progress_callback=None) -> str:
     """
     Exporta todos os painéis selecionados em um único PDF multipágina.
 
@@ -652,8 +663,9 @@ def export_figures_pdf(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
 
     import os
     path = unique_path(path)
+    total_panels = len(cfg.panels)
     with PdfPages(path) as pdf:
-        for panel in cfg.panels:
+        for idx, panel in enumerate(cfg.panels):
             if should_cancel and should_cancel():
                 break
                 
@@ -663,10 +675,15 @@ def export_figures_pdf(ctx, path: str, cfg: Optional[ExportConfig] = None, shoul
                 
             fig, ax = factory(ctx, cfg)
             try:
-                ax.set_title(_PANEL_TITLES.get(panel, panel),
+                ax.set_title(get_panel_title(panel, cfg.lang),
                              color=cfg.text_color, pad=8, fontsize=11)
                 pdf.savefig(fig, bbox_inches="tight",
                             facecolor=fig.get_facecolor())
+                if progress_callback is not None:
+                    try:
+                        progress_callback(idx + 1, total_panels)
+                    except Exception:
+                        pass
             finally:
                 fig.clf()
                 del fig

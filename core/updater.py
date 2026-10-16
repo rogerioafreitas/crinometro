@@ -308,12 +308,15 @@ def normalize_target_dir(target_dir: str) -> str:
     return target_dir
 
 
-def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_hash: str = "", execute: bool = True):
+def launch_windows_updater(downloaded_file: str, target_dir: str = "", expected_hash: str = "", execute: bool = True, require_hash: bool = False):
     """
     Orquestra a substituição limpa e atualização do Crinômetro no Windows de forma assíncrona.
     """
     expected_hash = (expected_hash or "").strip().lower()
     downloaded_file = os.path.abspath(downloaded_file)
+
+    if require_hash and not expected_hash:
+        raise ValueError("Hash esperado é obrigatório quando require_hash=True")
 
     if expected_hash and os.path.exists(downloaded_file):
         hasher = hashlib.sha256()

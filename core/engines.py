@@ -20,7 +20,9 @@ class HighPerfLineEngine:
     def get_viewport_slice(self, xmin, xmax):
         t_idx_min = max(0, np.searchsorted(self.time_sec, xmin) - 1)
         t_idx_max = min(len(self.time_sec), np.searchsorted(self.time_sec, xmax) + 1)
-        if t_idx_max <= t_idx_min: t_idx_max = t_idx_min + 2
+        if t_idx_max <= t_idx_min:
+            t_idx_max = min(len(self.time_sec), t_idx_min + 2)
+            t_idx_min = max(0, t_idx_max - 2)
         return t_idx_min, t_idx_max
 
     def _get_envelope(self, t, y, max_points=4000):
@@ -120,8 +122,12 @@ class HighPerfSpectrogramEngine:
         f_idx_min = max(0, np.searchsorted(self.f_spec, ymin_hz) - 1)
         f_idx_max = min(len(self.f_spec), np.searchsorted(self.f_spec, ymax_hz) + 1)
         
-        if t_idx_max <= t_idx_min: t_idx_max = t_idx_min + 2
-        if f_idx_max <= f_idx_min: f_idx_max = f_idx_min + 2
+        if t_idx_max <= t_idx_min:
+            t_idx_max = min(len(self.t_spec), t_idx_min + 2)
+            t_idx_min = max(0, t_idx_max - 2)
+        if f_idx_max <= f_idx_min:
+            f_idx_max = min(len(self.f_spec), f_idx_min + 2)
+            f_idx_min = max(0, f_idx_max - 2)
             
         return t_idx_min, t_idx_max, f_idx_min, f_idx_max
 
@@ -194,7 +200,8 @@ class HighPerfFreqEngine:
         t0 = max(0, int(np.searchsorted(self.t_spec, xmin)) - 1)
         t1 = min(len(self.t_spec), int(np.searchsorted(self.t_spec, xmax)) + 1)
         if t1 <= t0:
-            t1 = t0 + 2
+            t1 = min(len(self.t_spec), t0 + 2)
+            t0 = max(0, t1 - 2)
         return t0, t1
 
     def render_interactive(self, xmin, xmax, is_sync=False):
@@ -219,7 +226,7 @@ class HighPerfFreqEngine:
             QTimer.singleShot(50, self.update_bg_callback)
 
     def _update_plot(self, t, y):
-        if self.line is None:
+        if self.line is None or getattr(self.line, "axes", None) is None:
             self.line, = self.ax.plot(t, y, '.', color=self.base_color, markersize=2.2, alpha=0.72, zorder=2)
         else:
             self.line.set_data(t, y)

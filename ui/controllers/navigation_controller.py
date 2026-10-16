@@ -79,6 +79,10 @@ class NavigationController(QObject):
         # Hook para edição de pulsos (FASE 5 / MainWindow)
         self.pulse_edit_handler = None
 
+        self._bg_capture_timer = QTimer(self)
+        self._bg_capture_timer.setSingleShot(True)
+        self._bg_capture_timer.timeout.connect(self.capture_backgrounds)
+
     # ------------------------------------------------------------------
     # Propriedades de acesso a componentes externos via weakref
     # ------------------------------------------------------------------
@@ -133,6 +137,8 @@ class NavigationController(QObject):
 
     def reset(self) -> None:
         """Reseta o estado de navegação, cursores e cache de background."""
+        if hasattr(self, "_bg_capture_timer") and self._bg_capture_timer.isActive():
+            self._bg_capture_timer.stop()
         self.cursor_lines = []
         self.backgrounds = []
         self.bg_cache_valid = False
@@ -159,8 +165,15 @@ class NavigationController(QObject):
                 self.cursor_lines.append(line)
         return self.cursor_lines
 
+    def schedule_capture_backgrounds(self, delay_ms: int = 50) -> None:
+        """Agenda a captura de bitmaps de forma coalescente para evitar múltiplos draws síncronos."""
+        self.bg_cache_valid = False
+        self._bg_capture_timer.start(max(10, int(delay_ms)))
+
     def capture_backgrounds(self) -> None:
         """Captura os bitmaps dos eixos temporais sem o cursor para blitting ultra-rápido."""
+        if hasattr(self, "_bg_capture_timer") and self._bg_capture_timer.isActive():
+            self._bg_capture_timer.stop()
         if not self.cursor_lines:
             return
         for line in self.cursor_lines:
@@ -187,7 +200,7 @@ class NavigationController(QObject):
         if not self.bg_cache_valid or self.panning:
             current_time = time.time()
             if current_time - self.last_draw_time > 0.01:
-                for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+                for panel in [self.panel_wave, self.panel_spec]:
                     if panel is not None:
                         try:
                             panel.canvas.draw_idle()
@@ -208,7 +221,7 @@ class NavigationController(QObject):
                     panel.canvas.blit(panel.ax.bbox)
         except Exception:
             self.bg_cache_valid = False
-            for panel in [self.panel_wave, self.panel_freq, self.panel_spec]:
+            for panel in [self.panel_wave, self.panel_spec]:
                 if panel is not None:
                     try:
                         panel.canvas.draw_idle()
@@ -276,7 +289,7 @@ class NavigationController(QObject):
         elif self.panel_hist is not None and ax == self.panel_hist.ax:
             chirps = np.asarray(d.get("chirps", []))
             if chirps.size > 0:
-                c_xmin, c_xmax = float(chirps.min()) - 0.65, float(chirps.min()) + 0.65
+                c_xmin, c_xmax = float(chirps.min()) - 0.65, float(chirps.max()) + 0.65
                 ym = max(1, int(np.bincount(chirps.astype(int)).max()))
                 c_ymin, c_ymax = 0, ym * 1.20
 
@@ -504,12 +517,19 @@ class NavigationController(QObject):
         """Finaliza a operação de pan e agenda reconstrução do background blitting."""
         if event.button == 3:
             was_panning = self.panning
+            panned_ax = self.active_ax
             self.panning = False
             self.active_ax = None
-            for panel in self.all_panels:
-                panel.canvas.draw_idle()
+            time_panels = [p for p in (self.panel_wave, self.panel_spec) if p is not None]
+            if panned_ax is not None and any(getattr(p, "ax", None) == panned_ax for p in time_panels):
+                for panel in time_panels:
+                    panel.canvas.draw_idle()
+            else:
+                for panel in self.all_panels:
+                    if panel is not self.panel_hist and (panned_ax is None or getattr(panel, "ax", None) == panned_ax):
+                        panel.canvas.draw_idle()
 
-            QTimer.singleShot(350, self.capture_backgrounds)
+            self.schedule_capture_backgrounds(350)
             if was_panning:
                 self.pan_finished.emit()
 

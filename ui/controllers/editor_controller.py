@@ -26,7 +26,6 @@ NavigationController para orquestração visual sem acoplamento reverso.
 
 import json
 import os
-import tempfile
 import time
 import weakref
 import numpy as np
@@ -182,7 +181,12 @@ class EditorController(QObject):
         target = int(round(float(time_sec) * rate))
         detected = ctx.peaks_detected or []
         verified = ctx.peaks_user_verified or []
-        candidates = sorted(set(int(p) for p in detected) | set(int(p) for p in verified))
+        distant_orig = heavy.get('distant_peaks') or []
+        candidates = sorted(
+            set(int(p) for p in detected)
+            | set(int(p) for p in verified)
+            | set(int(p) for p in distant_orig)
+        )
         nearest = None
 
         if candidates:
@@ -213,12 +217,16 @@ class EditorController(QObject):
                 if distances[min_dist_idx] <= int(round(time_tol_sec * rate)):
                     nearest = candidates[min_dist_idx]
 
-        # Salva o estado atual na pilha de desfeita (picos e metadados)
+        # Salva o estado atual na pilha de desfeita (picos, metadados e descartados)
         meta = dict(ctx.pulse_metadata or {})
         meta_snapshot = {k: dict(v) if isinstance(v, dict) else v for k, v in meta.items()}
+        distant_list = [int(p) for p in heavy.get('distant_peaks', [])]
+        reasons_dict = dict(heavy.get('discarded_peaks_reasons', {}))
         self._pulse_edit_history.append({
             "peaks": list(verified),
             "metadata": meta_snapshot,
+            "distant_peaks": list(distant_list),
+            "discarded_reasons": dict(reasons_dict),
         })
         if len(self._pulse_edit_history) > 50:
             self._pulse_edit_history = self._pulse_edit_history[-50:]
@@ -230,11 +238,19 @@ class EditorController(QObject):
             # Remoção do pulso verificado existente e limpeza de metadados associados
             new_verified = [int(p) for p in verified if int(p) != nearest]
             meta.pop(nearest, None)
+            if nearest not in distant_list:
+                distant_list.append(int(nearest))
+                distant_list.sort()
+            reasons_dict[int(nearest)] = "Removido manualmente pelo usuário"
             modified_sample = nearest
             action = "removed"
         elif nearest is not None:
-            # Reativação de pico previamente detectado mas não verificado
+            # Reativação de pico previamente detectado ou descartado
             new_verified = sorted(set(verified + [nearest]))
+            if nearest in distant_list:
+                distant_list.remove(nearest)
+            reasons_dict.pop(int(nearest), None)
+            reasons_dict.pop(str(nearest), None)
             modified_sample = nearest
             action = "added"
             if f_click is not None or amp_click is not None:
@@ -246,6 +262,10 @@ class EditorController(QObject):
         else:
             # Inserção de um pulso totalmente novo no instante do clique
             new_verified = sorted(set(verified + [target]))
+            if target in distant_list:
+                distant_list.remove(target)
+            reasons_dict.pop(int(target), None)
+            reasons_dict.pop(str(target), None)
             modified_sample = target
             action = "added"
             if f_click is not None or amp_click is not None:
@@ -258,6 +278,10 @@ class EditorController(QObject):
         # Atualiza o estado da sessão de forma transacional e atômica
         heavy['peaks_user_verified'] = list(new_verified)
         heavy['pulse_metadata'] = dict(meta)
+        heavy['distant_peaks'] = list(distant_list)
+        heavy['discarded_peaks_reasons'] = dict(reasons_dict)
+        heavy.pop('_manual_added', None)
+        heavy.pop('_manual_removed', None)
 
         if hasattr(ctx, "update_verified_and_metadata"):
             ctx.update_verified_and_metadata(new_verified, meta)
@@ -309,12 +333,18 @@ class EditorController(QObject):
         heavy = ctx.active_heavy_data
         entry = self._pulse_edit_history.pop()
 
+        restored_distant = None
+        restored_reasons = None
         if isinstance(entry, dict) and "peaks" in entry:
             restored_peaks = list(entry["peaks"])
             restored_meta = {
                 k: dict(v) if isinstance(v, dict) else v
                 for k, v in entry.get("metadata", {}).items()
             }
+            if "distant_peaks" in entry:
+                restored_distant = list(entry["distant_peaks"])
+            if "discarded_reasons" in entry:
+                restored_reasons = dict(entry["discarded_reasons"])
         elif isinstance(entry, (list, tuple)):
             restored_peaks = list(entry)
             restored_meta = {
@@ -328,6 +358,12 @@ class EditorController(QObject):
         if heavy:
             heavy['peaks_user_verified'] = list(restored_peaks)
             heavy['pulse_metadata'] = dict(restored_meta)
+            if restored_distant is not None:
+                heavy['distant_peaks'] = restored_distant
+            if restored_reasons is not None:
+                heavy['discarded_peaks_reasons'] = restored_reasons
+            heavy.pop('_manual_added', None)
+            heavy.pop('_manual_removed', None)
 
         if hasattr(ctx, "update_verified_and_metadata"):
             ctx.update_verified_and_metadata(restored_peaks, restored_meta)
@@ -382,6 +418,7 @@ class EditorController(QObject):
             heavy['chirp_peaks_list'] = []
             heavy['media'] = 0.0
             heavy['moda'] = 0.0
+            heavy['variancia'] = 0.0
 
             active_fn = ctx.active_filename
             if active_fn and active_fn in ctx.analysis_cache:
@@ -390,6 +427,7 @@ class EditorController(QObject):
                 cache_entry["chirp_peaks_list"] = []
                 cache_entry["media"] = 0.0
                 cache_entry["moda"] = 0.0
+                cache_entry["variancia"] = 0.0
 
             if win is not None:
 
@@ -397,7 +435,7 @@ class EditorController(QObject):
 
                 l = getattr(win, "lang", "pt")
                 win.lbl_metric_sub.setText(f"{I18N[l]['mean']}: -   |   {I18N[l]['variance']}: -")
-                if 'duration' in heavy:
+                if 'duration' in heavy and hasattr(win, "transport_panel") and hasattr(win.transport_panel, "timeline"):
                     win.transport_panel.timeline.set_data(heavy.get('duration', 0.0), [])
 
             metrics_payload = {
@@ -438,6 +476,7 @@ class EditorController(QObject):
                 cache_entry["chirp_peaks_list"] = chirp_peaks_list
                 cache_entry["media"] = media
                 cache_entry["moda"] = moda
+                cache_entry["variancia"] = variancia
 
             win = self.main_window
             if win is not None:
@@ -445,11 +484,20 @@ class EditorController(QObject):
                 win.lbl_total.setText(str(len(chirps)))
 
                 win.lbl_metric_sub.setText(f'{I18N[win.lang]["mean"]}: {media:.2f}   |   {I18N[win.lang]["variance"]}: {variancia:.2f}')
+                if hasattr(win, "transport_panel") and hasattr(win.transport_panel, "timeline"):
+                    markers = []
+                    for idx, cp in enumerate(chirp_peaks_list):
+                        if not cp:
+                            continue
+                        t = float(cp[0] / rate)
+                        markers.append({"time": t, "color": "#F0A84B" if idx % 2 == 0 else "#3F94D5"})
+                    win.transport_panel.timeline.set_data(heavy.get('duration', 0.0), markers)
 
             metrics_payload = {
                 "total_chirps": len(chirps),
                 "media": float(media),
                 "moda": float(moda),
+                "variancia": float(variancia),
                 "chirps": chirps,
                 "chirp_peaks_list": chirp_peaks_list,
             }
@@ -507,7 +555,6 @@ class EditorController(QObject):
         if pipe is not None and hasattr(pipe, "_adapt_advanced_params"):
             pipe._adapt_advanced_params()
             return
-        win = self.main_window
 
     def learn_from_corrections(self, filename: str = None, blocking: bool = False):
         """Coordena o retreinamento do classificador PulseLearner com base nas correções do usuário."""
@@ -591,6 +638,9 @@ class EditorController(QObject):
 
         worker = GenericWorker(_task)
         self._learn_worker = worker
+        win = self.main_window
+        if win is not None and hasattr(win, "worker_registry") and win.worker_registry is not None:
+            win.worker_registry.retain(worker)
 
         def _on_finished(num_corrections):
             self._adapt_advanced_params()
@@ -608,10 +658,10 @@ class EditorController(QObject):
     # Coordenação dos Modos de Edição dos Painéis
     # ------------------------------------------------------------------
 
-    def shutdown(self):
+    def shutdown(self, timeout_ms: int = 3000):
         if hasattr(self, '_learn_worker') and self._learn_worker and self._learn_worker.isRunning():
             self._learn_worker.abort()
-            self._learn_worker.wait()
+            self._learn_worker.wait(timeout_ms)
 
     def update_pulse_edit_buttons(self, activated_panel) -> None:
         """Quando um painel é ativado para edição de pulsos, desativa os outros."""

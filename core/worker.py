@@ -47,27 +47,40 @@ class GenericWorker(QThread):
 class WorkerRegistry:
     def __init__(self):
         self._workers = []
+        self._lock = threading.Lock()
         
     def retain(self, worker):
-        self._workers.append(worker)
+        with self._lock:
+            if worker not in self._workers:
+                self._workers.append(worker)
         worker.finished.connect(lambda: self._remove(worker))
         
     def _remove(self, worker):
-        if worker in self._workers:
-            self._workers.remove(worker)
+        with self._lock:
+            if worker in self._workers:
+                self._workers.remove(worker)
             
     def abort_all(self):
-        for w in self._workers:
+        with self._lock:
+            snapshot = list(self._workers)
+        for w in snapshot:
             if w.isRunning():
                 w.abort()
                 
     def wait_all(self, timeout_ms=3000):
-        for w in self._workers:
+        import time
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        with self._lock:
+            snapshot = list(self._workers)
+        for w in snapshot:
             if w.isRunning():
-                w.wait(timeout_ms)
+                rem_ms = max(50, int((deadline - time.monotonic()) * 1000))
+                w.wait(rem_ms)
                 
     def count(self):
-        return len([w for w in self._workers if w.isRunning()])
+        with self._lock:
+            snapshot = list(self._workers)
+        return len([w for w in snapshot if w.isRunning()])
     
     def shutdown(self, timeout_ms=3000):
         self.abort_all()
