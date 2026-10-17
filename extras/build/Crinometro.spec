@@ -8,8 +8,24 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 app_dist_name = f'Crinometro_v{APP_VERSION}'
 
-skops_hidden = collect_submodules('skops')
-skops_data = collect_data_files('skops')
+import skops
+skops_pkg_dir = os.path.dirname(skops.__file__)
+skops_hidden = collect_submodules('skops', filter=lambda name: 'test' not in name) + [
+    'skops.io.old',
+    'skops.io.old._general_v0',
+    'skops.io.old._numpy_v0',
+    'skops.io.old._numpy_v1',
+]
+skops_data = collect_data_files('skops') + [
+    (os.path.join(skops_pkg_dir, 'io', 'old'), os.path.join('skops', 'io', 'old')),
+]
+sklearn_hidden = collect_submodules('sklearn', filter=lambda name: 'test' not in name and 'conftest' not in name)
+project_hidden = (
+    ['crinometro']
+    + collect_submodules('core')
+    + collect_submodules('ui')
+    + collect_submodules('utils')
+)
 
 a = Analysis(
     ['../../crinometro__laucher.py'],
@@ -22,12 +38,9 @@ a = Analysis(
     hiddenimports=[
         'reportlab', 'reportlab.platypus', 'reportlab.lib', 'reportlab.pdfgen',
         'scipy.special', 'scipy.integrate', 'scipy.signal', 'scipy.stats', 'scipy.optimize',
-        'sklearn', 'sklearn.ensemble', 'sklearn.ensemble._hist_gradient_boosting',
-        'sklearn.ensemble._hist_gradient_boosting.gradient_boosting',
-        'sklearn.mixture', 'sklearn.tree',
         'matplotlib', 'matplotlib.backends.backend_qtagg', 'matplotlib.backends.backend_agg',
         'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets'
-    ] + skops_hidden,
+    ] + skops_hidden + sklearn_hidden + project_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

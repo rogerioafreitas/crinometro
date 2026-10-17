@@ -647,7 +647,55 @@ class LauncherLoadingScreen(QWidget):
         super().closeEvent(event)
 
 
+def run_self_test(report_path: str) -> int:
+    try:
+        import scipy.special
+        import scipy.integrate
+        import scipy.signal
+        import matplotlib
+        import sklearn
+        import skops.io
+        import crinometro
+        from sklearn.dummy import DummyClassifier
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        from sklearn.mixture import GaussianMixture
+        import numpy as np
+
+        app = QApplication(sys.argv)
+        app.setStyle("Fusion")
+        win = crinometro.MainWindow()
+
+        # Verify skops serialization roundtrip in frozen environment for all learner models
+        X = np.random.RandomState(42).randn(20, 4)
+        y = np.array([0] * 10 + [1] * 10)
+        for model in [
+            DummyClassifier(strategy="prior").fit(X, y),
+            HistGradientBoostingClassifier(max_iter=5, random_state=42).fit(X, y),
+            GaussianMixture(n_components=2, random_state=42).fit(X),
+        ]:
+            raw = skops.io.dumps(model)
+            untrusted = skops.io.get_untrusted_types(data=raw)
+            _ = skops.io.loads(raw, trusted=untrusted)
+
+        win.close()
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write("SELF_TEST_PASSED\n")
+        return 0
+    except Exception:
+        import traceback
+        err = traceback.format_exc()
+        try:
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(f"SELF_TEST_FAILED\n{err}")
+        except Exception:
+            pass
+        return 1
+
+
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--self-test":
+        return run_self_test(sys.argv[2])
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setStyle("Fusion")
